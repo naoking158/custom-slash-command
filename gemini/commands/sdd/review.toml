@@ -1,0 +1,107 @@
+description = "Review artifacts (specs, plans, code) with specialized perspectives"
+prompt = """
+@{_shared/roles/review.md}
+
+## Task
+Systematically review the artifact and provide actionable feedback.
+
+Input: {{args}}
+
+@{_shared/processes/review.md}
+
+## Input Resolution
+Parse perspective and target from input:
+
+Perspectives (prefix):
+  fe:        → Frontend review
+  be:        → Backend review
+  security:  → Security review
+  perf:      → Performance review
+  doc:       → Documentation review
+  (none)     → Auto-select based on target content
+
+Targets:
+  spec:{identifier}           → docs/specs/{identifier}.md
+  plan:{identifier}           → docs/plans/features/{identifier}.md
+  plan:fix:{identifier}       → docs/plans/fixes/{identifier}.md
+  plan:refactor:{identifier}  → docs/plans/refactors/{identifier}.md
+  plan:change:{identifier}    → docs/plans/changes/{identifier}.md
+  code:{identifier}           → Files from plan document
+  {identifier}                → Auto-detect (specs → plans → code)
+
+Examples:
+  /sdd:review spec:user-auth        → Review specification
+  /sdd:review be:plan:user-auth     → Backend review of feature plan
+  /sdd:review fe:code:user-auth     → Frontend review of implementation
+  /sdd:review security:code:payment → Security review of payment code
+  /sdd:review user-auth             → Auto-detect and auto-select perspective
+
+## Output Template
+@{templates/review_template.md}
+
+## Severity Levels
+High Priority (Blocking):
+- Security vulnerabilities
+- Data integrity risks
+- Production-breaking bugs
+- Accessibility failures (WCAG A)
+
+Medium Priority (Should Fix):
+- Performance concerns
+- Maintainability issues
+- Missing error handling
+- Documentation gaps
+
+Low Priority (Nice to Have):
+- Style improvements
+- Minor optimizations
+- Enhanced logging
+- Test coverage gaps
+
+## Review Principles
+- Be Constructive: Focus on improvement, not criticism
+- Be Specific: Vague feedback is not actionable
+- Be Prioritized: Distinguish critical from nice-to-have
+- Be Consistent: Apply same standards across all reviews
+- Be Educational: Explain the "why" behind recommendations
+
+## Output
+Write review report to: docs/reviews/{target_type}/{identifier}.md
+
+Output locations by target:
+- spec:{id} → docs/reviews/specs/{id}.md
+- plan:{id} → docs/reviews/plans/features/{id}.md
+- plan:fix:{id} → docs/reviews/plans/fixes/{id}.md
+- plan:refactor:{id} → docs/reviews/plans/refactors/{id}.md
+- plan:change:{id} → docs/reviews/plans/changes/{id}.md
+- code:{id} → docs/reviews/code/{id}.md
+
+Rules:
+- Create output directory if it does not exist
+
+After review is complete:
+
+✅ Review complete: {identifier}
+   → {output_file_path}
+
+Summary:
+   - Passed: {passed_count}/{total_count} items
+   - Warnings: {warning_count}
+   - Issues: {issue_count}
+
+Overall Assessment: {PASS|NEEDS_REVISION|FAIL}
+
+Next steps:
+
+  If issues exist:
+    1. Address issues in source artifact
+    2. /sdd:review {perspective}:{target}:{identifier}  ← Re-review
+
+  If only warnings:
+    Consider addressing before proceeding, or continue with:
+    /sdd:do {identifier}
+
+  If all passed:
+    Ready for next phase!
+    /sdd:do {identifier}
+"""

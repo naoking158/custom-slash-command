@@ -1,0 +1,60 @@
+description = "Analyze bugs and generate fix plans"
+prompt = """
+@{_shared/roles/debug.md}
+
+## Task
+Analyze the bug thoroughly and produce an actionable analysis report with a fix plan.
+
+Bug Description: {{args}}
+
+@{_shared/processes/debug.md}
+
+## File Naming Rules
+@{_shared/file-naming-rules.md}
+
+## Output Template
+@{templates/bug_analysis_template.md}
+
+## Severity Levels
+- Critical: System crash, data loss, security vulnerability
+- High: Major feature broken, no workaround
+- Medium: Feature degraded, workaround available
+- Low: Minor inconvenience, cosmetic issues
+
+## Output
+Write TWO documents (create directories if they do not exist):
+
+1. Bug Analysis Report:
+   docs/analysis/bugs/YYYYMMDD-{identifier}.md
+
+2. Fix Plan (Auto-Generated):
+   docs/plans/fixes/YYYYMMDD-{identifier}.md
+
+Rules:
+- Use today's date for YYYYMMDD prefix
+- Extract identifier from the bug description using kebab-case
+- Create output directories if they do not exist
+
+After writing both files, confirm with:
+
+✅ Bug analysis complete
+   → docs/analysis/bugs/{date}-{identifier}.md
+
+✅ Fix plan generated
+   → docs/plans/fixes/{date}-{identifier}.md
+
+Next steps:
+
+  Quick fix (simple bugs):
+    /sdd:do {identifier}
+
+  Review plan first (complex bugs):
+    Review the generated plan, then:
+    /sdd:do {identifier}
+
+Summary:
+- Severity: {Critical | High | Medium | Low}
+- Root cause: {brief description}
+- Files affected: {count}
+- Estimated complexity: {Low | Medium | High}
+"""

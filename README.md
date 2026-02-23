@@ -1,12 +1,14 @@
-# Custom Slash Commands for Claude Code
+# Custom Slash Commands for Claude Code & gemini-cli
 
-Custom slash commands for implementing the SDD (Spec-Driven Development) pipeline in Claude Code.
+Custom slash commands for implementing the SDD (Spec-Driven Development) pipeline in Claude Code and gemini-cli.
 
 ## Overview
 
-This repository provides custom slash commands for Claude Code, enabling a systematic software development workflow: Research → Spec → Plan → Do → Review.
+This repository provides custom slash commands for Claude Code and gemini-cli, enabling a systematic software development workflow: Research → Spec → Plan → Do → Review. Both tools share the same prompt logic, ensuring consistent behavior across different AI assistants.
 
 ### Available Commands
+
+#### Claude Code
 
 | Command | Description | Output |
 |---------|-------------|--------|
@@ -19,12 +21,27 @@ This repository provides custom slash commands for Claude Code, enabling a syste
 | `/do` | Execute implementation plans | Source code files |
 | `/review` | Review artifacts | `docs/reviews/{type}/` |
 
+#### gemini-cli
+
+| Command | Description | Output |
+|---------|-------------|--------|
+| `/sdd:research` | Research and analyze requirements | `docs/research/` |
+| `/sdd:spec` | Create specifications from research | `docs/specs/` |
+| `/sdd:plan` | Create implementation plans | `docs/plans/{type}/` |
+| `/sdd:debug` | Analyze bugs + generate fix plans | `docs/analysis/bugs/` + `docs/plans/fixes/` |
+| `/sdd:refactor` | Analyze code for refactoring | `docs/analysis/refactors/` + `docs/plans/refactors/` |
+| `/sdd:change` | Analyze feature modifications | `docs/analysis/changes/` + `docs/plans/changes/` |
+| `/sdd:do` | Execute implementation plans | Source code files |
+| `/sdd:review` | Review artifacts | `docs/reviews/{type}/` |
+
 ## Installation
 
 ### Prerequisites
 
-- Claude Code installed
-- `~/.claude/` directory exists
+- Claude Code and/or gemini-cli installed
+- `~/.claude/` directory exists (for Claude Code)
+- `~/.gemini/` directory exists (for gemini-cli)
+- gemini-cli v0.23.0+ (for `@{path}` syntax support)
 
 ### Setup
 
@@ -35,37 +52,72 @@ This repository provides custom slash commands for Claude Code, enabling a syste
    cd custom-slash-command
    ```
 
-2. **Create symlinks**
+2. **Create shared prompts symlink**
+
+   ```bash
+   # Link the prompts directory to HOME (shared by both tools)
+   ln -sf "$(pwd)/prompts" ~/.prompts
+   ```
+
+3. **Create symlinks for Claude Code**
 
    ```bash
    # Link the commands directory
    ln -sf "$(pwd)/commands" ~/.claude/commands
-
-   # Link the prompts directory (as .prompts)
-   ln -sf "$(pwd)/prompts" ~/.claude/.prompts
    ```
 
-3. **Verify the setup**
+4. **Create symlinks for gemini-cli**
 
    ```bash
-   # Verify symlinks are created correctly
-   ls -la ~/.claude/commands
-   ls -la ~/.claude/.prompts
+   # Link the sdd commands directory
+   ln -sf "$(pwd)/gemini/commands/sdd" ~/.gemini/commands/sdd
+   ```
 
-   # Verify command files are accessible
-   ls ~/.claude/commands/
+5. **Configure gemini-cli workspace**
+
+   Add `~/.prompts` to gemini-cli's workspace by editing `~/.gemini/settings.json`:
+
+   ```json
+   {
+     "context": {
+       "includeDirectories": ["~/.prompts"]
+     }
+   }
+   ```
+
+   Or if you already have a settings.json, add the `context.includeDirectories` field to it.
+
+6. **Verify the setup**
+
+   ```bash
+   # Verify shared prompts
+   ls -la ~/.prompts
+
+   # Verify Claude Code symlinks
+   ls -la ~/.claude/commands
+
+   # Verify gemini-cli symlinks
+   ls -la ~/.gemini/commands/sdd
    ```
 
 ### Uninstall
 
 ```bash
+# Remove shared prompts
+rm ~/.prompts
+
+# Remove Claude Code symlinks
 rm ~/.claude/commands
-rm ~/.claude/.prompts
+
+# Remove gemini-cli symlinks
+rm ~/.gemini/commands/sdd
 ```
 
 ## Usage
 
-### New Feature Development Flow
+### Claude Code
+
+#### New Feature Development Flow
 
 ```bash
 # 1. Research requirements
@@ -84,7 +136,7 @@ rm ~/.claude/.prompts
 /review code:20241217-user-auth
 ```
 
-### Bug Fix Flow
+#### Bug Fix Flow
 
 ```bash
 # 1. Analyze the bug (auto-generates analysis and plan)
@@ -94,7 +146,7 @@ rm ~/.claude/.prompts
 /do 20241217-login-button-fix
 ```
 
-### Refactoring Flow
+#### Refactoring Flow
 
 ```bash
 # 1. Analyze for refactoring
@@ -104,7 +156,7 @@ rm ~/.claude/.prompts
 /do 20241217-auth-module
 ```
 
-### Feature Modification Flow
+#### Feature Modification Flow
 
 ```bash
 # 1. Analyze the change
@@ -114,7 +166,7 @@ rm ~/.claude/.prompts
 /do 20241217-chat-input-width
 ```
 
-### Review Flow
+#### Review Flow
 
 ```bash
 # Review a specification
@@ -135,13 +187,79 @@ rm ~/.claude/.prompts
 
 **Available perspectives:** `fe:` (frontend), `be:` (backend), `security:`, `perf:` (performance), `doc:` (documentation)
 
+### gemini-cli
+
+#### New Feature Development Flow
+
+```bash
+# 1. Research requirements
+gemini "/sdd:research implement user authentication feature"
+
+# 2. Create specification
+gemini "/sdd:spec 20241217-user-auth"
+
+# 3. Create implementation plan
+gemini "/sdd:plan 20241217-user-auth"
+
+# 4. Execute implementation
+gemini "/sdd:do 20241217-user-auth"
+
+# 5. Review the code
+gemini "/sdd:review code:20241217-user-auth"
+```
+
+#### Bug Fix Flow
+
+```bash
+# 1. Analyze the bug (auto-generates analysis and plan)
+gemini "/sdd:debug login button not working"
+
+# 2. Execute the fix
+gemini "/sdd:do 20241217-login-button-fix"
+```
+
+#### Refactoring Flow
+
+```bash
+# 1. Analyze for refactoring
+gemini "/sdd:refactor auth-module"
+
+# 2. Execute the refactoring
+gemini "/sdd:do 20241217-auth-module"
+```
+
+#### Feature Modification Flow
+
+```bash
+# 1. Analyze the change
+gemini "/sdd:change fix chat input width expanding issue"
+
+# 2. Execute the change
+gemini "/sdd:do 20241217-chat-input-width"
+```
+
+#### Review Flow
+
+```bash
+# Review a specification
+gemini "/sdd:review spec:20241218-user-auth"
+
+# Backend review of a plan
+gemini "/sdd:review be:plan:20241218-user-auth"
+
+# Security review of code
+gemini "/sdd:review security:code:payment"
+```
+
+**Available perspectives:** `fe:` (frontend), `be:` (backend), `security:`, `perf:` (performance), `doc:` (documentation)
+
 ## Directory Structure
 
 ### Repository Structure
 
 ```
 custom-slash-command/
-├── commands/           # Slash command definitions
+├── commands/           # Claude Code slash command definitions
 │   ├── research.md
 │   ├── spec.md
 │   ├── plan.md
@@ -150,13 +268,42 @@ custom-slash-command/
 │   ├── change.md
 │   ├── do.md
 │   └── review.md
-├── prompts/            # Prompt logic
-│   ├── _shared/               # Shared content
+├── gemini/             # gemini-cli commands
+│   └── commands/
+│       └── sdd/        # SDD namespace commands
+│           ├── research.toml
+│           ├── spec.toml
+│           ├── plan.toml
+│           ├── do.toml
+│           ├── debug.toml
+│           ├── refactor.toml
+│           ├── change.toml
+│           └── review.toml
+├── prompts/            # Shared prompt logic
+│   ├── _shared/               # Shared content (tool-agnostic)
+│   │   ├── roles/             # Role definitions
+│   │   │   ├── research.md
+│   │   │   ├── spec.md
+│   │   │   ├── plan.md
+│   │   │   ├── do.md
+│   │   │   ├── debug.md
+│   │   │   ├── refactor.md
+│   │   │   ├── change.md
+│   │   │   └── review.md
+│   │   ├── processes/         # Process definitions
+│   │   │   ├── research.md
+│   │   │   ├── spec.md
+│   │   │   ├── plan.md
+│   │   │   ├── do.md
+│   │   │   ├── debug.md
+│   │   │   ├── refactor.md
+│   │   │   ├── change.md
+│   │   │   └── review.md
 │   │   ├── file-naming-rules.md
 │   │   ├── output-constraints.md
 │   │   ├── placeholders.md
 │   │   └── quality-standards.md
-│   ├── 1_research.md
+│   ├── 1_research.md          # Claude Code specific prompts
 │   ├── 2_spec.md
 │   ├── 3_plan.md
 │   ├── 4_debug.md
@@ -218,7 +365,7 @@ your-project/
 
 ### Prompt Architecture
 
-All prompts use XML tags optimized for Claude's parsing:
+**Claude Code** prompts use XML tags optimized for Claude's parsing:
 
 | Tag | Purpose |
 |-----|---------|
@@ -229,9 +376,32 @@ All prompts use XML tags optimized for Claude's parsing:
 | `<critical>` | Critical constraints (must follow) |
 | `<example>` | Few-shot examples |
 
-### Shared Content
+**gemini-cli** commands use TOML format with `@{path}` injection:
 
-Common patterns are centralized in `prompts/_shared/`:
+```toml
+description = "Command description"
+prompt = """
+@{_shared/roles/research.md}
+
+## Task
+Your task instructions here.
+
+Feature: {{args}}
+
+@{_shared/processes/research.md}
+"""
+```
+
+Note: The `@{path}` syntax resolves paths from directories listed in `context.includeDirectories` (configured in `~/.gemini/settings.json`).
+
+### Shared Content Architecture
+
+Both Claude Code and gemini-cli share the same prompt logic through `prompts/_shared/`:
+
+| Directory | Content |
+|-----------|---------|
+| `roles/` | Tool-agnostic role definitions (Research, Spec, Plan, Do, etc.) |
+| `processes/` | Tool-agnostic process steps |
 
 | File | Description |
 |------|-------------|
@@ -242,10 +412,13 @@ Common patterns are centralized in `prompts/_shared/`:
 
 ### Placeholder Convention
 
-All placeholders use double-brace uppercase syntax:
+**Claude Code:** Uses double-brace uppercase syntax:
 - `{{IDENTIFIER}}` - Normalized feature/bug identifier
 - `{{DATE}}` - Current date (YYYYMMDD)
 - `{{INPUT}}` - Raw user input
+
+**gemini-cli:** Uses double-brace lowercase syntax:
+- `{{args}}` - Command arguments passed by user
 
 ## License
 

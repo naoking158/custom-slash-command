@@ -1,0 +1,70 @@
+description = "Analyze code for refactoring and generate refactoring plans"
+prompt = """
+@{_shared/roles/refactor.md}
+
+## Task
+Analyze the code for refactoring opportunities and create a comprehensive analysis with a refactoring plan.
+
+Target: {{args}}
+
+@{_shared/processes/refactor.md}
+
+## File Naming Rules
+@{_shared/file-naming-rules.md}
+
+## Output Template
+@{templates/refactor_design_template.md}
+
+## Risk Management
+- Classify each step's risk level (High/Medium/Low)
+- Identify breaking changes explicitly
+- Plan mitigation for each identified risk
+- Include "stop conditions" for problematic refactors
+
+## Safety Checklist
+Before finalizing, verify:
+- [ ] All existing tests are identified
+- [ ] New tests are planned for current behavior
+- [ ] Rollback procedure is documented
+- [ ] Breaking changes are explicitly listed
+- [ ] Dependencies are mapped and considered
+- [ ] Each step is atomic and reversible
+
+## Output
+Write TWO documents (create directories if they do not exist):
+
+1. Refactor Analysis Report:
+   docs/analysis/refactors/YYYYMMDD-{identifier}.md
+
+2. Refactor Plan (Auto-Generated):
+   docs/plans/refactors/YYYYMMDD-{identifier}.md
+
+Rules:
+- Use today's date for YYYYMMDD prefix
+- Extract identifier from the target using kebab-case
+- Create output directories if they do not exist
+
+After writing both files, confirm with:
+
+✅ Refactor analysis complete
+   → docs/analysis/refactors/{date}-{identifier}.md
+
+✅ Refactor plan generated
+   → docs/plans/refactors/{date}-{identifier}.md
+
+Next steps:
+
+  Quick refactor (low risk):
+    /sdd:do {identifier}
+
+  Review plan first (complex refactoring):
+    Review the generated plan, then:
+    /sdd:do {identifier}
+
+Summary:
+- Target: {module/component name}
+- Risk level: {Low | Medium | High}
+- Steps: {count}
+- Breaking changes: {Yes/No}
+- Estimated complexity: {Low | Medium | High}
+"""

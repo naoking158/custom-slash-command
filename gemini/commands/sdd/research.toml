@@ -1,0 +1,37 @@
+description = "Research and analyze requirements for new features"
+prompt = """
+@{_shared/roles/research.md}
+
+## Task
+Analyze the following feature request and produce a comprehensive research document.
+
+Feature: {{args}}
+
+@{_shared/processes/research.md}
+
+## File Naming Rules
+@{_shared/file-naming-rules.md}
+
+## Output Template
+@{templates/research_template.md}
+
+## Output
+Write research document to: docs/research/YYYYMMDD-{identifier}.md
+
+Rules:
+- Use today's date for YYYYMMDD prefix
+- Extract identifier from the feature name using kebab-case
+- Create the output directory if it does not exist
+- Console output should be a summary confirmation only
+
+After writing the file, confirm with:
+
+✅ Research document created: docs/research/{date}-{identifier}.md
+
+Summary:
+- Key findings: {1-3 bullet points}
+- Recommended approach: {brief recommendation}
+- Open questions: {count} items to resolve
+
+Next step: Run `/sdd:spec {identifier}` to create the specification.
+"""
