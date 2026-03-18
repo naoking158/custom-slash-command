@@ -47,4 +47,4 @@ You MUST extract a concise, meaningful identifier from the description.
 
 ## After Completion
 
-Provide a brief summary and suggest running `/spec YYYYMMDD-{identifier}` next.
+Provide a brief summary and suggest running `/my:spec YYYYMMDD-{identifier}` next.

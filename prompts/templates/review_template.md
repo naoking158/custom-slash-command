@@ -47,6 +47,6 @@
 
 {Based on assessment, suggest next command}
 
-- If PASS: `/do {identifier}` or merge approval
-- If NEEDS_REVISION: Address warnings, then `/review {identifier}` again
-- If FAIL: Address issues, update artifact, then `/review {identifier}`
+- If PASS: `/my:do {identifier}` or merge approval
+- If NEEDS_REVISION: Address warnings, then `/my:review {identifier}` again
+- If FAIL: Address issues, update artifact, then `/my:review {identifier}`

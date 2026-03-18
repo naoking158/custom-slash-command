@@ -56,7 +56,7 @@
 
 ## 9. Next Steps
 <!-- What should happen next? -->
-- [ ] Proceed to `/spec` phase with:
+- [ ] Proceed to `/my:spec` phase with:
 
 ---
 **Created:** {date}

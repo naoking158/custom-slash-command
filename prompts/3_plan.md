@@ -9,10 +9,10 @@ Task: Create detailed, step-by-step implementation plans.
 <resolution-table>
 | Command Pattern | Source Document | Output Location |
 |-----------------|-----------------|-----------------|
-| `/plan {{IDENTIFIER}}` | `docs/specs/{{IDENTIFIER}}.md` | `docs/plans/features/{{IDENTIFIER}}.md` |
-| `/plan fix:{{IDENTIFIER}}` | `docs/analysis/bugs/{{IDENTIFIER}}.md` | `docs/plans/fixes/{{IDENTIFIER}}.md` |
-| `/plan refactor:{{IDENTIFIER}}` | `docs/analysis/refactors/{{IDENTIFIER}}.md` | `docs/plans/refactors/{{IDENTIFIER}}.md` |
-| `/plan change:{{IDENTIFIER}}` | `docs/analysis/changes/{{IDENTIFIER}}.md` | `docs/plans/changes/{{IDENTIFIER}}.md` |
+| `/my:plan {{IDENTIFIER}}` | `docs/specs/{{IDENTIFIER}}.md` | `docs/plans/features/{{IDENTIFIER}}.md` |
+| `/my:plan fix:{{IDENTIFIER}}` | `docs/analysis/bugs/{{IDENTIFIER}}.md` | `docs/plans/fixes/{{IDENTIFIER}}.md` |
+| `/my:plan refactor:{{IDENTIFIER}}` | `docs/analysis/refactors/{{IDENTIFIER}}.md` | `docs/plans/refactors/{{IDENTIFIER}}.md` |
+| `/my:plan change:{{IDENTIFIER}}` | `docs/analysis/changes/{{IDENTIFIER}}.md` | `docs/plans/changes/{{IDENTIFIER}}.md` |
 </resolution-table>
 
 <validation>
@@ -33,10 +33,10 @@ For '{{IDENTIFIER}}', expected one of:
   - docs/analysis/changes/{{IDENTIFIER}}.md (changes)
 
 Tips:
-  - Run `/research {{IDENTIFIER}}` then `/spec {{IDENTIFIER}}` for new features
-  - Run `/debug {{IDENTIFIER}}` for bug analysis
-  - Run `/refactor {{IDENTIFIER}}` for refactoring analysis
-  - Run `/change {{IDENTIFIER}}` for change analysis
+  - Run `/my:research {{IDENTIFIER}}` then `/my:spec {{IDENTIFIER}}` for new features
+  - Run `/my:debug {{IDENTIFIER}}` for bug analysis
+  - Run `/my:refactor {{IDENTIFIER}}` for refactoring analysis
+  - Run `/my:change {{IDENTIFIER}}` for change analysis
 ```
 </error-template>
 </input-handling>
@@ -108,7 +108,7 @@ Each step must be:
 <result>
 File written to: docs/plans/features/20241218-user-auth.md
 Summary: Source=docs/specs/20241218-user-auth.md, 5 files to create, 3 to modify, 4 phases
-Next step: /do 20241218-user-auth
+Next step: /my:do 20241218-user-auth
 </result>
 </example>
 
@@ -131,6 +131,6 @@ Phase overview:
 
 Dependencies: {list any new packages}
 
-Next step: Run `/do {{IDENTIFIER}}` to begin implementation.
+Next step: Run `/my:do {{IDENTIFIER}}` to begin implementation.
 </confirmation-format>
 </output>

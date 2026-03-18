@@ -35,10 +35,10 @@ Parse command arguments in this order:
 3. Remaining argument is the identifier
 
 Examples:
-- `/do-by-gemini user-auth` → model=default, review=true, identifier=user-auth
-- `/do-by-gemini -m 3-pro user-auth` → model=3-pro, review=true, identifier=user-auth
-- `/do-by-gemini --no-review user-auth` → model=default, review=false, identifier=user-auth
-- `/do-by-gemini -m 3-pro --no-review feature:auth` → model=3-pro, review=false, identifier=feature:auth
+- `/my:do-by-gemini user-auth` → model=default, review=true, identifier=user-auth
+- `/my:do-by-gemini -m 3-pro user-auth` → model=3-pro, review=true, identifier=user-auth
+- `/my:do-by-gemini --no-review user-auth` → model=default, review=false, identifier=user-auth
+- `/my:do-by-gemini -m 3-pro --no-review feature:auth` → model=3-pro, review=false, identifier=feature:auth
 </option-parsing>
 
 <model-resolution>
@@ -50,7 +50,7 @@ Examples:
 </model-resolution>
 
 <resolution-logic>
-The `/do-by-gemini` command automatically resolves the plan type:
+The `/my:do-by-gemini` command automatically resolves the plan type:
 
 1. plans/features/{{IDENTIFIER}}.md exists → Execute new feature
 2. plans/fixes/{{IDENTIFIER}}.md exists → Execute bug fix
@@ -61,10 +61,10 @@ The `/do-by-gemini` command automatically resolves the plan type:
 </resolution-logic>
 
 <explicit-prefix>
-/do-by-gemini feature:{{IDENTIFIER}}   → docs/plans/features/{{IDENTIFIER}}.md
-/do-by-gemini fix:{{IDENTIFIER}}       → docs/plans/fixes/{{IDENTIFIER}}.md
-/do-by-gemini refactor:{{IDENTIFIER}}  → docs/plans/refactors/{{IDENTIFIER}}.md
-/do-by-gemini change:{{IDENTIFIER}}    → docs/plans/changes/{{IDENTIFIER}}.md
+/my:do-by-gemini feature:{{IDENTIFIER}}   → docs/plans/features/{{IDENTIFIER}}.md
+/my:do-by-gemini fix:{{IDENTIFIER}}       → docs/plans/fixes/{{IDENTIFIER}}.md
+/my:do-by-gemini refactor:{{IDENTIFIER}}  → docs/plans/refactors/{{IDENTIFIER}}.md
+/my:do-by-gemini change:{{IDENTIFIER}}    → docs/plans/changes/{{IDENTIFIER}}.md
 </explicit-prefix>
 
 <error-gemini-not-found>
@@ -86,14 +86,14 @@ For more information:
 📋 To create a plan:
 
   New Feature:
-    /research {{IDENTIFIER}}  → Start with research
-    /spec {{IDENTIFIER}}      → Create specification (if research exists)
-    /plan {{IDENTIFIER}}      → Create implementation plan (if spec exists)
+    /my:research {{IDENTIFIER}}  → Start with research
+    /my:spec {{IDENTIFIER}}      → Create specification (if research exists)
+    /my:plan {{IDENTIFIER}}      → Create implementation plan (if spec exists)
 
   Maintenance:
-    /debug {{IDENTIFIER}}      → Analyze and plan bug fix
-    /refactor {{IDENTIFIER}}   → Analyze and plan refactoring
-    /change {{IDENTIFIER}}     → Analyze and plan behavior change
+    /my:debug {{IDENTIFIER}}      → Analyze and plan bug fix
+    /my:refactor {{IDENTIFIER}}   → Analyze and plan refactoring
+    /my:change {{IDENTIFIER}}     → Analyze and plan behavior change
 
 💡 Tip: Check existing documents with: ls docs/plans/
 </error-no-plan>
@@ -104,8 +104,8 @@ For more information:
    - docs/plans/changes/{{IDENTIFIER}}.md
 
 Please specify flow:
-  /do-by-gemini feature:{{IDENTIFIER}}
-  /do-by-gemini change:{{IDENTIFIER}}
+  /my:do-by-gemini feature:{{IDENTIFIER}}
+  /my:do-by-gemini change:{{IDENTIFIER}}
 </error-multiple-plans>
 
 <error-empty-plan>
@@ -138,7 +138,7 @@ Possible causes:
 Suggested actions:
   1. Check `gemini auth status`
   2. Retry after a moment
-  3. Use `/do` to execute with Claude instead
+  3. Use `/my:do` to execute with Claude instead
 </error-gemini-execution>
 
 <error-pattern-detection>
@@ -206,7 +206,7 @@ Suggested actions:
      https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com/quotas
 
   3. Consider using a different model with higher quota
-  4. Use `/do` to execute with Claude instead
+  4. Use `/my:do` to execute with Claude instead
 </error-rate-limit>
 
 <error-network>
@@ -245,7 +245,7 @@ Suggested actions:
      - Adjusting sandbox permissions
      - Running in a trusted environment
 
-  3. Use `/do` to execute with Claude instead (different sandbox model)
+  3. Use `/my:do` to execute with Claude instead (different sandbox model)
 </error-sandbox-restriction>
 
 
@@ -293,7 +293,7 @@ Aliases:
   - 3, 3-pro → gemini-3-pro-preview
 
 Example:
-  /do-by-gemini -m 3-pro {identifier}
+  /my:do-by-gemini -m 3-pro {identifier}
 </error-invalid-model>
 
 <error-model-unavailable>
@@ -329,7 +329,7 @@ Remaining issues:
 Suggested actions:
   1. Review the remaining issues manually
   2. Make targeted fixes to the specific problems
-  3. Run /review {identifier} after manual changes
+  3. Run /my:review {identifier} after manual changes
 
 Changes from improvement cycles have been applied.
 </error-max-cycles>
@@ -743,7 +743,7 @@ Where:
 ⏭️ Skipping automatic review (--no-review flag)
 
 To review changes later, run:
-  /review {identifier}
+  /my:review {identifier}
 
 Or manually inspect:
   git diff

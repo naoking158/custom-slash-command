@@ -92,17 +92,17 @@ Write TWO documents (create directories if they do not exist):
 </change-principles>
 
 <decision-guide>
-Use `/change` when:
+Use `/my:change` when:
 - Modifying existing behavior
 - UI/UX improvements
 - Small to medium feature enhancements
 - Behavior adjustments
 
 Consider other commands when:
-- New feature from scratch → `/research` → `/spec`
-- Bug fix → `/debug`
-- Code structure improvement → `/refactor`
-- Large architectural change → `/spec`
+- New feature from scratch → `/my:research` → `/my:spec`
+- Bug fix → `/my:debug`
+- Code structure improvement → `/my:refactor`
+- Large architectural change → `/my:spec`
 </decision-guide>
 </rules>
 
@@ -128,11 +128,11 @@ After writing both files, confirm with:
 Next steps:
 
   Quick change (simple modifications):
-    /do {{IDENTIFIER}}
+    /my:do {{IDENTIFIER}}
 
   Review plan first (complex changes):
-    /plan change:{{IDENTIFIER}}  ← Edit the generated plan
-    /do {{IDENTIFIER}}
+    /my:plan change:{{IDENTIFIER}}  ← Edit the generated plan
+    /my:do {{IDENTIFIER}}
 
 Summary:
 - Feature: {feature name}

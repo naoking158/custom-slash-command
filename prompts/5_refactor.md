@@ -111,11 +111,11 @@ After writing both files, confirm with:
 Next steps:
 
   Quick refactor (low risk):
-    /do {{IDENTIFIER}}
+    /my:do {{IDENTIFIER}}
 
   Review plan first (complex refactoring):
-    /plan refactor:{{IDENTIFIER}}  ← Edit the generated plan
-    /do {{IDENTIFIER}}
+    /my:plan refactor:{{IDENTIFIER}}  ← Edit the generated plan
+    /my:do {{IDENTIFIER}}
 
 Summary:
 - Target: {module/component name}

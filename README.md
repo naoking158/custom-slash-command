@@ -12,27 +12,28 @@ This repository provides custom slash commands for Claude Code and gemini-cli, e
 
 | Command | Description | Output |
 |---------|-------------|--------|
-| `/research` | Research and analyze requirements | `docs/research/` |
-| `/spec` | Create specifications from research | `docs/specs/` |
-| `/plan` | Create implementation plans | `docs/plans/{type}/` |
-| `/debug` | Analyze bugs + generate fix plans | `docs/analysis/bugs/` + `docs/plans/fixes/` |
-| `/refactor` | Analyze code for refactoring | `docs/analysis/refactors/` + `docs/plans/refactors/` |
-| `/change` | Analyze feature modifications | `docs/analysis/changes/` + `docs/plans/changes/` |
-| `/do` | Execute implementation plans | Source code files |
-| `/review` | Review artifacts | `docs/reviews/{type}/` |
+| `/my:research` | Research and analyze requirements | `docs/research/` |
+| `/my:spec` | Create specifications from research | `docs/specs/` |
+| `/my:plan` | Create implementation plans | `docs/plans/{type}/` |
+| `/my:debug` | Analyze bugs + generate fix plans | `docs/analysis/bugs/` + `docs/plans/fixes/` |
+| `/my:refactor` | Analyze code for refactoring | `docs/analysis/refactors/` + `docs/plans/refactors/` |
+| `/my:change` | Analyze feature modifications | `docs/analysis/changes/` + `docs/plans/changes/` |
+| `/my:do` | Execute implementation plans | Source code files |
+| `/my:do-by-gemini` | Execute plans via gemini-cli | Source code files |
+| `/my:review` | Review artifacts | `docs/reviews/{type}/` |
 
 #### gemini-cli
 
 | Command | Description | Output |
 |---------|-------------|--------|
-| `/sdd:research` | Research and analyze requirements | `docs/research/` |
-| `/sdd:spec` | Create specifications from research | `docs/specs/` |
-| `/sdd:plan` | Create implementation plans | `docs/plans/{type}/` |
-| `/sdd:debug` | Analyze bugs + generate fix plans | `docs/analysis/bugs/` + `docs/plans/fixes/` |
-| `/sdd:refactor` | Analyze code for refactoring | `docs/analysis/refactors/` + `docs/plans/refactors/` |
-| `/sdd:change` | Analyze feature modifications | `docs/analysis/changes/` + `docs/plans/changes/` |
-| `/sdd:do` | Execute implementation plans | Source code files |
-| `/sdd:review` | Review artifacts | `docs/reviews/{type}/` |
+| `/my:research` | Research and analyze requirements | `docs/research/` |
+| `/my:spec` | Create specifications from research | `docs/specs/` |
+| `/my:plan` | Create implementation plans | `docs/plans/{type}/` |
+| `/my:debug` | Analyze bugs + generate fix plans | `docs/analysis/bugs/` + `docs/plans/fixes/` |
+| `/my:refactor` | Analyze code for refactoring | `docs/analysis/refactors/` + `docs/plans/refactors/` |
+| `/my:change` | Analyze feature modifications | `docs/analysis/changes/` + `docs/plans/changes/` |
+| `/my:do` | Execute implementation plans | Source code files |
+| `/my:review` | Review artifacts | `docs/reviews/{type}/` |
 
 ## Installation
 
@@ -69,8 +70,8 @@ This repository provides custom slash commands for Claude Code and gemini-cli, e
 4. **Create symlinks for gemini-cli**
 
    ```bash
-   # Link the sdd commands directory
-   ln -sf "$(pwd)/gemini/commands/sdd" ~/.gemini/commands/sdd
+   # Link the my commands directory
+   ln -sf "$(pwd)/gemini/commands/my" ~/.gemini/commands/my
    ```
 
 5. **Configure gemini-cli workspace**
@@ -97,7 +98,7 @@ This repository provides custom slash commands for Claude Code and gemini-cli, e
    ls -la ~/.claude/commands
 
    # Verify gemini-cli symlinks
-   ls -la ~/.gemini/commands/sdd
+   ls -la ~/.gemini/commands/my
    ```
 
 ### Uninstall
@@ -110,7 +111,7 @@ rm ~/.prompts
 rm ~/.claude/commands
 
 # Remove gemini-cli symlinks
-rm ~/.gemini/commands/sdd
+rm ~/.gemini/commands/my
 ```
 
 ## Usage
@@ -121,68 +122,68 @@ rm ~/.gemini/commands/sdd
 
 ```bash
 # 1. Research requirements
-/research implement user authentication feature
+/my:research implement user authentication feature
 
 # 2. Create specification (use the research document filename)
-/spec 20241217-user-auth
+/my:spec 20241217-user-auth
 
 # 3. Create implementation plan
-/plan 20241217-user-auth
+/my:plan 20241217-user-auth
 
 # 4. Execute implementation
-/do 20241217-user-auth
+/my:do 20241217-user-auth
 
 # 5. Review the code
-/review code:20241217-user-auth
+/my:review code:20241217-user-auth
 ```
 
 #### Bug Fix Flow
 
 ```bash
 # 1. Analyze the bug (auto-generates analysis and plan)
-/debug login button not working
+/my:debug login button not working
 
 # 2. Execute the fix
-/do 20241217-login-button-fix
+/my:do 20241217-login-button-fix
 ```
 
 #### Refactoring Flow
 
 ```bash
 # 1. Analyze for refactoring
-/refactor auth-module
+/my:refactor auth-module
 
 # 2. Execute the refactoring
-/do 20241217-auth-module
+/my:do 20241217-auth-module
 ```
 
 #### Feature Modification Flow
 
 ```bash
 # 1. Analyze the change
-/change fix chat input width expanding issue
+/my:change fix chat input width expanding issue
 
 # 2. Execute the change
-/do 20241217-chat-input-width
+/my:do 20241217-chat-input-width
 ```
 
 #### Review Flow
 
 ```bash
 # Review a specification
-/review spec:20241218-user-auth
+/my:review spec:20241218-user-auth
 
 # Backend review of a plan
-/review be:plan:20241218-user-auth
+/my:review be:plan:20241218-user-auth
 
 # Security review of code
-/review security:code:payment
+/my:review security:code:payment
 
 # Review a specific commit
-/review commit:abc1234
+/my:review commit:abc1234
 
 # Review the current PR
-/review pr:current
+/my:review pr:current
 ```
 
 **Available perspectives:** `fe:` (frontend), `be:` (backend), `security:`, `perf:` (performance), `doc:` (documentation)
@@ -193,62 +194,62 @@ rm ~/.gemini/commands/sdd
 
 ```bash
 # 1. Research requirements
-gemini "/sdd:research implement user authentication feature"
+gemini "/my:research implement user authentication feature"
 
 # 2. Create specification
-gemini "/sdd:spec 20241217-user-auth"
+gemini "/my:spec 20241217-user-auth"
 
 # 3. Create implementation plan
-gemini "/sdd:plan 20241217-user-auth"
+gemini "/my:plan 20241217-user-auth"
 
 # 4. Execute implementation
-gemini "/sdd:do 20241217-user-auth"
+gemini "/my:do 20241217-user-auth"
 
 # 5. Review the code
-gemini "/sdd:review code:20241217-user-auth"
+gemini "/my:review code:20241217-user-auth"
 ```
 
 #### Bug Fix Flow
 
 ```bash
 # 1. Analyze the bug (auto-generates analysis and plan)
-gemini "/sdd:debug login button not working"
+gemini "/my:debug login button not working"
 
 # 2. Execute the fix
-gemini "/sdd:do 20241217-login-button-fix"
+gemini "/my:do 20241217-login-button-fix"
 ```
 
 #### Refactoring Flow
 
 ```bash
 # 1. Analyze for refactoring
-gemini "/sdd:refactor auth-module"
+gemini "/my:refactor auth-module"
 
 # 2. Execute the refactoring
-gemini "/sdd:do 20241217-auth-module"
+gemini "/my:do 20241217-auth-module"
 ```
 
 #### Feature Modification Flow
 
 ```bash
 # 1. Analyze the change
-gemini "/sdd:change fix chat input width expanding issue"
+gemini "/my:change fix chat input width expanding issue"
 
 # 2. Execute the change
-gemini "/sdd:do 20241217-chat-input-width"
+gemini "/my:do 20241217-chat-input-width"
 ```
 
 #### Review Flow
 
 ```bash
 # Review a specification
-gemini "/sdd:review spec:20241218-user-auth"
+gemini "/my:review spec:20241218-user-auth"
 
 # Backend review of a plan
-gemini "/sdd:review be:plan:20241218-user-auth"
+gemini "/my:review be:plan:20241218-user-auth"
 
 # Security review of code
-gemini "/sdd:review security:code:payment"
+gemini "/my:review security:code:payment"
 ```
 
 **Available perspectives:** `fe:` (frontend), `be:` (backend), `security:`, `perf:` (performance), `doc:` (documentation)
@@ -260,17 +261,19 @@ gemini "/sdd:review security:code:payment"
 ```
 custom-slash-command/
 ├── commands/           # Claude Code slash command definitions
-│   ├── research.md
-│   ├── spec.md
-│   ├── plan.md
-│   ├── debug.md
-│   ├── refactor.md
-│   ├── change.md
-│   ├── do.md
-│   └── review.md
+│   └── my/             # my: namespace commands
+│       ├── research.md
+│       ├── spec.md
+│       ├── plan.md
+│       ├── debug.md
+│       ├── refactor.md
+│       ├── change.md
+│       ├── do.md
+│       ├── do-by-gemini.md
+│       └── review.md
 ├── gemini/             # gemini-cli commands
 │   └── commands/
-│       └── sdd/        # SDD namespace commands
+│       └── my/         # my: namespace commands
 │           ├── research.toml
 │           ├── spec.toml
 │           ├── plan.toml
@@ -335,18 +338,18 @@ custom-slash-command/
 ```
 your-project/
 └── docs/
-    ├── research/       # /research output
-    ├── specs/          # /spec output
-    ├── plans/          # /plan output
+    ├── research/       # /my:research output
+    ├── specs/          # /my:spec output
+    ├── plans/          # /my:plan output
     │   ├── features/
     │   ├── fixes/
     │   ├── refactors/
     │   └── changes/
-    ├── analysis/       # /debug, /refactor, /change analysis output
+    ├── analysis/       # /my:debug, /my:refactor, /my:change analysis output
     │   ├── bugs/
     │   ├── refactors/
     │   └── changes/
-    └── reviews/        # /review output
+    └── reviews/        # /my:review output
 ```
 
 ## File Naming Convention

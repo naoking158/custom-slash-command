@@ -60,7 +60,7 @@ Use template: `.prompts/templates/research_template.md`
 <result>
 File written to: docs/research/20241218-user-auth.md
 Summary: 3 key findings, OAuth2 recommended, 5 open questions
-Next step: /spec 20241218-user-auth
+Next step: /my:spec 20241218-user-auth
 </result>
 </example>
 
@@ -74,6 +74,6 @@ Summary:
 - Recommended approach: {brief recommendation}
 - Open questions: {count} items to resolve
 
-Next step: Run `/spec {{IDENTIFIER}}` to create the specification.
+Next step: Run `/my:spec {{IDENTIFIER}}` to create the specification.
 </confirmation-format>
 </output>

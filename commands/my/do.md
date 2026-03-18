@@ -12,10 +12,10 @@ Read and follow the prompt logic at: `~/.prompts/7_do.md`
 
 ## Input Resolution
 
-The `/do` command automatically resolves the plan type:
+The `/my:do` command automatically resolves the plan type:
 
 ```
-/do {identifier}
+/my:do {identifier}
 
 1. plans/features/{id}.md exists → Execute new feature
 2. plans/fixes/{id}.md exists → Execute bug fix
@@ -28,10 +28,10 @@ The `/do` command automatically resolves the plan type:
 ## Explicit Prefix Notation
 
 ```
-/do feature:{name}    → docs/plans/features/{name}.md
-/do fix:{id}          → docs/plans/fixes/{id}.md
-/do refactor:{target} → docs/plans/refactors/{target}.md
-/do change:{feature}  → docs/plans/changes/{feature}.md
+/my:do feature:{name}    → docs/plans/features/{name}.md
+/my:do fix:{id}          → docs/plans/fixes/{id}.md
+/my:do refactor:{target} → docs/plans/refactors/{target}.md
+/my:do change:{feature}  → docs/plans/changes/{feature}.md
 ```
 
 ## Input
@@ -69,14 +69,14 @@ Plan identifier: $ARGUMENTS
 📋 To create a plan:
 
   New Feature:
-    /research {name}  → Start with research
-    /spec {name}      → Create specification
-    /plan {name}      → Create implementation plan
+    /my:research {name}  → Start with research
+    /my:spec {name}      → Create specification
+    /my:plan {name}      → Create implementation plan
 
   Maintenance:
-    /debug {issue}      → Analyze and plan bug fix
-    /refactor {target}  → Analyze and plan refactoring
-    /change {feature}   → Analyze and plan behavior change
+    /my:debug {issue}      → Analyze and plan bug fix
+    /my:refactor {target}  → Analyze and plan refactoring
+    /my:change {feature}   → Analyze and plan behavior change
 
 💡 Tip: Check existing documents with:
     ls docs/plans/
@@ -87,10 +87,10 @@ Plan identifier: $ARGUMENTS
 ❌ Error: Multiple plans found for '{identifier}'
 
 Please specify flow:
-  /do feature:{identifier}
-  /do fix:{identifier}
-  /do refactor:{identifier}
-  /do change:{identifier}
+  /my:do feature:{identifier}
+  /my:do fix:{identifier}
+  /my:do refactor:{identifier}
+  /my:do change:{identifier}
 ```
 
 ## After Completion

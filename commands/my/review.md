@@ -12,10 +12,10 @@ Read and follow the prompt logic at: `~/.prompts/8_review.md`
 
 ## Input Resolution
 
-The `/review` command automatically resolves perspective and target:
+The `/my:review` command automatically resolves perspective and target:
 
 ```
-/review [perspective:]<target>
+/my:review [perspective:]<target>
 
 Perspectives (optional prefix):
   fe:        → Frontend (accessibility, responsive, components)
@@ -44,42 +44,42 @@ Targets:
 
 ```bash
 # Specification review
-/review spec:user-auth
+/my:review spec:user-auth
 
 # Backend review of plan
-/review be:plan:user-auth
+/my:review be:plan:user-auth
 
 # Frontend review of implementation
-/review fe:code:user-auth
+/my:review fe:code:user-auth
 
 # Security review of payment code
-/review security:code:payment
+/my:review security:code:payment
 
 # Auto-detect (checks specs → plans → code)
-/review user-auth
+/my:review user-auth
 
 # === Commit レビュー ===
 # 特定コミットをレビュー
-/review commit:abc1234
+/my:review commit:abc1234
 
 # 最新コミットをレビュー
-/review commit:HEAD
+/my:review commit:HEAD
 
 # 直近3コミットをレビュー
-/review commit:HEAD~3..HEAD
+/my:review commit:HEAD~3..HEAD
 
 # セキュリティ観点でコミットレビュー
-/review security:commit:abc1234
+/my:review security:commit:abc1234
 
 # === PR レビュー ===
 # PR #123 をレビュー
-/review pr:123
+/my:review pr:123
 
 # 現在のブランチのPRをレビュー
-/review pr:current
+/my:review pr:current
 
 # バックエンド観点でPRレビュー
-/review be:pr:123
+/my:review be:pr:123
 ```
 
 ## Input

@@ -12,14 +12,14 @@ Read and follow the prompt logic at: `~/.prompts/3_plan.md`
 
 ## Input Resolution
 
-The `/plan` command supports multiple input types via prefix notation:
+The `/my:plan` command supports multiple input types via prefix notation:
 
 | Command Pattern | Source Document | Output Location |
 |-----------------|-----------------|-----------------|
-| `/plan {feature}` | `docs/specs/{feature}.md` | `docs/plans/features/{feature}.md` |
-| `/plan fix:{id}` | `docs/analysis/bugs/{id}.md` | `docs/plans/fixes/{id}.md` |
-| `/plan refactor:{target}` | `docs/analysis/refactors/{target}.md` | `docs/plans/refactors/{target}.md` |
-| `/plan change:{feature}` | `docs/analysis/changes/{feature}.md` | `docs/plans/changes/{feature}.md` |
+| `/my:plan {feature}` | `docs/specs/{feature}.md` | `docs/plans/features/{feature}.md` |
+| `/my:plan fix:{id}` | `docs/analysis/bugs/{id}.md` | `docs/plans/fixes/{id}.md` |
+| `/my:plan refactor:{target}` | `docs/analysis/refactors/{target}.md` | `docs/plans/refactors/{target}.md` |
+| `/my:plan change:{feature}` | `docs/analysis/changes/{feature}.md` | `docs/plans/changes/{feature}.md` |
 
 ## Input
 Plan identifier: $ARGUMENTS
@@ -46,10 +46,10 @@ Plan identifier: $ARGUMENTS
 
 ## Error Handling
 If source document not found, display guidance:
-- For new features: `/research` → `/spec` → `/plan`
-- For bugs: `/debug {issue}`
-- For refactoring: `/refactor {target}`
-- For changes: `/change {feature}`
+- For new features: `/my:research` → `/my:spec` → `/my:plan`
+- For bugs: `/my:debug {issue}`
+- For refactoring: `/my:refactor {target}`
+- For changes: `/my:change {feature}`
 
 ## After Completion
-Provide a brief summary and suggest running `/do {identifier}` next.
+Provide a brief summary and suggest running `/my:do {identifier}` next.

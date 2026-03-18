@@ -78,9 +78,9 @@ Display next steps:
 📋 Next steps:
 
   Quick refactor (low risk):
-    /do {target}
+    /my:do {target}
 
   Review plan first (complex refactoring):
-    /plan refactor:{target}  ← Edit the generated plan
-    /do {target}
+    /my:plan refactor:{target}  ← Edit the generated plan
+    /my:do {target}
 ```

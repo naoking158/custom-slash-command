@@ -7,7 +7,7 @@ Task: Systematically review artifacts (specifications, plans, code) against pers
 
 <input-handling>
 <resolution-logic>
-The `/review` command parses perspective and target:
+The `/my:review` command parses perspective and target:
 
 Perspectives (prefix):
   fe:        → Frontend review
@@ -33,16 +33,16 @@ Targets:
 </resolution-logic>
 
 <examples>
-/review spec:user-auth        → Review specification
-/review be:plan:user-auth     → Backend review of feature plan
-/review fe:code:user-auth     → Frontend review of implementation
-/review security:code:payment → Security review of payment code
-/review user-auth             → Auto-detect and auto-select perspective
-/review commit:abc1234        → Review specific commit
-/review commit:HEAD           → Review latest commit
-/review commit:HEAD~3..HEAD   → Review last 3 commits
-/review pr:123                → Review PR #123
-/review pr:current            → Review current branch's PR
+/my:review spec:user-auth        → Review specification
+/my:review be:plan:user-auth     → Backend review of feature plan
+/my:review fe:code:user-auth     → Frontend review of implementation
+/my:review security:code:payment → Security review of payment code
+/my:review user-auth             → Auto-detect and auto-select perspective
+/my:review commit:abc1234        → Review specific commit
+/my:review commit:HEAD           → Review latest commit
+/my:review commit:HEAD~3..HEAD   → Review last 3 commits
+/my:review pr:123                → Review PR #123
+/my:review pr:current            → Review current branch's PR
 </examples>
 
 <error-no-target>
@@ -73,9 +73,9 @@ Multiple artifacts found for '{{IDENTIFIER}}':
    - docs/plans/features/{{IDENTIFIER}}.md
 
 Please specify target type:
-  /review spec:{{IDENTIFIER}}
-  /review plan:{{IDENTIFIER}}
-  /review code:{{IDENTIFIER}}
+  /my:review spec:{{IDENTIFIER}}
+  /my:review plan:{{IDENTIFIER}}
+  /my:review code:{{IDENTIFIER}}
 </error-multiple-targets>
 
 <error-commit-not-found>
@@ -93,7 +93,7 @@ Error: PR not found: '{{NUMBER}}'
 Tips:
   - Check PR number: gh pr list
   - Check GitHub auth: gh auth status
-  - Use current branch's PR: /review pr:current
+  - Use current branch's PR: /my:review pr:current
 </error-pr-not-found>
 </input-handling>
 
@@ -216,14 +216,14 @@ Next steps:
 
   If issues exist:
     1. Address issues in source artifact
-    2. /review {perspective}:{target}:{{IDENTIFIER}}  ← Re-review
+    2. /my:review {perspective}:{target}:{{IDENTIFIER}}  ← Re-review
 
   If only warnings:
     Consider addressing before proceeding, or continue with:
-    /do {{IDENTIFIER}}
+    /my:do {{IDENTIFIER}}
 
   If all passed:
     Ready for next phase!
-    /do {{IDENTIFIER}}
+    /my:do {{IDENTIFIER}}
 </confirmation-format>
 </output>

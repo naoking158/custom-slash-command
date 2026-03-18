@@ -85,7 +85,7 @@ Include Mermaid diagrams:
 <result>
 File written to: docs/specs/20241218-user-auth.md
 Summary: 5 user stories, 8 API endpoints, 3 data models
-Next step: /plan 20241218-user-auth
+Next step: /my:plan 20241218-user-auth
 </result>
 </example>
 
@@ -103,6 +103,6 @@ Key design decisions:
 - {decision 1}
 - {decision 2}
 
-Next step: Run `/plan {{IDENTIFIER}}` to create the implementation plan.
+Next step: Run `/my:plan {{IDENTIFIER}}` to create the implementation plan.
 </confirmation-format>
 </output>

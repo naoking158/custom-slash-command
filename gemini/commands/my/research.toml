@@ -33,5 +33,5 @@ Summary:
 - Recommended approach: {brief recommendation}
 - Open questions: {count} items to resolve
 
-Next step: Run `/sdd:spec {identifier}` to create the specification.
+Next step: Run `/my:spec {identifier}` to create the specification.
 """

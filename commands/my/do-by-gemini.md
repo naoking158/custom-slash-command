@@ -13,7 +13,7 @@ Read and follow the prompt logic at: `~/.prompts/9_do_by_gemini.md`
 ## Command Syntax
 
 ```
-/do-by-gemini [-m|--model <model>] [--no-review] {identifier}
+/my:do-by-gemini [-m|--model <model>] [--no-review] {identifier}
 ```
 
 ### Options
@@ -34,10 +34,10 @@ Read and follow the prompt logic at: `~/.prompts/9_do_by_gemini.md`
 
 ## Input Resolution
 
-The `/do-by-gemini` command uses the same resolution logic as `/do`:
+The `/my:do-by-gemini` command uses the same resolution logic as `/my:do`:
 
 ```
-/do-by-gemini {identifier}
+/my:do-by-gemini {identifier}
 
 1. plans/features/{id}.md exists → Execute new feature
 2. plans/fixes/{id}.md exists → Execute bug fix
@@ -50,10 +50,10 @@ The `/do-by-gemini` command uses the same resolution logic as `/do`:
 ## Explicit Prefix Notation
 
 ```
-/do-by-gemini feature:{name}    → docs/plans/features/{name}.md
-/do-by-gemini fix:{id}          → docs/plans/fixes/{id}.md
-/do-by-gemini refactor:{target} → docs/plans/refactors/{target}.md
-/do-by-gemini change:{feature}  → docs/plans/changes/{feature}.md
+/my:do-by-gemini feature:{name}    → docs/plans/features/{name}.md
+/my:do-by-gemini fix:{id}          → docs/plans/fixes/{id}.md
+/my:do-by-gemini refactor:{target} → docs/plans/refactors/{target}.md
+/my:do-by-gemini change:{feature}  → docs/plans/changes/{feature}.md
 ```
 
 ## Input
@@ -63,17 +63,17 @@ Plan identifier: $ARGUMENTS
 
 ```bash
 # Default model (gemini-2.5-pro) with review
-/do-by-gemini user-auth
+/my:do-by-gemini user-auth
 
 # Use Gemini 3 Pro
-/do-by-gemini -m 3-pro user-auth
-/do-by-gemini --model gemini-3-pro-preview user-auth
+/my:do-by-gemini -m 3-pro user-auth
+/my:do-by-gemini --model gemini-3-pro-preview user-auth
 
 # Skip automatic review
-/do-by-gemini --no-review user-auth
+/my:do-by-gemini --no-review user-auth
 
 # Combined options
-/do-by-gemini -m 3-pro --no-review feature:user-auth
+/my:do-by-gemini -m 3-pro --no-review feature:user-auth
 ```
 
 ## Process
@@ -179,14 +179,14 @@ Aliases:
 📋 To create a plan:
 
   New Feature:
-    /research {name}  → Start with research
-    /spec {name}      → Create specification
-    /plan {name}      → Create implementation plan
+    /my:research {name}  → Start with research
+    /my:spec {name}      → Create specification
+    /my:plan {name}      → Create implementation plan
 
   Maintenance:
-    /debug {issue}      → Analyze and plan bug fix
-    /refactor {target}  → Analyze and plan refactoring
-    /change {feature}   → Analyze and plan behavior change
+    /my:debug {issue}      → Analyze and plan bug fix
+    /my:refactor {target}  → Analyze and plan refactoring
+    /my:change {feature}   → Analyze and plan behavior change
 
 💡 Tip: Check existing documents with:
     ls docs/plans/
@@ -197,10 +197,10 @@ Aliases:
 ❌ Error: Multiple plans found for '{identifier}'
 
 Please specify flow:
-  /do-by-gemini feature:{identifier}
-  /do-by-gemini fix:{identifier}
-  /do-by-gemini refactor:{identifier}
-  /do-by-gemini change:{identifier}
+  /my:do-by-gemini feature:{identifier}
+  /my:do-by-gemini fix:{identifier}
+  /my:do-by-gemini refactor:{identifier}
+  /my:do-by-gemini change:{identifier}
 ```
 
 ## After Completion

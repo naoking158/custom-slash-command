@@ -35,4 +35,4 @@ Research document: `docs/research/{feature}.md`
 - MUST include at least one Mermaid diagram
 
 ## After Completion
-Provide a brief summary and suggest running `/plan {feature_name}` next.
+Provide a brief summary and suggest running `/my:plan {feature_name}` next.

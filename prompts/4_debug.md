@@ -98,11 +98,11 @@ After writing both files, confirm with:
 Next steps:
 
   Quick fix (simple bugs):
-    /do {{IDENTIFIER}}
+    /my:do {{IDENTIFIER}}
 
   Review plan first (complex bugs):
-    /plan fix:{{IDENTIFIER}}  ← Edit the generated plan
-    /do {{IDENTIFIER}}
+    /my:plan fix:{{IDENTIFIER}}  ← Edit the generated plan
+    /my:do {{IDENTIFIER}}
 
 Summary:
 - Severity: {Critical | High | Medium | Low}

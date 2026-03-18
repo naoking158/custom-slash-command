@@ -30,11 +30,11 @@ Targets:
   {identifier}                → Auto-detect (specs → plans → code)
 
 Examples:
-  /sdd:review spec:user-auth        → Review specification
-  /sdd:review be:plan:user-auth     → Backend review of feature plan
-  /sdd:review fe:code:user-auth     → Frontend review of implementation
-  /sdd:review security:code:payment → Security review of payment code
-  /sdd:review user-auth             → Auto-detect and auto-select perspective
+  /my:review spec:user-auth        → Review specification
+  /my:review be:plan:user-auth     → Backend review of feature plan
+  /my:review fe:code:user-auth     → Frontend review of implementation
+  /my:review security:code:payment → Security review of payment code
+  /my:review user-auth             → Auto-detect and auto-select perspective
 
 ## Output Template
 @{templates/review_template.md}
@@ -95,13 +95,13 @@ Next steps:
 
   If issues exist:
     1. Address issues in source artifact
-    2. /sdd:review {perspective}:{target}:{identifier}  ← Re-review
+    2. /my:review {perspective}:{target}:{identifier}  ← Re-review
 
   If only warnings:
     Consider addressing before proceeding, or continue with:
-    /sdd:do {identifier}
+    /my:do {identifier}
 
   If all passed:
     Ready for next phase!
-    /sdd:do {identifier}
+    /my:do {identifier}
 """

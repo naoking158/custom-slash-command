@@ -46,11 +46,11 @@ After writing both files, confirm with:
 Next steps:
 
   Quick fix (simple bugs):
-    /sdd:do {identifier}
+    /my:do {identifier}
 
   Review plan first (complex bugs):
     Review the generated plan, then:
-    /sdd:do {identifier}
+    /my:do {identifier}
 
 Summary:
 - Severity: {Critical | High | Medium | Low}

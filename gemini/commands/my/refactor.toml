@@ -55,11 +55,11 @@ After writing both files, confirm with:
 Next steps:
 
   Quick refactor (low risk):
-    /sdd:do {identifier}
+    /my:do {identifier}
 
   Review plan first (complex refactoring):
     Review the generated plan, then:
-    /sdd:do {identifier}
+    /my:do {identifier}
 
 Summary:
 - Target: {module/component name}

@@ -22,17 +22,17 @@ Change Request: {{args}}
 - User-Centric: Keep user experience as the priority
 
 ## Decision Guide
-Use `/sdd:change` when:
+Use `/my:change` when:
 - Modifying existing behavior
 - UI/UX improvements
 - Small to medium feature enhancements
 - Behavior adjustments
 
 Consider other commands when:
-- New feature from scratch → `/sdd:research` → `/sdd:spec`
-- Bug fix → `/sdd:debug`
-- Code structure improvement → `/sdd:refactor`
-- Large architectural change → `/sdd:spec`
+- New feature from scratch → `/my:research` → `/my:spec`
+- Bug fix → `/my:debug`
+- Code structure improvement → `/my:refactor`
+- Large architectural change → `/my:spec`
 
 ## Output
 Write TWO documents (create directories if they do not exist):
@@ -59,11 +59,11 @@ After writing both files, confirm with:
 Next steps:
 
   Quick change (simple modifications):
-    /sdd:do {identifier}
+    /my:do {identifier}
 
   Review plan first (complex changes):
     Review the generated plan, then:
-    /sdd:do {identifier}
+    /my:do {identifier}
 
 Summary:
 - Feature: {feature name}

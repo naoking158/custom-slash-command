@@ -53,5 +53,5 @@ Phase overview:
 
 Dependencies: {list any new packages}
 
-Next step: Run `/sdd:do {identifier}` to begin implementation.
+Next step: Run `/my:do {identifier}` to begin implementation.
 """

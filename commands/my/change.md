@@ -75,17 +75,17 @@ Display next steps:
 📋 Next steps:
 
   Quick change (simple modifications):
-    /do {feature}
+    /my:do {feature}
 
   Review plan first (complex changes):
-    /plan change:{feature}  ← Edit the generated plan
-    /do {feature}
+    /my:plan change:{feature}  ← Edit the generated plan
+    /my:do {feature}
 ```
 
 ## Examples
 
 ```
-/change チャット入力欄の横幅が伸び続けるのを固定したい
-/change ユーザープロフィールのアバター画像を丸形に変更
-/change ダークモード時のボタンのコントラストを改善
+/my:change チャット入力欄の横幅が伸び続けるのを固定したい
+/my:change ユーザープロフィールのアバター画像を丸形に変更
+/my:change ダークモード時のボタンのコントラストを改善
 ```

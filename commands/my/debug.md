@@ -64,9 +64,9 @@ Display next steps:
 📋 Next steps:
 
   Quick fix (simple bugs):
-    /do {id}
+    /my:do {id}
 
   Review plan first (complex bugs):
-    /plan fix:{id}  ← Edit the generated plan
-    /do {id}
+    /my:plan fix:{id}  ← Edit the generated plan
+    /my:do {id}
 ```

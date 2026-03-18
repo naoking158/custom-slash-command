@@ -7,7 +7,7 @@ Task: Execute implementation plans across ALL workflow types: new features, bug 
 
 <input-handling>
 <resolution-logic>
-The `/do` command automatically resolves the plan type:
+The `/my:do` command automatically resolves the plan type:
 
 1. plans/features/{{IDENTIFIER}}.md exists → Execute new feature
 2. plans/fixes/{{IDENTIFIER}}.md exists → Execute bug fix
@@ -18,10 +18,10 @@ The `/do` command automatically resolves the plan type:
 </resolution-logic>
 
 <explicit-prefix>
-/do feature:{{IDENTIFIER}}   → docs/plans/features/{{IDENTIFIER}}.md
-/do fix:{{IDENTIFIER}}       → docs/plans/fixes/{{IDENTIFIER}}.md
-/do refactor:{{IDENTIFIER}}  → docs/plans/refactors/{{IDENTIFIER}}.md
-/do change:{{IDENTIFIER}}    → docs/plans/changes/{{IDENTIFIER}}.md
+/my:do feature:{{IDENTIFIER}}   → docs/plans/features/{{IDENTIFIER}}.md
+/my:do fix:{{IDENTIFIER}}       → docs/plans/fixes/{{IDENTIFIER}}.md
+/my:do refactor:{{IDENTIFIER}}  → docs/plans/refactors/{{IDENTIFIER}}.md
+/my:do change:{{IDENTIFIER}}    → docs/plans/changes/{{IDENTIFIER}}.md
 </explicit-prefix>
 
 <error-no-plan>
@@ -30,14 +30,14 @@ Error: No plan found for '{{IDENTIFIER}}'
 To create a plan:
 
   New Feature:
-    /research {{IDENTIFIER}}  → Start with research
-    /spec {{IDENTIFIER}}      → Create specification (if research exists)
-    /plan {{IDENTIFIER}}      → Create implementation plan (if spec exists)
+    /my:research {{IDENTIFIER}}  → Start with research
+    /my:spec {{IDENTIFIER}}      → Create specification (if research exists)
+    /my:plan {{IDENTIFIER}}      → Create implementation plan (if spec exists)
 
   Maintenance:
-    /debug {{IDENTIFIER}}      → Analyze and plan bug fix
-    /refactor {{IDENTIFIER}}   → Analyze and plan refactoring
-    /change {{IDENTIFIER}}     → Analyze and plan behavior change
+    /my:debug {{IDENTIFIER}}      → Analyze and plan bug fix
+    /my:refactor {{IDENTIFIER}}   → Analyze and plan refactoring
+    /my:change {{IDENTIFIER}}     → Analyze and plan behavior change
 
 Tip: Check existing documents with: ls docs/plans/
 </error-no-plan>
@@ -48,8 +48,8 @@ Error: Multiple plans found for '{{IDENTIFIER}}':
    - docs/plans/changes/{{IDENTIFIER}}.md
 
 Please specify flow:
-  /do feature:{{IDENTIFIER}}
-  /do change:{{IDENTIFIER}}
+  /my:do feature:{{IDENTIFIER}}
+  /my:do change:{{IDENTIFIER}}
 </error-multiple-plans>
 </input-handling>
 

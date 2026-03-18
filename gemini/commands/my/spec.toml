@@ -45,5 +45,5 @@ Key design decisions:
 - {decision 1}
 - {decision 2}
 
-Next step: Run `/sdd:plan {identifier}` to create the implementation plan.
+Next step: Run `/my:plan {identifier}` to create the implementation plan.
 """
