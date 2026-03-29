@@ -23,6 +23,7 @@ Perspectives (optional prefix):
   security:  → Security (OWASP Top 10, auth, crypto)
   perf:      → Performance (algorithms, caching, queries)
   doc:       → Documentation (completeness, accuracy, clarity)
+  maint:     → Maintainability (naming, comments, readability, consistency)
   (none)     → Auto-select based on artifact content
 
 Targets:
@@ -54,6 +55,9 @@ Targets:
 
 # Security review of payment code
 /my:review security:code:payment
+
+# Maintainability review of implementation
+/my:review maint:code:user-auth
 
 # Auto-detect (checks specs → plans → code)
 /my:review user-auth

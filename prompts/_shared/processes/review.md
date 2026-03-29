@@ -16,6 +16,7 @@ Based on perspective and target type, load appropriate checklist:
 | `security:` | Security (auth, validation, vulnerabilities) |
 | `perf:` | Performance (queries, algorithms, caching) |
 | `doc:` | Documentation (clarity, completeness) |
+| `maint:` | Maintainability (naming, comments, readability, consistency) |
 
 Auto-Selection Rules:
 - `.jsx`, `.tsx`, `.vue`, `.svelte`, CSS files → `fe:`

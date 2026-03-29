@@ -15,6 +15,7 @@ Perspectives (prefix):
   security:  → Security review
   perf:      → Performance review
   doc:       → Documentation review
+  maint:     → Maintainability review (naming, comments, readability, consistency)
   (none)     → Auto-select based on target content
 
 Targets:
@@ -99,7 +100,7 @@ Tips:
 
 <process>
 <step n="1" name="Parse Input">
-1. Extract perspective prefix (if any): `fe|be|security|perf|doc`
+1. Extract perspective prefix (if any): `fe|be|security|perf|doc|maint`
 2. Extract target prefix (if any): `spec|plan|code|commit|pr`
 3. Extract identifier
 4. Resolve to input file(s) or Git/PR content
@@ -115,6 +116,7 @@ Based on perspective and target type:
 | `security:` | `.prompts/templates/checklists/review_security_checklist.md` |
 | `perf:` | `.prompts/templates/checklists/review_perf_checklist.md` |
 | `doc:` | `.prompts/templates/checklists/review_doc_checklist.md` |
+| `maint:` | `.prompts/templates/checklists/review_maint_checklist.md` |
 | (auto) | Infer from content type and file patterns |
 
 Auto-Selection Rules:
@@ -141,7 +143,7 @@ For each checklist item:
    - PASS: All items pass, 0-2 warnings, 0 issues
    - NEEDS_REVISION: Any warnings > 2 OR minor issues
    - FAIL: Any critical issues or security vulnerabilities
-2. Write report to: `docs/reviews/{target_type}/{{IDENTIFIER}}.md`
+2. Write report to: `docs/reviews/{target_type}/{PERSPECTIVE}/{{IDENTIFIER}}.md`
 3. Format using: `.prompts/templates/review_template.md`
 </step>
 </process>
@@ -150,14 +152,14 @@ For each checklist item:
 <output-locations>
 | Target | Output Location |
 |--------|-----------------|
-| `spec:{{IDENTIFIER}}` | `docs/reviews/specs/{{IDENTIFIER}}.md` |
-| `plan:{{IDENTIFIER}}` | `docs/reviews/plans/features/{{IDENTIFIER}}.md` |
-| `plan:fix:{{IDENTIFIER}}` | `docs/reviews/plans/fixes/{{IDENTIFIER}}.md` |
-| `plan:refactor:{{IDENTIFIER}}` | `docs/reviews/plans/refactors/{{IDENTIFIER}}.md` |
-| `plan:change:{{IDENTIFIER}}` | `docs/reviews/plans/changes/{{IDENTIFIER}}.md` |
-| `code:{{IDENTIFIER}}` | `docs/reviews/code/{type}/{{IDENTIFIER}}.md` |
-| `commit:{{HASH}}` | `docs/reviews/commits/{{HASH_SHORT}}.md` |
-| `pr:{{NUMBER}}` | `docs/reviews/prs/{{NUMBER}}.md` |
+| `spec:{{IDENTIFIER}}` | `docs/reviews/specs/{{PERSPECTIVE}}/{{IDENTIFIER}}.md` |
+| `plan:{{IDENTIFIER}}` | `docs/reviews/plans/features/{{PERSPECTIVE}}/{{IDENTIFIER}}.md` |
+| `plan:fix:{{IDENTIFIER}}` | `docs/reviews/plans/fixes/{{PERSPECTIVE}}/{{IDENTIFIER}}.md` |
+| `plan:refactor:{{IDENTIFIER}}` | `docs/reviews/plans/refactors/{{PERSPECTIVE}}/{{IDENTIFIER}}.md` |
+| `plan:change:{{IDENTIFIER}}` | `docs/reviews/plans/changes/{{PERSPECTIVE}}/{{IDENTIFIER}}.md` |
+| `code:{{IDENTIFIER}}` | `docs/reviews/code/{type}/{{PERSPECTIVE}}/{{IDENTIFIER}}.md` |
+| `commit:{{HASH}}` | `docs/reviews/commits/{{PERSPECTIVE}}/{{HASH_SHORT}}.md` |
+| `pr:{{NUMBER}}` | `docs/reviews/prs/{{PERSPECTIVE}}/{{NUMBER}}.md` |
 </output-locations>
 
 <severity-levels>
