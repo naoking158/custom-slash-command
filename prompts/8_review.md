@@ -10,13 +10,18 @@ Task: Systematically review artifacts (specifications, plans, code) against pers
 The `/my:review` command parses perspective and target:
 
 Perspectives (prefix):
-  fe:        → Frontend review
-  be:        → Backend review
-  security:  → Security review
-  perf:      → Performance review
-  doc:       → Documentation review
-  maint:     → Maintainability review (naming, comments, readability, consistency)
-  (none)     → Auto-select based on target content
+  fe:        → Frontend review (+ maint auto-applied)
+  be:        → Backend review (+ maint auto-applied)
+  security:  → Security review (standalone)
+  perf:      → Performance review (standalone)
+  doc:       → Documentation review (+ maint auto-applied)
+  maint:     → Maintainability review only
+  (none)     → Auto-select based on target content (fallback: maint)
+
+Maint Auto-Apply Rule:
+  - fe, be, doc → maint checklist is automatically combined
+  - security, perf → standalone (maint NOT auto-applied)
+  - no match → maint only
 
 Targets:
   spec:{{IDENTIFIER}}           → docs/specs/{{IDENTIFIER}}.md
@@ -104,10 +109,17 @@ Tips:
 2. Extract target prefix (if any): `spec|plan|code|commit|pr`
 3. Extract identifier
 4. Resolve to input file(s) or Git/PR content
+5. Determine perspective list:
+   - If `security` or `perf` → [that perspective] (standalone)
+   - If `fe`, `be`, or `doc` → [that perspective, maint]
+   - If `maint` → [maint]
+   - If auto-selected as fe/be/doc → [selected, maint]
+   - If auto-selected as security/perf → [selected] (standalone)
+   - If no match → [maint]
 </step>
 
 <step n="2" name="Load Checklist">
-Based on perspective and target type:
+Load all checklists for the determined perspective list:
 
 | Perspective | Checklist File |
 |-------------|----------------|
@@ -117,14 +129,16 @@ Based on perspective and target type:
 | `perf:` | `.prompts/templates/checklists/review_perf_checklist.md` |
 | `doc:` | `.prompts/templates/checklists/review_doc_checklist.md` |
 | `maint:` | `.prompts/templates/checklists/review_maint_checklist.md` |
-| (auto) | Infer from content type and file patterns |
 
-Auto-Selection Rules:
+Auto-Selection Rules (determines primary perspective):
 - `.jsx`, `.tsx`, `.vue`, `.svelte`, CSS files → `fe:`
 - `.py`, `.go`, `.java`, `.rs`, API routes → `be:`
 - Auth, crypto, input handling code → `security:`
 - Database queries, algorithms, loops → `perf:`
 - Markdown, README, docstrings → `doc:`
+- (no match / fallback) → `maint:`
+
+Maint Auto-Apply: Unless primary is `security` or `perf`, also load `maint` checklist.
 </step>
 
 <step n="3" name="Review Execution">
@@ -143,13 +157,16 @@ For each checklist item:
    - PASS: All items pass, 0-2 warnings, 0 issues
    - NEEDS_REVISION: Any warnings > 2 OR minor issues
    - FAIL: Any critical issues or security vulnerabilities
-2. Write report to: `docs/reviews/{target_type}/{PERSPECTIVE}/{{IDENTIFIER}}.md`
+2. Write report to: `docs/reviews/{target_type}/{PRIMARY_PERSPECTIVE}/{{IDENTIFIER}}.md`
+   (PRIMARY_PERSPECTIVE = first perspective in the list)
 3. Format using: `.prompts/templates/review_template.md`
 </step>
 </process>
 
 <rules>
 <output-locations>
+Note: {{PERSPECTIVE}} uses the primary perspective (first in the perspective list).
+
 | Target | Output Location |
 |--------|-----------------|
 | `spec:{{IDENTIFIER}}` | `docs/reviews/specs/{{PERSPECTIVE}}/{{IDENTIFIER}}.md` |

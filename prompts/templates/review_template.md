@@ -2,7 +2,7 @@
 
 ## Metadata
 - **Target**: {target_type} / {identifier}
-- **Perspective**: {perspective}
+- **Perspectives**: {perspectives}
 - **Reviewed**: {timestamp}
 - **Input Files**: {input_files}
 
@@ -16,7 +16,7 @@
 
 ## Detailed Findings
 
-### {Category 1}
+### [{primary_perspective}] {Primary Perspective Name} Review
 
 #### ✅ Passed
 - {passed_item}
@@ -32,8 +32,21 @@
   - **Impact**: {impact}
   - **Recommendation**: {recommendation}
 
-### {Category 2}
-...
+### [maint] Maintainability Review
+
+#### ✅ Passed
+- {passed_item}
+
+#### ⚠️ Warnings
+- **[W001]** {warning_description}
+  - **Location**: {file:line}
+  - **Suggestion**: {suggestion}
+
+#### ❌ Issues
+- **[E001]** {issue_description}
+  - **Location**: {file:line}
+  - **Impact**: {impact}
+  - **Recommendation**: {recommendation}
 
 ## Action Items
 

@@ -1,13 +1,20 @@
 # Process: Review
 
 ## Step 1: Parse Input
-1. Extract perspective prefix (if any): `fe|be|security|perf|doc`
+1. Extract perspective prefix (if any): `fe|be|security|perf|doc|maint`
 2. Extract target prefix (if any): `spec|plan|code|commit|pr`
 3. Extract identifier
 4. Resolve to input file(s) or Git/PR content
+5. Determine perspective list:
+   - If `security` or `perf` → [that perspective] (standalone)
+   - If `fe`, `be`, or `doc` → [that perspective, maint]
+   - If `maint` → [maint]
+   - If auto-selected as fe/be/doc → [selected, maint]
+   - If auto-selected as security/perf → [selected] (standalone)
+   - If no match → [maint]
 
 ## Step 2: Load Checklist
-Based on perspective and target type, load appropriate checklist:
+Load all checklists for the determined perspective list:
 
 | Perspective | Focus Area |
 |-------------|------------|
@@ -18,12 +25,15 @@ Based on perspective and target type, load appropriate checklist:
 | `doc:` | Documentation (clarity, completeness) |
 | `maint:` | Maintainability (naming, comments, readability, consistency) |
 
-Auto-Selection Rules:
+Auto-Selection Rules (determines primary perspective):
 - `.jsx`, `.tsx`, `.vue`, `.svelte`, CSS files → `fe:`
 - `.py`, `.go`, `.java`, `.rs`, API routes → `be:`
 - Auth, crypto, input handling code → `security:`
 - Database queries, algorithms, loops → `perf:`
 - Markdown, README, docstrings → `doc:`
+- (no match / fallback) → `maint:`
+
+Maint Auto-Apply: Unless primary is `security` or `perf`, also load `maint` checklist.
 
 ## Step 3: Review Execution
 For each checklist item:
