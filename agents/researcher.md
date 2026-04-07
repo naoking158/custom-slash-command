@@ -2,7 +2,7 @@
 name: researcher
 description: "新機能や技術的課題について調査・分析する。research, 調査, リサーチ に関するタスクに使用。"
 tools: Read, Glob, Grep, Write, Bash, WebSearch, WebFetch
-model: inherit
+model: sonnet
 mcpServers: modular-mcp
 ---
 

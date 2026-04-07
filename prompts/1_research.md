@@ -6,7 +6,7 @@ Task: Investigate feature requests and produce comprehensive research documents.
 </role>
 
 <mcp-servers>
-Recommended: gemini-grounded-search
+Recommended: gemini-grounded-search via modular-mcp
 </mcp-servers>
 
 <process>
