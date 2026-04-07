@@ -21,6 +21,7 @@ This repository provides custom slash commands for Claude Code and gemini-cli, e
 | `/my:do` | Execute implementation plans | Source code files |
 | `/my:do-by-gemini` | Execute plans via gemini-cli | Source code files |
 | `/my:review` | Review artifacts | `docs/reviews/{type}/` |
+| `/my:pipeline` | Run sequential pipeline (research → spec → plan → do) | Multiple `docs/` outputs |
 
 #### gemini-cli
 
@@ -167,6 +168,37 @@ rm ~/.gemini/commands/my
 /my:do 20241217-chat-input-width
 ```
 
+#### Pipeline Flow
+
+```bash
+# Full pipeline: research → spec → plan (with review)
+/my:pipeline "implement user authentication feature"
+
+# Fast execution without review
+/my:pipeline "新機能追加" --no-review
+
+# Resume from existing identifier (spec → plan only)
+/my:pipeline 20241217-user-auth --from spec --to plan
+
+# Single step execution
+/my:pipeline 20241217-user-auth --only research
+
+# Full pipeline including implementation
+/my:pipeline "payment integration" --from research --to do --no-review
+```
+
+**Options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--from <step>` | `research` | Start step (`research`/`spec`/`plan`/`do`) |
+| `--to <step>` | `plan` | End step (`research`/`spec`/`plan`/`do`) |
+| `--only <step>` | - | Single step (mutually exclusive with `--from`/`--to`) |
+| `--review` | enabled | Enable review cycle after each step |
+| `--no-review` | - | Disable review cycle |
+
+Each step runs in an isolated subagent context to prevent context pollution. When `--review` is enabled, a reviewer + fixer cycle runs after each step (Critical/Medium issues only).
+
 #### Review Flow
 
 ```bash
@@ -260,6 +292,13 @@ gemini "/my:review security:code:payment"
 
 ```
 custom-slash-command/
+├── agents/             # Subagent definitions (used by /my:pipeline)
+│   ├── researcher.md
+│   ├── specifier.md
+│   ├── planner.md
+│   ├── implementer.md
+│   ├── reviewer.md
+│   └── fixer.md
 ├── commands/           # Claude Code slash command definitions
 │   └── my/             # my: namespace commands
 │       ├── research.md
@@ -270,7 +309,8 @@ custom-slash-command/
 │       ├── change.md
 │       ├── do.md
 │       ├── do-by-gemini.md
-│       └── review.md
+│       ├── review.md
+│       └── pipeline.md
 ├── gemini/             # gemini-cli commands
 │   └── commands/
 │       └── my/         # my: namespace commands
@@ -314,6 +354,7 @@ custom-slash-command/
 │   ├── 6_change.md
 │   ├── 7_do.md
 │   ├── 8_review.md
+│   ├── 10_pipeline.md
 │   └── templates/      # Output templates
 │       ├── research_template.md
 │       ├── spec_template.md
