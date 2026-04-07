@@ -2,6 +2,7 @@
 
 ## Metadata
 - **Target**: {target_type} / {identifier}
+- **Content-Type**: {content_type or "none"}
 - **Perspectives**: {perspectives}
 - **Reviewed**: {timestamp}
 - **Input Files**: {input_files}
@@ -10,12 +11,31 @@
 
 | Category | Status | Issues |
 |----------|--------|--------|
+| {content_type_category (if any)} | ✅/⚠️/❌ | {count} |
 | {category} | ✅/⚠️/❌ | {count} |
 
 **Overall Assessment**: {PASS|NEEDS_REVISION|FAIL}
 
 ## Detailed Findings
 
+<!-- Content-type section: only include when content_type = spec or plan -->
+### [content-type] {Spec|Plan} Content Review
+
+#### ✅ Passed
+- {passed_item}
+
+#### ⚠️ Warnings
+- **[W001]** {warning_description}
+  - **Location**: {file:line}
+  - **Suggestion**: {suggestion}
+
+#### ❌ Issues
+- **[E001]** {issue_description}
+  - **Location**: {file:line}
+  - **Impact**: {impact}
+  - **Recommendation**: {recommendation}
+
+<!-- Perspective section: only include when a perspective checklist is applied -->
 ### [{primary_perspective}] {Primary Perspective Name} Review
 
 #### ✅ Passed

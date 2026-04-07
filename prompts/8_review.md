@@ -109,17 +109,41 @@ Tips:
 2. Extract target prefix (if any): `spec|plan|code|commit|pr`
 3. Extract identifier
 4. Resolve to input file(s) or Git/PR content
-5. Determine perspective list:
-   - If `security` or `perf` → [that perspective] (standalone)
-   - If `fe`, `be`, or `doc` → [that perspective, maint]
-   - If `maint` → [maint]
-   - If auto-selected as fe/be/doc → [selected, maint]
-   - If auto-selected as security/perf → [selected] (standalone)
-   - If no match → [maint]
+5. Determine content-type from target:
+   - target = `spec:{id}` or auto-detect resolves to spec → content_type = "spec"
+   - target = `plan:{id}` / `plan:fix:{id}` / `plan:refactor:{id}` / `plan:change:{id}` or auto-detect resolves to plan → content_type = "plan"
+   - Otherwise (code, commit, pr) → content_type = none
+6. Determine checklist list:
+   - If content_type exists AND perspective explicitly specified:
+     → [content_type_checklist, perspective_checklist, maint_if_applicable]
+     (maint auto-apply follows existing standalone rules for the perspective)
+   - If content_type exists AND perspective NOT specified:
+     → [content_type_checklist, maint]
+     (skip perspective auto-select — spec/plan needs content quality review, not doc: style review)
+   - If content_type = none:
+     → Apply existing perspective rules below:
+     - If `security` or `perf` → [that perspective] (standalone)
+     - If `fe`, `be`, or `doc` → [that perspective, maint]
+     - If `maint` → [maint]
+     - If auto-selected as fe/be/doc → [selected, maint]
+     - If auto-selected as security/perf → [selected] (standalone)
+     - If no match → [maint]
 </step>
 
 <step n="2" name="Load Checklist">
-Load all checklists for the determined perspective list:
+Load all checklists in the following order:
+
+1. Content-Type Checklist (if content_type resolved in Step 1):
+
+| Content-Type | Checklist File |
+|--------------|----------------|
+| `spec` | `.prompts/templates/checklists/review_spec_checklist.md` |
+| `plan` | `.prompts/templates/checklists/review_plan_checklist.md` |
+| (none) | (skip) |
+
+If the content-type checklist file is not found, treat as content_type = none and proceed with perspective + maint only (graceful degradation).
+
+2. Perspective Checklist (if applicable):
 
 | Perspective | Checklist File |
 |-------------|----------------|
@@ -130,7 +154,9 @@ Load all checklists for the determined perspective list:
 | `doc:` | `.prompts/templates/checklists/review_doc_checklist.md` |
 | `maint:` | `.prompts/templates/checklists/review_maint_checklist.md` |
 
-Auto-Selection Rules (determines primary perspective):
+3. Maint Checklist (if auto-applied per rules below)
+
+Auto-Selection Rules (determines primary perspective — only when content_type = none):
 - `.jsx`, `.tsx`, `.vue`, `.svelte`, CSS files → `fe:`
 - `.py`, `.go`, `.java`, `.rs`, API routes → `be:`
 - Auth, crypto, input handling code → `security:`
@@ -138,7 +164,9 @@ Auto-Selection Rules (determines primary perspective):
 - Markdown, README, docstrings → `doc:`
 - (no match / fallback) → `maint:`
 
-Maint Auto-Apply: Unless primary is `security` or `perf`, also load `maint` checklist.
+Note: When content_type = spec or plan and no perspective is explicitly specified, auto-select is skipped. This is because spec/plan documents need content quality review, not documentation style review (doc: checklist).
+
+Maint Auto-Apply: Unless primary perspective is `security` or `perf`, also load `maint` checklist.
 </step>
 
 <step n="3" name="Review Execution">
@@ -166,6 +194,7 @@ For each checklist item:
 <rules>
 <output-locations>
 Note: {{PERSPECTIVE}} uses the primary perspective (first in the perspective list).
+When content-type is present and no explicit perspective, use content-type as {{PERSPECTIVE}} (e.g., "spec", "plan").
 
 | Target | Output Location |
 |--------|-----------------|
