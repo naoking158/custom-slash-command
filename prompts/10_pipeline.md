@@ -2,7 +2,8 @@
 
 <role>
 Expert Pipeline Orchestrator responsible for coordinating sequential execution of
-research → spec → plan → do with optional review cycles using specialized subagents.
+feature flow (research → spec → plan → do) or change flow (change → do)
+with optional review cycles using specialized subagents.
 Each step runs in an isolated context via the Agent tool to prevent context pollution.
 </role>
 
@@ -17,21 +18,34 @@ Parse the raw input string to extract:
    - Otherwise → new feature description → generate identifier
 
 2. **Options** (parsed from remaining arguments):
-   - `--from <step>`: Start step (research/spec/plan/do), default=research
-   - `--to <step>`: End step (research/spec/plan/do), default=plan
+   - `--flow <type>`: Flow type (feature/change), default=feature
+   - `--from <step>`: Start step, default varies by flow
+   - `--to <step>`: End step, default varies by flow
    - `--only <step>`: Single step execution (mutually exclusive with --from/--to)
    - `--review`: Enable review cycle (default)
    - `--no-review`: Disable review cycle
 
 ## 2. Validation Rules
 
-Step order (lowest to highest): research < spec < plan < do
+### Flow-specific step order (lowest to highest):
+- **feature** flow: research < spec < plan < do
+- **change** flow: change < do
 
-Validate:
+### Flow-specific defaults:
+| Flow | --from default | --to default |
+|------|----------------|--------------|
+| feature | research | plan |
+| change | change | do |
+
+### Validation checks:
+- If `--flow` value is not `feature` or `change`
+  → Error: "❌ Invalid flow type: '{value}'. Valid flows: feature, change"
 - If `--only` is specified, `--from` and `--to` must NOT be specified
   → Error: "❌ --only cannot be used with --from/--to"
 - If `--from` step is after `--to` step in order
   → Error: "❌ --from must be before --to"
+- If step is not valid for the specified flow
+  → Error: "❌ Step '{step}' is not valid for {flow} flow. Valid steps: {valid_steps}"
 - If no arguments provided
   → Show usage and examples
 
@@ -46,13 +60,19 @@ When the input is a feature description (not an existing identifier):
 
 ## 4. Input File Pre-validation
 
-When `--from` is NOT `research`, verify the previous step's output exists:
+When `--from` is NOT the first step of the flow, verify the previous step's output exists:
 
+### Feature flow:
 | from value | Required input file |
 |------------|---------------------|
 | spec | `docs/research/{id}.md` |
 | plan | `docs/specs/{id}.md` |
 | do | `docs/plans/features/{id}.md` |
+
+### Change flow:
+| from value | Required input file |
+|------------|---------------------|
+| do | `docs/plans/changes/{id}.md` |
 
 If missing:
 ```
@@ -64,7 +84,7 @@ If missing:
 
 <pipeline-definition>
 
-## Step Definitions
+## Feature Flow Step Definitions
 
 | Step | Subagent Type | Input | Output |
 |------|---------------|-------|--------|
@@ -72,6 +92,13 @@ If missing:
 | spec | specifier | docs/research/{id}.md | docs/specs/{id}.md |
 | plan | planner | docs/specs/{id}.md | docs/plans/features/{id}.md |
 | do | implementer | docs/plans/features/{id}.md | (code changes) |
+
+## Change Flow Step Definitions
+
+| Step | Subagent Type | Input | Output |
+|------|---------------|-------|--------|
+| change | changer | change_description | docs/analysis/changes/{id}.md + docs/plans/changes/{id}.md |
+| do | implementer | docs/plans/changes/{id}.md | (code changes) |
 
 ## Review Cycle (after each step, when --review is enabled)
 
@@ -84,6 +111,7 @@ Review cycle rules:
 - Maximum 1 cycle per step
 - Fixer runs only if reviewer reports Critical or Medium issues
 - Low-priority-only or no-issues → skip fixer
+- For change flow, review target is `docs/plans/changes/{id}.md`
 
 </pipeline-definition>
 
@@ -95,7 +123,10 @@ After parsing and validation, execute the following:
 
 ### Step 1: Filter Target Steps
 
-Determine which steps to execute based on --from, --to, --only:
+Determine which steps to execute based on flow type, --from, --to, --only:
+- Select step candidates based on flow type:
+  - feature: [research, spec, plan, do]
+  - change: [change, do]
 - If --only: execute only that single step
 - Otherwise: execute all steps from --from to --to (inclusive)
 
@@ -120,6 +151,14 @@ Pass a prompt containing ONLY file paths and identifier — never pass file cont
 
 **c. Verify output:**
 After subagent completes, verify the output file exists (except for `do` step).
+For the `change` step, verify BOTH output files exist:
+- `docs/analysis/changes/{id}.md`
+- `docs/plans/changes/{id}.md`
+
+If either is missing:
+```
+❌ Error: change step did not produce expected output: {missing_path}
+```
 
 **d. Display completion:**
 ```
@@ -147,7 +186,9 @@ iv. If no Critical/Medium issues:
 
 ### Step 4: Pipeline Completion
 
-Display final summary:
+Display final summary based on flow type:
+
+**Feature flow:**
 ```
 ═══════════════════════════════════════
 🎉 Pipeline completed: {id}
@@ -163,8 +204,23 @@ Artifacts:
 Next step: /my:do {id}
 ```
 
+**Change flow:**
+```
+═══════════════════════════════════════
+🎉 Pipeline completed: {id}
+═══════════════════════════════════════
+
+Artifacts:
+- Analysis: docs/analysis/changes/{id}.md
+- Plan: docs/plans/changes/{id}.md
+(if review enabled)
+- Review: docs/reviews/changes/{id}.md
+
+Next step: Code review
+```
+
 Only list artifacts that were actually created in this run.
-If --to includes `do`, suggest code review instead.
+If --to includes `do`, suggest code review instead of next step command.
 
 </execution-flow>
 
@@ -200,12 +256,31 @@ prompt:
    Output file: docs/plans/features/{id}.md"
 ```
 
-### implementer
+### implementer (feature flow)
 ```
 subagent_type: implementer
 prompt:
   "Feature name: {id}
    Plan document: docs/plans/features/{id}.md"
+```
+
+### changer
+```
+subagent_type: changer
+prompt:
+  "Change description: '{change_description}'
+   Identifier: {id}
+   Output analysis: docs/analysis/changes/{id}.md
+   Output plan: docs/plans/changes/{id}.md
+   Today's date: {date}"
+```
+
+### implementer (change flow)
+```
+subagent_type: implementer
+prompt:
+  "Feature name: {id}
+   Plan document: docs/plans/changes/{id}.md"
 ```
 
 ### reviewer
@@ -215,6 +290,15 @@ prompt:
   "Review target: {step_type}:{id}
    Source file: docs/{type_path}/{id}.md
    Output file: docs/reviews/{type}/{id}.md"
+```
+
+### reviewer (change plan)
+```
+subagent_type: reviewer
+prompt:
+  "Review target: change_plan:{id}
+   Source file: docs/plans/changes/{id}.md
+   Output file: docs/reviews/changes/{id}.md"
 ```
 
 ### fixer
@@ -243,14 +327,22 @@ When a subagent fails or its expected output file is not created:
 ```
 ❌ Error: {step_name} failed.
    Completed artifacts are preserved.
-   Resume with: /my:pipeline {id} --from {failed_step}
+   Resume with: /my:pipeline {id} [--flow {flow}] --from {failed_step}
 ```
 Stop the pipeline immediately. Do not continue to the next step.
 
 ### 3. Parameter errors
+- Invalid flow type:
+  ```
+  ❌ Invalid flow type: '{value}'. Valid flows: feature, change
+  ```
+- Invalid step for flow:
+  ```
+  ❌ Step '{step}' is not valid for {flow} flow. Valid steps: {valid_steps}
+  ```
 - `--from` after `--to`:
   ```
-  ❌ --from must be before --to in the pipeline order (research < spec < plan < do)
+  ❌ --from must be before --to in the pipeline order
   ```
 - `--only` with `--from`/`--to`:
   ```
@@ -260,21 +352,28 @@ Stop the pipeline immediately. Do not continue to the next step.
   ```
   ❌ Error: No arguments provided.
 
-  Usage: /my:pipeline <feature_description_or_identifier> [options]
+  Usage: /my:pipeline <description_or_identifier> [options]
 
   Options:
-    --from <step>    Start step (research/spec/plan/do), default: research
-    --to <step>      End step (research/spec/plan/do), default: plan
+    --flow <type>    Flow type (feature/change), default: feature
+    --from <step>    Start step, default: varies by flow
+    --to <step>      End step, default: varies by flow
     --only <step>    Execute single step only
     --review         Enable review cycle (default)
     --no-review      Disable review cycle
 
   Examples:
     /my:pipeline "新機能の追加"
+    /my:pipeline "ボタン改善" --flow change
     /my:pipeline 20260407-feature --from spec --to plan
-    /my:pipeline 20260407-feature --only research
+    /my:pipeline 20260407-fix --flow change --from do
     /my:pipeline "高速実行" --no-review
   ```
+
+### 4. Change step output missing
+```
+❌ Error: change step did not produce expected output: {missing_path}
+```
 
 </error-handling>
 

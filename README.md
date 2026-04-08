@@ -21,7 +21,7 @@ This repository provides custom slash commands for Claude Code and gemini-cli, e
 | `/my:do` | Execute implementation plans | Source code files |
 | `/my:do-by-gemini` | Execute plans via gemini-cli | Source code files |
 | `/my:review` | Review artifacts | `docs/reviews/{type}/` |
-| `/my:pipeline` | Run sequential pipeline (research → spec → plan → do) | Multiple `docs/` outputs |
+| `/my:pipeline` | Run sequential pipeline (feature: research → spec → plan → do, change: change → do) | Multiple `docs/` outputs |
 
 #### gemini-cli
 
@@ -170,29 +170,47 @@ rm ~/.gemini/commands/my
 
 #### Pipeline Flow
 
+The pipeline supports two flow types:
+
+- **Feature flow** (default): research → spec → plan → do
+- **Change flow**: change → do
+
 ```bash
-# Full pipeline: research → spec → plan (with review)
+# Feature flow: research → spec → plan (with review)
 /my:pipeline "implement user authentication feature"
 
-# Fast execution without review
+# Feature flow: fast execution without review
 /my:pipeline "新機能追加" --no-review
 
-# Resume from existing identifier (spec → plan only)
+# Feature flow: resume from existing identifier (spec → plan only)
 /my:pipeline 20241217-user-auth --from spec --to plan
 
-# Single step execution
+# Feature flow: single step execution
 /my:pipeline 20241217-user-auth --only research
 
-# Full pipeline including implementation
+# Feature flow: full pipeline including implementation
 /my:pipeline "payment integration" --from research --to do --no-review
+
+# Change flow: change → do (with review)
+/my:pipeline "ダークモードのボタン改善" --flow change
+
+# Change flow: change only (review plan before do)
+/my:pipeline "ボタン改善" --flow change --to change
+
+# Change flow: resume from existing change plan
+/my:pipeline 20241217-button-contrast --flow change --from do
+
+# Change flow: fast execution without review
+/my:pipeline "ボタン改善" --flow change --no-review
 ```
 
 **Options:**
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--from <step>` | `research` | Start step (`research`/`spec`/`plan`/`do`) |
-| `--to <step>` | `plan` | End step (`research`/`spec`/`plan`/`do`) |
+| `--flow <type>` | `feature` | Flow type (`feature`/`change`) |
+| `--from <step>` | varies by flow | Start step (feature: `research`/`spec`/`plan`/`do`, change: `change`/`do`) |
+| `--to <step>` | varies by flow | End step (feature: `research`/`spec`/`plan`/`do`, change: `change`/`do`) |
 | `--only <step>` | - | Single step (mutually exclusive with `--from`/`--to`) |
 | `--review` | enabled | Enable review cycle after each step |
 | `--no-review` | - | Disable review cycle |
@@ -297,6 +315,7 @@ custom-slash-command/
 │   ├── specifier.md
 │   ├── planner.md
 │   ├── implementer.md
+│   ├── changer.md
 │   ├── reviewer.md
 │   └── fixer.md
 ├── commands/           # Claude Code slash command definitions
