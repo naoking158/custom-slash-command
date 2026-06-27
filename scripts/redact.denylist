@@ -1,0 +1,4 @@
+# One pattern per line. Lines starting with '#' are comments.
+# Matched against any 8+ char alphanumeric token in input.
+# Example:
+#   internal-project-codename-2026

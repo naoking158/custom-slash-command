@@ -1,0 +1,18 @@
+# Session knowledge capture journal — never commit to a shared repo.
+# Append this template to your project's .gitignore if you keep journals locally.
+#
+# Usage:
+#   cat .gitignore.journal-template >> .gitignore
+#
+# The default journal store is machine-local at:
+#   ~/.claude/projects/<repo>/memory/journal/
+# The patterns below are a safety net for any project that chooses to keep
+# journal entries inside the working tree against the default recommendation.
+
+# Local journal store (default: machine-local under ~/.claude/projects/<repo>/memory/journal/)
+docs/journal/
+**/journal/*.md
+*.journal.md
+
+# Backups created on frontmatter parse failure
+**/journal/*.bak

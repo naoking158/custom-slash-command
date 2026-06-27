@@ -19,6 +19,8 @@ This repository provides custom slash commands for Claude Code, enabling a syste
 | `/my:do` | Execute implementation plans | Source code files |
 | `/my:review` | Review artifacts | `docs/reviews/{type}/` |
 | `/my:pipeline` | Run sequential pipeline (feature: research → spec → plan → do, change: change → do) | Multiple `docs/` outputs |
+| `/my:learn` | Capture session knowledge to machine-local journal | `~/.claude/projects/<repo>/memory/journal/` |
+| `/my:retro` | Surface promotion candidates from journals | stdout (read-only) |
 
 ## Installation
 
@@ -191,6 +193,53 @@ Each step runs in an isolated subagent context to prevent context pollution. Whe
 
 **Available perspectives:** `fe:` (frontend), `be:` (backend), `security:`, `perf:` (performance), `doc:` (documentation)
 
+### Session Knowledge Capture Flow
+
+Capture in-session learnings, then promote them through the existing SDD
+pipeline. Journals live in a **machine-local** store
+(`~/.claude/projects/<repo>/memory/journal/`) and never enter the project
+repository.
+
+```bash
+# 1. Capture a learning during any session (works from any project)
+/my:learn --category mistake "TS catch は unknown 必須"
+
+# 2. Surface promotion candidates from accumulated journals
+#    (toolkit repo is auto-resolved; run this from any project)
+/my:retro --since 14d
+
+# 3. Copy the suggested command from the /my:retro output VERBATIM and run it.
+#    The leading `cd` is REQUIRED — without it, /my:change would scaffold
+#    docs/analysis/changes/ and docs/plans/changes/ under the wrong project.
+cd ~/src/github.com/naoking158/custom-slash-command \
+  && /my:change "ts-error-handling: enforce unknown in catch"
+
+# 4. /my:do executes inside the toolkit repo (already cd'd by step 3)
+/my:do 20260627-ts-error-handling
+
+# 5. Manually flip the source journal entry's frontmatter
+#    `status: raw` → `status: promoted` so it drops out of the next /my:retro
+```
+
+If `/my:retro` cannot auto-resolve the toolkit repo it prints the literal
+placeholder `<TOOLKIT_REPO>` and a replacement guide. Either create the
+symlink (`ln -s <toolkit-absolute-path>/commands ~/.claude/commands`) or
+hand-edit the placeholder before running the command. The tool will **never**
+silently substitute the current working directory.
+
+### Journal Privacy
+
+Journals are local-only by design. If you must keep them inside a repository
+tree for some reason, append the provided template to that repo's `.gitignore`:
+
+```bash
+# Append journal patterns to your project's .gitignore
+cat .gitignore.journal-template >> .gitignore
+```
+
+The repository tree of this toolkit MUST NOT contain a `docs/journal/`
+directory at any point — `/my:learn` will refuse to write there.
+
 ## Directory Structure
 
 ### Repository Structure
@@ -215,7 +264,12 @@ custom-slash-command/
 │       ├── change.md
 │       ├── do.md
 │       ├── review.md
-│       └── pipeline.md
+│       ├── pipeline.md
+│       ├── learn.md
+│       └── retro.md
+├── scripts/            # Helper shell scripts (no Python/Node deps)
+│   ├── redact.sh       # Secret masking pipeline used by /my:retro
+│   └── redact.denylist # User-extendable deny-list for redact.sh
 ├── prompts/            # Prompt logic
 │   ├── _shared/               # Shared content (role/process definitions)
 │   │   ├── roles/             # Role definitions
@@ -286,6 +340,20 @@ your-project/
     │   └── changes/
     └── reviews/        # /my:review output
 ```
+
+### Machine-Local Journal Store (per user, per repo)
+
+`/my:learn` and `/my:retro` operate exclusively on a per-user, per-repo
+journal directory outside the project tree:
+
+```
+~/.claude/projects/<repo>/memory/
+├── MEMORY.md           # Auto Memory (read-only — never touched by /my:learn)
+└── journal/
+    └── YYYY-MM-DD-<session_id>.md   # /my:learn appends; /my:retro reads
+```
+
+The repository tree itself MUST NOT contain a `docs/journal/` directory.
 
 ## File Naming Convention
 
