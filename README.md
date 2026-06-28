@@ -27,50 +27,55 @@ This repository provides custom slash commands for Claude Code, enabling a syste
 ### Prerequisites
 
 - Claude Code installed
-- `~/.claude/` directory exists
+- `bash` available (the installer is a single bash script, no other deps)
 
 ### Setup
 
-1. **Clone the repository**
+```bash
+git clone https://github.com/naoking158/custom-slash-command.git
+cd custom-slash-command
+./scripts/install.sh
+```
 
-   ```bash
-   git clone https://github.com/naoking158/custom-slash-command.git
-   cd custom-slash-command
-   ```
+The installer is idempotent and creates these three symlinks:
 
-2. **Create shared prompts symlink**
+| Symlink | Target |
+|---------|--------|
+| `~/.prompts` | `<repo>/prompts` |
+| `~/.claude/commands` | `<repo>/commands` |
+| `~/.claude/agents` | `<repo>/agents` |
 
-   ```bash
-   # Link the prompts directory to HOME
-   ln -sf "$(pwd)/prompts" ~/.prompts
-   ```
+Safety: the installer never overwrites a real file/directory and never touches
+a symlink that points elsewhere. Use `--force` to retarget a stray symlink.
 
-3. **Create symlinks for Claude Code**
-
-   ```bash
-   # Link the commands directory
-   ln -sf "$(pwd)/commands" ~/.claude/commands
-   ```
-
-4. **Verify the setup**
-
-   ```bash
-   # Verify shared prompts
-   ls -la ~/.prompts
-
-   # Verify Claude Code symlinks
-   ls -la ~/.claude/commands
-   ```
-
-### Uninstall
+Verify:
 
 ```bash
-# Remove shared prompts
-rm ~/.prompts
-
-# Remove Claude Code symlinks
-rm ~/.claude/commands
+./scripts/install.sh --check
 ```
+
+Uninstall (removes only the symlinks above; ignores real files and foreign
+symlinks):
+
+```bash
+./scripts/install.sh --uninstall
+```
+
+<details>
+<summary>Manual setup (if you'd rather not run the script)</summary>
+
+```bash
+ln -sf "$(pwd)/prompts"   ~/.prompts
+mkdir -p ~/.claude
+ln -sf "$(pwd)/commands"  ~/.claude/commands
+ln -sf "$(pwd)/agents"    ~/.claude/agents
+```
+
+The `agents` symlink is required for `/my:pipeline` — without it the
+pipeline cannot resolve its subagents (`researcher`, `specifier`, `planner`,
+`implementer`, `changer`, `reviewer`, `fixer`).
+
+</details>
 
 ## Usage
 
