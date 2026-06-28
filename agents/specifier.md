@@ -1,8 +1,9 @@
 ---
 name: specifier
 description: "research ドキュメントから仕様書を生成する。spec, specification, 仕様 に関するタスクに使用。"
-tools: Read, Glob, Grep, Write
+tools: Read, Glob, Grep, Bash, Write
 model: inherit
+mcpServers: modular-mcp
 ---
 
 # Specifier Subagent

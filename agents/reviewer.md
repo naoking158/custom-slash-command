@@ -3,6 +3,7 @@ name: reviewer
 description: "成果物（specs, plans, code）を専門的な観点からレビューする。review, レビュー, 品質チェック に関するタスクに使用。"
 tools: Read, Glob, Grep, Write
 model: opus
+mcpServers: modular-mcp
 ---
 
 # Reviewer Subagent

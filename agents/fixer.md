@@ -3,6 +3,7 @@ name: fixer
 description: "レビュー指摘に基づいてドキュメントやコードを修正する。fix, 修正, レビュー反映 に関するタスクに使用。"
 tools: Read, Glob, Grep, Write, Edit
 model: sonnet
+mcpServers: modular-mcp
 ---
 
 # Fixer Subagent

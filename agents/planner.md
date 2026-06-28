@@ -3,6 +3,7 @@ name: planner
 description: "仕様書や分析ドキュメントから実装計画を作成する。plan, 計画, 実装プラン に関するタスクに使用。"
 tools: Read, Glob, Grep, Write, Bash
 model: inherit
+mcpServers: modular-mcp
 ---
 
 # Planner Subagent

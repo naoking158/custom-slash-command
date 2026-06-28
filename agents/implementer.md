@@ -3,6 +3,7 @@ name: implementer
 description: "実装計画に基づいてコードを実装する。implement, 実装, do に関するタスクに使用。"
 tools: Read, Glob, Grep, Write, Edit, Bash
 model: sonnet
+mcpServers: modular-mcp
 ---
 
 # Implementer Subagent

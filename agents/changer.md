@@ -3,6 +3,7 @@ name: changer
 description: "変更リクエストを分析して change plan を生成する。change, 変更分析 に関するタスクに使用。"
 tools: Read, Glob, Grep, Write, Edit, Bash
 model: sonnet
+mcpServers: modular-mcp
 ---
 
 # Changer Subagent
