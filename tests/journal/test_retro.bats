@@ -3,20 +3,20 @@
 #
 # Scope: covers the toolkit-repo resolution helper (scripts/lib/toolkit.sh)
 # and the glob/filter/sort/redaction shell logic described in
-# prompts/12_retro.md. End-to-end /my:retro invocation via Claude is covered
+# skills/retro/SKILL.md. End-to-end /my:retro invocation via Claude is covered
 # by the manual smoke checklist (Spec §9.3).
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
-  REDACT="$REPO_ROOT/scripts/redact.sh"
+  REDACT="$REPO_ROOT/skills/retro/scripts/redact.sh"
   TOOLKIT_LIB="$REPO_ROOT/scripts/lib/toolkit.sh"
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
   TOOLKIT_FIX="$FIXTURES/toolkit_repo"
 
   TMP="$(mktemp -d -t retro-test.XXXXXX)"
-  # Redirect HOME so we never touch the user's real ~/.claude/commands.
+  # Redirect HOME so we never touch the user's real ~/.claude.
   export HOME="$TMP"
-  mkdir -p "$HOME/.claude"
+  mkdir -p "$HOME/.claude/skills"
 
   # Sanitize env so each test starts in a known state.
   unset CLAUDE_TOOLKIT_REPO || true
@@ -30,27 +30,6 @@ teardown() {
 # resolve_toolkit_repo helper (scripts/lib/toolkit.sh)
 # ============================================================================
 
-@test "toolkit: symlink to a valid commands/ dir resolves to its parent" {
-  ln -s "$TOOLKIT_FIX/commands" "$HOME/.claude/commands"
-  run bash "$TOOLKIT_LIB"
-  [ "$status" -eq 0 ]
-  # Expected: parent of the commands/ dir = $TOOLKIT_FIX
-  expected="$TOOLKIT_FIX"
-  # Resolve any symlinks on macOS so the comparison is robust to /private prefixes.
-  expected_real="$(cd "$expected" && pwd -P)"
-  output_real="$(cd "$output" && pwd -P)"
-  [ "$output_real" = "$expected_real" ]
-}
-
-@test "toolkit: no symlink and no env var returns empty and exit 1" {
-  # Ensure no symlink and no env var.
-  [ ! -e "$HOME/.claude/commands" ]
-  unset CLAUDE_TOOLKIT_REPO || true
-  run bash "$TOOLKIT_LIB"
-  [ "$status" -eq 1 ]
-  [ -z "$output" ]
-}
-
 @test "toolkit: \$CLAUDE_TOOLKIT_REPO pointing at valid dir resolves to it" {
   export CLAUDE_TOOLKIT_REPO="$TOOLKIT_FIX"
   run bash "$TOOLKIT_LIB"
@@ -60,24 +39,59 @@ teardown() {
   [ "$output_real" = "$expected_real" ]
 }
 
-@test "toolkit: \$CLAUDE_TOOLKIT_REPO pointing at invalid dir fails resolution" {
-  export CLAUDE_TOOLKIT_REPO="$TMP/definitely-does-not-exist"
-  run bash "$TOOLKIT_LIB"
-  [ "$status" -eq 1 ]
-  [ -z "$output" ]
-}
-
-@test "toolkit: symlink takes priority over env var (priority order §3.5)" {
-  ln -s "$TOOLKIT_FIX/commands" "$HOME/.claude/commands"
-  # Set env var to a different existing dir.
+@test "toolkit: env var takes priority over the skills/my symlink" {
+  # Symlink points at the fixture; env var at a different existing dir.
+  ln -s "$TOOLKIT_FIX" "$HOME/.claude/skills/my"
   ALT="$(mktemp -d -t alt-toolkit.XXXXXX)"
   export CLAUDE_TOOLKIT_REPO="$ALT"
+  run bash "$TOOLKIT_LIB"
+  [ "$status" -eq 0 ]
+  expected_real="$(cd "$ALT" && pwd -P)"
+  output_real="$(cd "$output" && pwd -P)"
+  [ "$output_real" = "$expected_real" ]
+  rm -rf "$ALT"
+}
+
+@test "toolkit: env var at missing dir falls through to the symlink" {
+  export CLAUDE_TOOLKIT_REPO="$TMP/definitely-does-not-exist"
+  ln -s "$TOOLKIT_FIX" "$HOME/.claude/skills/my"
   run bash "$TOOLKIT_LIB"
   [ "$status" -eq 0 ]
   expected_real="$(cd "$TOOLKIT_FIX" && pwd -P)"
   output_real="$(cd "$output" && pwd -P)"
   [ "$output_real" = "$expected_real" ]
-  rm -rf "$ALT"
+}
+
+@test "toolkit: skills/my symlink to a plugin repo resolves to it" {
+  ln -s "$TOOLKIT_FIX" "$HOME/.claude/skills/my"
+  run bash "$TOOLKIT_LIB"
+  [ "$status" -eq 0 ]
+  expected_real="$(cd "$TOOLKIT_FIX" && pwd -P)"
+  output_real="$(cd "$output" && pwd -P)"
+  [ "$output_real" = "$expected_real" ]
+}
+
+@test "toolkit: no symlink and no env var returns empty and exit 1" {
+  [ ! -e "$HOME/.claude/skills/my" ]
+  unset CLAUDE_TOOLKIT_REPO || true
+  run bash "$TOOLKIT_LIB"
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}
+
+@test "toolkit: symlink target without .claude-plugin/plugin.json is rejected" {
+  mkdir -p "$TMP/not-a-plugin"
+  ln -s "$TMP/not-a-plugin" "$HOME/.claude/skills/my"
+  run bash "$TOOLKIT_LIB"
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}
+
+@test "toolkit: dangling symlink (target missing) fails resolution" {
+  ln -s "$TMP/no-such-dir/my" "$HOME/.claude/skills/my"
+  run bash "$TOOLKIT_LIB"
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
 }
 
 @test "toolkit: NEVER substitutes cwd as toolkit on resolution failure" {
@@ -88,21 +102,6 @@ teardown() {
   [ -z "$output" ]
   # The output must NOT echo $PWD or any cwd-derived path.
   [[ "$output" != *"$TMP"* ]]
-}
-
-@test "toolkit: symlink target name must be 'commands' (rejects arbitrary dirs)" {
-  # Point the symlink at the rules/ dir instead of commands/.
-  ln -s "$TOOLKIT_FIX/rules" "$HOME/.claude/commands"
-  run bash "$TOOLKIT_LIB"
-  [ "$status" -eq 1 ]
-  [ -z "$output" ]
-}
-
-@test "toolkit: dangling symlink (target missing) fails resolution" {
-  ln -s "$TMP/no-such-dir/commands" "$HOME/.claude/commands"
-  run bash "$TOOLKIT_LIB"
-  [ "$status" -eq 1 ]
-  [ -z "$output" ]
 }
 
 # ============================================================================
@@ -212,8 +211,7 @@ teardown() {
 
 @test "sort: mistake group precedes pattern and preference" {
   run bash -c '
-    # Build a list with categories in arbitrary order, then sort using the
-    # priority order described in prompts/_shared/processes/retro.md.
+    # Priority order described in skills/retro/SKILL.md.
     printf "%s\n" "preference" "pattern" "mistake" "domain-knowledge" "open-question" | \
       awk '"'"'
         BEGIN {
@@ -224,7 +222,6 @@ teardown() {
       '"'"' | sort -n | awk "{print \$2}"
   '
   [ "$status" -eq 0 ]
-  # First line of sorted output should be "mistake".
   first="$(echo "$output" | head -n 1)"
   [ "$first" = "mistake" ]
   second="$(echo "$output" | sed -n 2p)"
@@ -242,8 +239,7 @@ teardown() {
   rc=$?
   set -e
   [ "$rc" -eq 2 ]
-  # The disposition rule in prompts/12_retro.md says exit 2 => excluded.
-  # We assert the rule, not the rendered output (rendering is the LLM's job).
+  # The disposition rule in skills/retro/SKILL.md says exit 2 => excluded.
 }
 
 @test "redaction: clean candidate is included (exit 0 disposition)" {
@@ -256,12 +252,10 @@ teardown() {
 }
 
 @test "redaction: missing script triggers warn+continue path (Edge case #7)" {
-  # Simulate "script missing" by pointing at a nonexistent path.
   FAKE_REDACT="$TMP/no-redact.sh"
   run bash -c '
     if [ ! -x "$1" ]; then
       echo "warning: redact.sh not found at $1; continuing without redaction" >&2
-      # caller continues with the candidate as-is
       exit 0
     fi
   ' _ "$FAKE_REDACT"
@@ -269,25 +263,25 @@ teardown() {
 }
 
 # ============================================================================
-# duplicate detection scope (must stay inside <toolkit_repo>)
+# duplicate detection scope (must stay inside {toolkit_repo})
 # ============================================================================
 
 @test "duplicate detection: greps under toolkit_repo only, never cwd" {
-  # Set up: toolkit fixture has rules/typescript/ts-error-handling.md
-  ln -s "$TOOLKIT_FIX/commands" "$HOME/.claude/commands"
+  # Set up: toolkit fixture has skills/rules-typescript/references/error-handling.md
+  ln -s "$TOOLKIT_FIX" "$HOME/.claude/skills/my"
   toolkit="$(bash "$TOOLKIT_LIB")"
 
   # Drop a decoy file in $TMP (cwd) with the same name; if the impl ever
   # grepped under cwd it would produce a false positive from this decoy.
   cd "$TMP"
-  mkdir -p "$TMP/rules/typescript"
-  echo "DECOY (should never be grepped)" > "$TMP/rules/typescript/ts-error-handling.md"
+  mkdir -p "$TMP/skills/rules-typescript/references"
+  echo "DECOY (should never be grepped)" > "$TMP/skills/rules-typescript/references/error-handling.md"
 
-  # Now simulate the duplicate grep: only look under $toolkit/{rules,prompts,commands,agents}.
+  # Simulate the duplicate grep: only look under $toolkit/{skills,agents}.
   run bash -c '
     toolkit="$1"
-    title="ts-error-handling"
-    hit="$(find "$toolkit"/{rules,prompts,commands,agents} -type f -name "*${title}*" 2>/dev/null | head -1)"
+    title="error-handling"
+    hit="$(find "$toolkit"/{skills,agents} -type f -name "*${title}*" 2>/dev/null | head -1)"
     if [ -n "$hit" ]; then
       echo "duplicate_of: $hit"
     else
@@ -295,23 +289,20 @@ teardown() {
     fi
   ' _ "$toolkit"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"$TOOLKIT_FIX/rules/typescript/ts-error-handling.md"* ]]
+  [[ "$output" == *"/skills/rules-typescript/references/error-handling.md"* ]]
   # The decoy under $TMP must NOT appear.
-  [[ "$output" != *"$TMP/rules"* ]]
+  [[ "$output" != *"$TMP/skills"* ]]
 }
 
 @test "duplicate detection: skipped (notice) when toolkit_repo is empty" {
-  # No symlink, no env var → resolution failure
   unset CLAUDE_TOOLKIT_REPO || true
-  [ ! -e "$HOME/.claude/commands" ]
+  [ ! -e "$HOME/.claude/skills/my" ]
   set +e
   toolkit="$(bash "$TOOLKIT_LIB")"
   rc=$?
   set -e
   [ "$rc" -eq 1 ]
   [ -z "$toolkit" ]
-  # The retro process spec says: annotate "(duplicate check skipped: toolkit repo not resolved)".
-  # Verify the annotation string itself is constructible.
   annotation="(duplicate check skipped: toolkit repo not resolved)"
   [[ "$annotation" == *"toolkit repo not resolved"* ]]
 }
@@ -321,12 +312,13 @@ teardown() {
 # ============================================================================
 
 @test "handoff: cd-prefixed format with resolved toolkit_repo" {
-  ln -s "$TOOLKIT_FIX/commands" "$HOME/.claude/commands"
+  ln -s "$TOOLKIT_FIX" "$HOME/.claude/skills/my"
   toolkit="$(bash "$TOOLKIT_LIB")"
   title="ts-error-handling: enforce unknown in catch"
   handoff="cd $toolkit && /my:change \"$title\""
   [[ "$handoff" == cd*"&& /my:change"* ]]
-  [[ "$handoff" == *"$TOOLKIT_FIX"* ]]
+  expected_real="$(cd "$TOOLKIT_FIX" && pwd -P)"
+  [[ "$handoff" == *"$expected_real"* ]]
   # MUST NOT be a bare /my:change line.
   [[ "$handoff" != "/my:change"* ]]
 }
@@ -338,7 +330,6 @@ teardown() {
   set -e
   [ -z "$toolkit" ]
   title="ts-error-handling: enforce unknown in catch"
-  # Per spec §3.2 (failed example) the placeholder is emitted literally.
   toolkit_display="${toolkit:-<TOOLKIT_REPO>}"
   handoff="cd $toolkit_display && /my:change \"$title\""
   [[ "$handoff" == "cd <TOOLKIT_REPO> && /my:change \"$title\"" ]]

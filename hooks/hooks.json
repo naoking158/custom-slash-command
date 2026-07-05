@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"$HOME/.claude/projects/$(basename \"$PWD\")/memory/journal\"; mkdir -p \"$d\" && printf '%s\\t%s\\n' \"$(date +%Y-%m-%dT%H:%M:%S)\" \"$PWD\" >> \"$d/.sessions.log\""
+          }
+        ]
+      }
+    ]
+  }
+}

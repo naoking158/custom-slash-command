@@ -2,7 +2,7 @@
 # Unit + integration tests for /my:learn shell logic.
 #
 # Scope: The slash command itself is markdown, so we exercise the shell
-# snippets described in prompts/11_learn.md (session_id resolution, path
+# snippets described in skills/learn/SKILL.md (session_id resolution, path
 # policy assertion, frontmatter parsing). End-to-end /my:learn invocation
 # via Claude is covered by the manual smoke checklist (Spec §9.3).
 
@@ -85,7 +85,7 @@ extract_fm() {
 }
 
 get_fm_field() {
-  # Simple `key: value` extractor used by prompts/_shared/processes/retro.md.
+  # Simple `key: value` extractor used by skills/retro/SKILL.md.
   local file="$1" key="$2"
   extract_fm "$file" | awk -F': ' -v k="$key" '$1==k {sub(/^[^:]*: */, ""); print; exit}'
 }
@@ -125,7 +125,7 @@ get_fm_field() {
   local delim_count
   delim_count="$(grep -c '^---$' "$TMP/broken.md")"
   [ "$delim_count" -eq 1 ]
-  # Per prompts/11_learn.md, on parse failure the file is renamed *.bak.
+  # Per skills/learn/SKILL.md, on parse failure the file is renamed *.bak.
   # Simulate the operation and check the rename works.
   mv "$TMP/broken.md" "$TMP/broken.md.bak"
   [ -f "$TMP/broken.md.bak" ]

@@ -1,0 +1,8 @@
+{
+  "name": "my",
+  "description": "Personal SDD toolkit: research→spec→plan→do pipeline, review, debug/refactor/change flows, learn/retro knowledge loop, and path-triggered language rules.",
+  "version": "1.0.0",
+  "author": { "name": "naoking158" },
+  "repository": "https://github.com/naoking158/custom-slash-command",
+  "license": "MIT"
+}

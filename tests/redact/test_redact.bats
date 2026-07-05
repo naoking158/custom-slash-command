@@ -1,9 +1,9 @@
 #!/usr/bin/env bats
-# Unit tests for scripts/redact.sh — Spec §9.1.
+# Unit tests for skills/retro/scripts/redact.sh — Spec §9.1.
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
-  REDACT="$REPO_ROOT/scripts/redact.sh"
+  REDACT="$REPO_ROOT/skills/retro/scripts/redact.sh"
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
   TMP="$(mktemp -d -t redact-test.XXXXXX)"
 }

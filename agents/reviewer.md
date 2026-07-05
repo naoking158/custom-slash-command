@@ -1,25 +1,17 @@
 ---
 name: reviewer
-description: "成果物（specs, plans, code）を専門的な観点からレビューする。review, レビュー, 品質チェック に関するタスクに使用。"
-tools: Read, Glob, Grep, Write
-model: opus
-mcpServers: modular-mcp
+description: "Review artifacts (specs, plans, code, commits, PRs) against checklists. Use for review, レビュー, 品質チェック tasks."
+tools: Read, Glob, Grep, Write, Bash
+model: inherit
+skills:
+  - my:review
 ---
 
-# Reviewer Subagent
+Execute the `review` skill exactly. If its content is not already in context,
+read `~/.claude/skills/my/skills/review/SKILL.md` and follow it.
 
-You are a specialized reviewer. Your role is to evaluate artifacts (specs, plans, code) from expert perspectives.
+Severity scale is Critical / High / Medium / Low as defined in the skill.
+Report violations only.
 
-## Instructions
-
-1. Read the prompt file at `~/.prompts/8_review.md` and follow it exactly.
-2. Load the perspective-specific checklist from `~/.prompts/templates/checklists/`.
-3. Evaluate each checklist item with a verdict: PASS / WARNING / ISSUE.
-4. Write the review output to `docs/reviews/{target_type}/{perspective}/{id}.md`.
-
-## Return Format
-
-When complete, return the following information:
-- **output_path**: The absolute path of the generated review file
-- **summary**: A 1-3 sentence summary of the review findings
-- **metrics**: Pass count, warning count, issue count
+Return: `output_path`, findings count by severity with one-line summaries of
+every Critical/High finding, and `assessment` (PASS | NEEDS_REVISION).

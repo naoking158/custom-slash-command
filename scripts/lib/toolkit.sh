@@ -1,37 +1,43 @@
 #!/usr/bin/env bash
 # toolkit.sh — Resolve <toolkit_repo> for /my:retro.
 #
-# Single source of truth for the resolution algorithm specified in
-# docs/specs/20260627-session-knowledge-capture.md §3.5. The same logic
-# is described inline in prompts/12_retro.md; this file exists so tests
-# can exercise the actual shell implementation rather than re-implement it.
+# Single source of truth for the resolution algorithm. The same logic is
+# described inline in skills/retro/SKILL.md; this file exists so tests can
+# exercise the actual shell implementation rather than re-implement it.
 #
 # Priority order (binding decision, US-004 AC-004):
-#   1. ~/.claude/commands symlink whose target is a directory named "commands"
-#   2. $CLAUDE_TOOLKIT_REPO env var pointing at an existing directory
+#   1. $CLAUDE_TOOLKIT_REPO env var pointing at an existing directory
+#      (first priority: plugin/skills installs leave no commands/ symlink
+#      to sniff, so the explicit override must win)
+#   2. ~/.claude/skills/my symlink — resolved target is accepted only if it
+#      contains .claude-plugin/plugin.json (i.e. it is the toolkit repo root)
 #   3. Resolution failure → echo "" and return 1
 #
 # Forbidden: falling back to $PWD or any cwd-derived guess.
 
 resolve_toolkit_repo() {
-  local link target parent
-  link="$HOME/.claude/commands"
-  if [ -L "$link" ]; then
-    target="$(readlink "$link")"
-    case "$target" in
-      /*) ;;
-      *) target="$(cd "$(dirname "$link")" && cd "$(dirname "$target")" && pwd)/$(basename "$target")" ;;
-    esac
-    parent="$(dirname "$target")"
-    if [ -d "$target" ] && [ "$(basename "$target")" = "commands" ] && [ -d "$parent" ]; then
-      printf '%s' "$parent"
-      return 0
-    fi
-  fi
+  local link target
+  # Priority 1: $CLAUDE_TOOLKIT_REPO env override
   if [ -n "${CLAUDE_TOOLKIT_REPO:-}" ] && [ -d "$CLAUDE_TOOLKIT_REPO" ]; then
     printf '%s' "$CLAUDE_TOOLKIT_REPO"
     return 0
   fi
+  # Priority 2: ~/.claude/skills/my symlink to the toolkit repo root
+  link="$HOME/.claude/skills/my"
+  if [ -L "$link" ]; then
+    target="$(readlink "$link")"
+    # Resolve relative symlinks against the symlink's own directory.
+    case "$target" in
+      /*) ;;
+      *) target="$(cd "$(dirname "$link")" && cd "$(dirname "$target")" && pwd)/$(basename "$target")" ;;
+    esac
+    if [ -d "$target" ] && [ -f "$target/.claude-plugin/plugin.json" ]; then
+      # Normalize to a physical path (portable; no GNU realpath).
+      printf '%s' "$(cd "$target" && pwd -P)"
+      return 0
+    fi
+  fi
+  # Resolution failure — caller emits placeholder + guidance (US-004 AC-004).
   printf ''
   return 1
 }

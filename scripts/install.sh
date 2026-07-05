@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# install.sh — Set up the three symlinks required by this toolkit.
+# install.sh — Install this toolkit as a skills-directory plugin.
 #
-#   $HOME/.prompts          -> <repo>/prompts
-#   $HOME/.claude/commands  -> <repo>/commands
-#   $HOME/.claude/agents    -> <repo>/agents
+#   $HOME/.claude/skills/my -> <repo>   (single symlink; plugin is discovered
+#                                        in place, so repo edits apply live)
+#
+# Also cleans up symlinks from the pre-plugin layout when they point into
+# this repo:
+#   $HOME/.prompts, $HOME/.claude/commands, $HOME/.claude/agents
 #
 # Usage:
-#   ./scripts/install.sh             # create missing links (idempotent)
+#   ./scripts/install.sh             # create the link, clean legacy links
 #   ./scripts/install.sh --check     # report current state, no changes
-#   ./scripts/install.sh --uninstall # remove only the links we manage
+#   ./scripts/install.sh --uninstall # remove only what we manage
 #   ./scripts/install.sh --force     # replace a symlink that points elsewhere
 #   ./scripts/install.sh --help
 #
@@ -21,12 +24,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 
 CLAUDE_DIR="$HOME/.claude"
+PLUGIN_LINK="$CLAUDE_DIR/skills/my"
 
-# target|source pairs, in install order.
-LINKS=(
-  "$HOME/.prompts|$REPO_ROOT/prompts"
-  "$CLAUDE_DIR/commands|$REPO_ROOT/commands"
-  "$CLAUDE_DIR/agents|$REPO_ROOT/agents"
+# Symlinks from the pre-plugin layout. Removed when they point into this repo
+# (including dangling links left behind after the repo restructure).
+LEGACY_LINKS=(
+  "$HOME/.prompts"
+  "$CLAUDE_DIR/commands"
+  "$CLAUDE_DIR/agents"
 )
 
 MODE="install"
@@ -36,13 +41,14 @@ usage() {
   cat <<'EOF'
 Usage: scripts/install.sh [--check | --uninstall] [--force] [-h|--help]
 
-Creates these symlinks (idempotent):
-  $HOME/.prompts          -> <repo>/prompts
-  $HOME/.claude/commands  -> <repo>/commands
-  $HOME/.claude/agents    -> <repo>/agents
+Creates this symlink (idempotent):
+  $HOME/.claude/skills/my -> <repo>
+
+and removes legacy symlinks ($HOME/.prompts, $HOME/.claude/commands,
+$HOME/.claude/agents) when they point into this repo.
 
 Modes:
-  (default)     Install missing links. Skip ones already correct.
+  (default)     Install the link if missing. Clean legacy links.
   --check       Report state and exit non-zero if anything is missing/wrong.
   --uninstall   Remove only the symlinks we manage. Never touch real files
                 or symlinks pointing elsewhere.
@@ -104,7 +110,7 @@ inspect_target() {
   fi
 }
 
-install_one() {
+install_plugin_link() {
   local target="$1" want="$2" state
   state="$(inspect_target "$target" "$want")"
   case "$state" in
@@ -136,7 +142,7 @@ install_one() {
   esac
 }
 
-uninstall_one() {
+uninstall_plugin_link() {
   local target="$1" want="$2" state
   state="$(inspect_target "$target" "$want")"
   case "$state" in
@@ -145,8 +151,7 @@ uninstall_one() {
       printf '  OK     removed:        %s\n' "$target"
       ;;
     wrong-symlink:*)
-      local existing="${state#wrong-symlink:}"
-      printf '  SKIP   not ours:       %s -> %s\n' "$target" "$existing"
+      printf '  SKIP   not ours:       %s -> %s\n' "$target" "${state#wrong-symlink:}"
       ;;
     real-path)
       printf '  SKIP   real path:      %s\n' "$target"
@@ -157,7 +162,7 @@ uninstall_one() {
   esac
 }
 
-check_one() {
+check_plugin_link() {
   local target="$1" want="$2" state
   state="$(inspect_target "$target" "$want")"
   case "$state" in
@@ -179,28 +184,66 @@ check_one() {
   esac
 }
 
+# Legacy links may dangle (their old targets under the repo no longer exist),
+# so classify by literal target path instead of resolving directories.
+legacy_points_into_repo() {
+  local target="$1" actual
+  [ -L "$target" ] || return 1
+  actual="$(abs_target "$target")"
+  case "$actual" in
+    "$REPO_ROOT"|"$REPO_ROOT"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+cleanup_legacy() {
+  local target="$1"
+  if legacy_points_into_repo "$target"; then
+    rm "$target"
+    printf '  OK     legacy removed: %s\n' "$target"
+  elif [ -L "$target" ] || [ -e "$target" ]; then
+    printf '  SKIP   not ours:       %s\n' "$target"
+  fi
+}
+
+check_legacy() {
+  local target="$1"
+  if legacy_points_into_repo "$target"; then
+    printf '  LEGACY    %s (points into repo; run install to clean up)\n' "$target"
+    return 1
+  fi
+  return 0
+}
+
 # --- main --------------------------------------------------------------------
 
-if [ "$MODE" = "install" ]; then
-  mkdir -p "$CLAUDE_DIR"
-fi
-
 case "$MODE" in
-  install)   printf 'Installing toolkit symlinks (repo: %s)\n' "$REPO_ROOT" ;;
-  uninstall) printf 'Uninstalling toolkit symlinks\n' ;;
-  check)     printf 'Checking toolkit symlinks (repo: %s)\n' "$REPO_ROOT" ;;
+  install)   printf 'Installing plugin symlink (repo: %s)\n' "$REPO_ROOT" ;;
+  uninstall) printf 'Uninstalling plugin symlink\n' ;;
+  check)     printf 'Checking plugin symlink (repo: %s)\n' "$REPO_ROOT" ;;
 esac
 
 failed=0
-for entry in "${LINKS[@]}"; do
-  target="${entry%|*}"
-  want="${entry#*|}"
-  case "$MODE" in
-    install)   install_one   "$target" "$want" || failed=1 ;;
-    uninstall) uninstall_one "$target" "$want" || failed=1 ;;
-    check)     check_one     "$target" "$want" || failed=1 ;;
-  esac
-done
+case "$MODE" in
+  install)
+    install_plugin_link "$PLUGIN_LINK" "$REPO_ROOT" || failed=1
+    for legacy in "${LEGACY_LINKS[@]}"; do
+      cleanup_legacy "$legacy"
+    done
+    ;;
+  uninstall)
+    uninstall_plugin_link "$PLUGIN_LINK" "$REPO_ROOT" || failed=1
+    for legacy in "${LEGACY_LINKS[@]}"; do
+      cleanup_legacy "$legacy"
+    done
+    ;;
+  check)
+    check_plugin_link "$PLUGIN_LINK" "$REPO_ROOT" || failed=1
+    for legacy in "${LEGACY_LINKS[@]}"; do
+      check_legacy "$legacy" || failed=1
+    done
+    ;;
+esac
 
 if [ "$failed" -ne 0 ]; then
   case "$MODE" in
@@ -212,7 +255,7 @@ if [ "$failed" -ne 0 ]; then
 fi
 
 case "$MODE" in
-  install)   printf '\nDone.\n' ;;
+  install)   printf '\nDone. Restart Claude Code (or run /reload-plugins) to pick up the plugin.\n' ;;
   uninstall) printf '\nDone.\n' ;;
   check)     printf '\nAll good.\n' ;;
 esac
