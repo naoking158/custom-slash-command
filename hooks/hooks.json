@@ -5,7 +5,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "d=\"$HOME/.claude/projects/$(basename \"$PWD\")/memory/journal\"; mkdir -p \"$d\" && printf '%s\\t%s\\n' \"$(date +%Y-%m-%dT%H:%M:%S)\" \"$PWD\" >> \"$d/.sessions.log\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/my}/scripts/hooks/session-end.sh\""
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/my}/scripts/hooks/prompt-capture.sh\""
           }
         ]
       }

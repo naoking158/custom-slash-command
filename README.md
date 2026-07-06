@@ -18,8 +18,8 @@ language rules.
 | `/my:do` | Execute a plan, with real end-to-end verification | source code |
 | `/my:review` | Checklist review of specs/plans/code/commits/PRs | `docs/reviews/{type}/` |
 | `/my:pipeline` | Run the whole flow via isolated subagents | multiple `docs/` outputs |
-| `/my:learn` | Capture session knowledge to a machine-local journal | `~/.claude/projects/<repo>/memory/journal/` |
-| `/my:retro` | Surface promotion candidates from journals (read-only) | stdout |
+| `/my:learn` | Capture a toolkit improvement signal to the machine-local journal | `~/.claude/my-toolkit/journal/` |
+| `/my:retro` | Cluster signals, propose toolkit edits, apply approved ones | toolkit repo edits (approval-gated) |
 
 Language rules (`skills/rules-{go,rails,react,typescript}/`) load
 automatically when matching files are read — no invocation needed.
@@ -107,22 +107,37 @@ Perspectives: `fe:` `be:` `security:` `perf:` `doc:` `maint:`.
 Severity scale (toolkit-wide): **Critical / High / Medium / Low**; the fixer
 and pipeline act on Critical/High only. Assessment is PASS or NEEDS_REVISION.
 
-### Session knowledge (learn / retro)
+### Improvement loop (learn / retro)
 
-```bash
-/my:learn --category mistake "TS catch は unknown 必須"   # capture (any project)
-/my:retro --since 14d                                     # surface candidates
-# then run the suggested `cd <toolkit_repo> && /my:change "..."` VERBATIM,
-# execute /my:do inside the toolkit repo, and flip the journal entry to
-# status: promoted.
+The toolkit improves itself through a capture-then-promote loop. Capture is
+cheap and automatic; promotion is deliberate and approval-gated.
+
+**Division of labor with native features** — project knowledge (facts about
+the codebase you're working in) belongs to Claude Code's native auto memory;
+`/insights` covers monthly workflow retrospectives. This loop handles the one
+thing native features don't: **evidence that this toolkit's own assets should
+change**, promoted into real edits of this repo.
+
+```
+[hooks]      SessionEnd → session index; UserPromptSubmit → correction queue
+[/my:learn]  explicit capture: "this my:* asset misbehaved / is missing X"
+[/my:retro]  cluster → classify (skill edit / rule / new skill / hook /
+             CLAUDE.md / SDD handoff) → propose diffs → apply approved →
+             archive promoted signals, prune stale ones
 ```
 
-Journals are machine-local
-(`~/.claude/projects/<repo>/memory/journal/`) and never enter a project tree.
-`/my:retro` resolves the toolkit repo via `$CLAUDE_TOOLKIT_REPO` or the
-`~/.claude/skills/my` symlink — it never silently uses the current directory.
-A `SessionEnd` hook (`hooks/hooks.json`) appends a one-line session marker to
-the journal dir so retro can spot unjournaled sessions.
+```bash
+/my:learn --category mistake --target skills/plan "baseline テストをまた飛ばした"
+/my:retro                 # cluster + propose + apply (with approval)
+/my:retro --dry-run       # report only
+/my:retro --deep          # also mine transcripts before their ~30-day expiry
+```
+
+All captured data is machine-local under `~/.claude/my-toolkit/` (journal
+entries, `sessions.jsonl`, `corrections.jsonl`) and never enters a project
+tree. `/my:retro` resolves the toolkit repo via `$CLAUDE_TOOLKIT_REPO`,
+plugin env vars, or the `~/.claude/skills/my` symlink — never the current
+directory. Text promoted into the repo passes `redact.sh` first.
 
 ## Repository structure
 
@@ -136,9 +151,9 @@ custom-slash-command/
 │   ├── retro/                     # + scripts/redact.sh, redact.denylist
 │   └── rules-{go,rails,react,typescript}/          # SKILL.md index + references/
 ├── agents/                        # thin subagent shells (preload their skill)
-├── hooks/hooks.json               # SessionEnd session marker
-├── scripts/                       # install.sh, lib/toolkit.sh
-├── tests/                         # bats: install / journal / redact
+├── hooks/hooks.json               # SessionEnd index + UserPromptSubmit correction capture
+├── scripts/                       # install.sh, lib/, hooks/ (capture scripts)
+├── tests/                         # bats: hooks / install / redact / toolkit
 └── docs/                          # SDD artifacts of this repo itself
 ```
 
@@ -158,7 +173,7 @@ Design rules the repo follows:
 ## Development
 
 ```bash
-bats tests/            # all suites
+bats -r tests/         # all suites
 ./scripts/install.sh --check
 ```
 

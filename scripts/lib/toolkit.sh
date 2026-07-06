@@ -7,22 +7,34 @@
 #
 # Priority order (binding decision, US-004 AC-004):
 #   1. $CLAUDE_TOOLKIT_REPO env var pointing at an existing directory
-#      (first priority: plugin/skills installs leave no commands/ symlink
-#      to sniff, so the explicit override must win)
-#   2. ~/.claude/skills/my symlink — resolved target is accepted only if it
+#      (first priority: the explicit override must win)
+#   2. $CLAUDE_PLUGIN_ROOT / $CLAUDE_SKILL_DIR — set by Claude Code when the
+#      caller runs as a plugin component; accepted only if the derived root
+#      contains .claude-plugin/plugin.json
+#   3. ~/.claude/skills/my symlink — resolved target is accepted only if it
 #      contains .claude-plugin/plugin.json (i.e. it is the toolkit repo root)
-#   3. Resolution failure → echo "" and return 1
+#   4. Resolution failure → echo "" and return 1
 #
 # Forbidden: falling back to $PWD or any cwd-derived guess.
 
 resolve_toolkit_repo() {
-  local link target
+  local link target candidate
   # Priority 1: $CLAUDE_TOOLKIT_REPO env override
   if [ -n "${CLAUDE_TOOLKIT_REPO:-}" ] && [ -d "$CLAUDE_TOOLKIT_REPO" ]; then
     printf '%s' "$CLAUDE_TOOLKIT_REPO"
     return 0
   fi
-  # Priority 2: ~/.claude/skills/my symlink to the toolkit repo root
+  # Priority 2: plugin runtime env vars. CLAUDE_PLUGIN_ROOT points at the
+  # plugin root; CLAUDE_SKILL_DIR points at <root>/skills/<name>.
+  for candidate in "${CLAUDE_PLUGIN_ROOT:-}" \
+                   "${CLAUDE_SKILL_DIR:+$CLAUDE_SKILL_DIR/../..}"; do
+    if [ -n "$candidate" ] && [ -d "$candidate" ] \
+       && [ -f "$candidate/.claude-plugin/plugin.json" ]; then
+      printf '%s' "$(cd "$candidate" && pwd -P)"
+      return 0
+    fi
+  done
+  # Priority 3: ~/.claude/skills/my symlink to the toolkit repo root
   link="$HOME/.claude/skills/my"
   if [ -L "$link" ]; then
     target="$(readlink "$link")"
