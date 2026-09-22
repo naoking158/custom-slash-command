@@ -1,5 +1,5 @@
 ---
-description: "Coding rules for Go: error handling, concurrency, interfaces, testing, performance, security, style/naming, antipatterns. Loaded automatically when working with Go files."
+description: "Coding rules for Go: error handling, concurrency, interfaces, testing, performance, security, style/naming, comments, antipatterns. Loaded automatically when working with Go files."
 user-invocable: false
 paths: ["**/*.go", "**/go.mod"]
 ---
@@ -11,6 +11,7 @@ When editing Go code, consult the relevant reference before writing non-trivial 
 ## INDEX
 
 - `references/antipatterns.md` — Patterns to avoid: init() abuse, global mutable state, interface{}/any overuse, swallowed errors, channels-where-a-mutex-suffices, god functions/packages, context misuse, unnecessary else, goto.
+- `references/comments.md` — Doc comments on exported identifiers only; no comments that restate code, justify or apologize for a decision, or record history (dates, PR numbers, review IDs); comments must stand alone without the design discussion.
 - `references/concurrency.md` — Goroutine lifecycle control via context, channel direction and select patterns, WaitGroup/errgroup/mutex choice, data race prevention with -race, channel closing and buffering pitfalls.
 - `references/error-handling.md` — Always check and wrap errors with %w, sentinel errors with errors.Is, custom error types with errors.As, error message style, panic avoidance, defer-based cleanup, early-return error flow.
 - `references/interfaces.md` — Small (1-3 method) interfaces defined on the consumer side, accept-interfaces/return-structs, composition via embedding, avoiding single-implementation abstractions, implementing standard library interfaces.
