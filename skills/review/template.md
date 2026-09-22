@@ -58,3 +58,4 @@ Checked: {checklists used}
 
 - If PASS: `/my:do {identifier}` (doc reviews) or commit / merge approval (code reviews)
 - If NEEDS_REVISION: address every Critical/High finding, then `/my:review {identifier}` again
+- Applying findings: commit messages and PR bodies describe the change itself. This report, its finding IDs, and `docs/reviews/` paths are local working files — never cite them.

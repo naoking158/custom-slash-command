@@ -67,6 +67,10 @@ Self-reported checklists are not verification. After all phases:
 
 - Stay strictly within the plan + source document scope.
 - **Do NOT commit** unless the user explicitly asked for commits.
+- When the user does ask for a commit or PR, describe the change itself.
+  Plans, specs, and review reports under `docs/` are local working files:
+  never cite finding IDs (`M003`), report paths, or the review process in
+  commit messages or PR bodies.
 - No TODO/FIXME left in delivered code for in-scope work.
 - Follow existing code style; comments only for non-obvious constraints.
 
