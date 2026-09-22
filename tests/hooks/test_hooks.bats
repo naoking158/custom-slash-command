@@ -100,3 +100,27 @@ payload() {
   out="$(printf '%s' "$(payload '"違う、やり直して"')" | "$PROMPT_CAPTURE")"
   [ -z "$out" ]
 }
+
+@test "prompt-capture: system-injected <task-notification> is NOT captured" {
+  run bash -c "printf '%s' '$(payload '"<task-notification>\n<summary>Agent finished</summary>\nUse Monitor instead of sleep.\n</task-notification>"')' | \"$PROMPT_CAPTURE\""
+  [ "$status" -eq 0 ]
+  [ ! -e "$MY_TOOLKIT_DATA/corrections.jsonl" ]
+}
+
+@test "prompt-capture: system-injected <scheduled-task ...> is NOT captured" {
+  run bash -c "printf '%s' '$(payload '"<scheduled-task name=\"nightly\">\n自動実行です。質問はしないで進めてください。\n</scheduled-task>"')' | \"$PROMPT_CAPTURE\""
+  [ "$status" -eq 0 ]
+  [ ! -e "$MY_TOOLKIT_DATA/corrections.jsonl" ]
+}
+
+@test "prompt-capture: pasted review-screen feedback is NOT captured" {
+  run bash -c "printf '%s' '$(payload '"# レビューフィードバック: pr:641 のレビュー\n\n## 採用された指摘\n\n- A ではなく B を使う"')' | \"$PROMPT_CAPTURE\""
+  [ "$status" -eq 0 ]
+  [ ! -e "$MY_TOOLKIT_DATA/corrections.jsonl" ]
+}
+
+@test "prompt-capture: a correction that merely contains a tag IS captured" {
+  run bash -c "printf '%s' '$(payload '"違う、<div> ではなく <span> を使って"')' | \"$PROMPT_CAPTURE\""
+  [ "$status" -eq 0 ]
+  [ -f "$MY_TOOLKIT_DATA/corrections.jsonl" ]
+}

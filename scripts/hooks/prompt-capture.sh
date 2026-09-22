@@ -21,6 +21,10 @@ prompt="$(printf '%s' "$payload" | jq -r '.prompt // empty' 2>/dev/null)" || exi
 
 # Slash commands are never corrections.
 case "$prompt" in /*) exit 0 ;; esac
+# Neither are system-injected prompts — <task-notification>, <scheduled-task>,
+# <system-reminder>, <local-command-*> arrive wrapped in an XML-ish tag — nor
+# the review-screen feedback Markdown that the user pastes back verbatim.
+printf '%s' "$prompt" | grep -qE '^[[:space:]]*(<[A-Za-z][A-Za-z-]*[[:space:]>/]|# レビューフィードバック:)' && exit 0
 
 markers='違う|ちがう|そうじゃなく|じゃなくて|ではなく|しないで|やめて|やり直し|覚えて|忘れないで|さっきも|前も言った|何度も言|^no[,. ]|not that|don.t (do|use)|stop (doing|using)|instead of|^actually[, ]|remember (this|that|:)|i (already|just) (said|told)|as i said'
 printf '%s' "$prompt" | grep -qiE "$markers" || exit 0
