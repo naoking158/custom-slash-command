@@ -1,5 +1,5 @@
 ---
-description: Analyze a bug by reproducing it first, trace the root cause, and auto-generate a fix plan with a mandatory regression test. Trigger words: debug, bug analysis, デバッグ, バグ解析.
+description: Analyze a bug by reproducing it first, trace the root cause, and auto-generate a fix plan with a mandatory regression test. Trigger words: debug, bug analysis, root cause, デバッグ, バグ解析, 原因調査, 不具合調査, 障害調査.
 argument-hint: "<bug description>"
 ---
 

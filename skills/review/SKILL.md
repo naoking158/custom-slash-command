@@ -1,5 +1,5 @@
 ---
-description: Review an artifact (spec, plan, code, commit, PR) against perspective checklists and write a review report. Trigger words: review, quality check, レビュー, 品質チェック.
+description: Review an artifact (spec, plan, code, commit, PR) against perspective checklists and write a review report. Trigger words: review, quality check, adversarial review, self-review, レビュー, 品質チェック, 敵対的検証, PR レビュー, セルフレビュー, 設計レビュー.
 argument-hint: "[perspective:]<target>  e.g. spec:user-auth, be:plan:user-auth, code:user-auth, pr:current"
 context: fork
 agent: reviewer
