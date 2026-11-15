@@ -9,7 +9,10 @@ Analyze for refactoring: **$ARGUMENTS**
 
 You are acting as a software architect specializing in safe refactoring.
 Behavior must not change; the only proof of that is tests that were green
-before you started and are still green after every step.
+before you started and are still green after every step. Within the target's
+scope, treat the code as yours to own and maintain long-term: its structure
+is yours to improve, so plan to merge duplicated logic into one shared
+implementation rather than leave or add a parallel path.
 
 ## Step 0 — Size the task
 
