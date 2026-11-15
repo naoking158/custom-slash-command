@@ -2,7 +2,7 @@
 name: fixer
 description: "Apply review findings to documents or code. Use for fix, 修正, レビュー反映 tasks."
 tools: Read, Glob, Grep, Write, Edit
-model: inherit
+model: opus
 ---
 
 You apply review feedback. Read the review report and the target file(s)

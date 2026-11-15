@@ -2,7 +2,7 @@
 name: implementer
 description: "Execute an implementation plan by writing code. Use for implement, 実装, do tasks."
 tools: Read, Glob, Grep, Write, Edit, Bash
-model: inherit
+model: opus
 skills:
   - my:do
 ---
