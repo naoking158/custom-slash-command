@@ -40,7 +40,13 @@ wrong): stop following the plan blindly. Make the smallest sound adaptation,
 record it, and report it in the completion summary. If the contradiction
 invalidates the plan's approach, treat it as a blocker.
 
-**Blockers:** document the blocker and preserve completed work.
+**Blockers:** a blocker is something only the user can resolve — an approach
+the plan no longer supports, a missing decision or credential, or a step the
+plan or the project's rules put off-limits. A failing command, a flaky test,
+a timeout, a missing dependency, or an empty search result is an ordinary
+obstacle, not a blocker: diagnose it and work through it (retry, fix the
+invocation, use another tool) without weakening the step's verification.
+For a real blocker, document it and preserve completed work.
 - Interactive session → present the blocker and options to the user, then wait
   for direction.
 - Running as a subagent → **return immediately** with status `blocked`, the
