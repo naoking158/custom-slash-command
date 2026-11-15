@@ -83,6 +83,18 @@ instruction → skill → rule → hook):
 | User CLAUDE.md | Needed in EVERY session, toolkit-independent | propose text for `~/.claude/CLAUDE.md` (apply only with approval) |
 | SDD handoff | Structural change too big for an inline edit | `cd {toolkit_repo} && /my:change "<title>"` |
 
+Promotion is not only additive. When a cluster shows an existing rule
+causing the friction (asking for approval nobody needs, refusing a
+legitimate step, contradicting a newer rule), or the reason a rule was
+added no longer holds, propose **deleting or narrowing** that rule on the
+same rung instead of adding another one on top.
+
+Write every promoted instruction in plain wording with its scope and its
+reason. Where the user wants to keep the decision rather than forbid the
+action, write an approval requirement (`ask before deleting files`) instead
+of a prohibition (`never delete files`): an unscoped `never` is followed
+literally and blocks the legitimate cases too.
+
 ## Step 5 — Propose (the approval gate)
 
 For each cluster present: title, category, recurrence, source signals,
