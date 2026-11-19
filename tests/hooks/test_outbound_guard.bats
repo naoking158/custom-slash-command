@@ -163,6 +163,22 @@ decision() {
   [ -z "$output" ]
 }
 
+@test "paths in setup steps before the commit are not a leak" {
+  run_guard "$(bash_payload 'git init -q /Users/me/tmp/w && git -C /Users/me/tmp/w commit --allow-empty -m init')"
+  [ -z "$output" ]
+}
+
+@test "commands mentioned inside a heredoc message are not run" {
+  cmd="$(printf 'git commit -q -F - <<%sEOF%s\ngh pr create and git push origin main are described here\nEOF' "'" "'")"
+  run_guard "$(bash_payload "$cmd")"
+  [ -z "$output" ]
+}
+
+@test "commands mentioned inside a quoted message are not run" {
+  run_guard "$(bash_payload 'git commit -m "explain why gh pr ready is denied"')"
+  [ -z "$output" ]
+}
+
 @test "body file contents are checked" {
   printf 'see docs/reviews/r.md\n' >"$TMP/body.md"
   run_guard "$(bash_payload "gh pr create --draft --title t --body-file $TMP/body.md")"

@@ -76,16 +76,24 @@ lead_cd="$(printf '%s' "$cmd" | sed -nE '1s#^[[:space:]]*cd[[:space:]]+("([^"]+)
 git_c="$(printf '%s' "$cmd" | sed -nE 's#.*git[[:space:]]+-C[[:space:]]+("([^"]+)"|([^[:space:]]+)).*#\2\3#p' | head -n1)"
 [ -n "$git_c" ] && workdir="${git_c/#\~/$HOME}"
 
+# Command shape: heredoc bodies and quoted strings emptied, so that a message
+# that mentions `gh pr create` or `git push` is not mistaken for running it.
+shape="$(printf '%s' "$cmd" | perl -0777 -pe '
+  s/(<<-?\s*(["\x27]?)(\w+)\2)([^\n]*)\n.*?\n[ \t]*\3[ \t]*(?=\n|\z)/$1$4/gs;
+  s/"(?:[^"\\]|\\.)*"/""/gs;
+  s/\x27[^\x27]*\x27/\x27\x27/gs;
+')"
+
 # --- PR state ------------------------------------------------------------------
-if printf '%s' "$cmd" | grep -qE '(^|[^A-Za-z0-9_-])gh[[:space:]]+pr[[:space:]]+ready([[:space:]]|$)'; then
+if printf '%s' "$shape" | grep -qE '(^|[^A-Za-z0-9_-])gh[[:space:]]+pr[[:space:]]+ready([[:space:]]|$)'; then
   decide deny "PR を ready にしない。ready への変更は本人がセルフレビュー後に行う"
 fi
-if printf '%s' "$cmd" | grep -qE 'gh[[:space:]]+api' \
+if printf '%s' "$shape" | grep -qE 'gh[[:space:]]+api' \
   && printf '%s' "$cmd" | grep -qiE 'markPullRequestReadyForReview|ready_for_review|"?draft"?[[:space:]]*[:=][[:space:]]*false'; then
   decide deny "API 経由でも PR を ready にしない"
 fi
-if printf '%s' "$cmd" | grep -qE '(^|[^A-Za-z0-9_-])gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'; then
-  create_seg="$(printf '%s' "$cmd" | sed -nE 's#.*(gh[[:space:]]+pr[[:space:]]+create.*)#\1#p' | head -n1)"
+if printf '%s' "$shape" | grep -qE '(^|[^A-Za-z0-9_-])gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'; then
+  create_seg="$(printf '%s' "$shape" | sed -nE 's#.*(gh[[:space:]]+pr[[:space:]]+create.*)#\1#p' | head -n1)"
   if printf '%s' "$create_seg" | grep -qE -- '--draft=(false|0)'; then
     decide deny "PR は draft で作る（--draft=false は使わない）"
   fi
@@ -95,7 +103,7 @@ if printf '%s' "$cmd" | grep -qE '(^|[^A-Za-z0-9_-])gh[[:space:]]+pr[[:space:]]+
 fi
 
 # --- git push ------------------------------------------------------------------
-push_seg="$(printf '%s' "$cmd" | grep -oE '(^|[^A-Za-z0-9_-])git([[:space:]]+-C[[:space:]]+[^[:space:]]+)?[[:space:]]+push([[:space:]][^;&|]*)?' | head -n1)"
+push_seg="$(printf '%s' "$shape" | grep -oE '(^|[^A-Za-z0-9_-])git([[:space:]]+-C[[:space:]]+[^[:space:]]+)?[[:space:]]+push([[:space:]][^;&|]*)?' | head -n1)"
 if [ -n "$push_seg" ]; then
   args="$(printf '%s' "$push_seg" | sed -E 's#.*push##')"
   protected="main master"
@@ -134,8 +142,10 @@ if [ -n "$push_seg" ]; then
 fi
 
 # --- outbound text ---------------------------------------------------------------
-if printf '%s' "$cmd" | grep -qE 'git([[:space:]]+-C[[:space:]]+[^[:space:]]+)?[[:space:]]+commit|gh[[:space:]]+(pr|issue)[[:space:]]+(create|comment|edit|review)'; then
-  text="$cmd"
+if printf '%s' "$shape" | grep -qE 'git([[:space:]]+-C[[:space:]]+[^[:space:]]+)?[[:space:]]+commit|gh[[:space:]]+(pr|issue)[[:space:]]+(create|comment|edit|review)'; then
+  # Only what follows the outbound command can be its text; earlier setup steps
+  # (git init <dir>, cp <path> ...) address the machine.
+  text="$(printf '%s' "$cmd" | perl -0777 -pe 's/\A.*?(?=git(\s+-C\s+\S+)?\s+commit|gh\s+(pr|issue)\s+(create|comment|edit|review))//s')"
   for f in $(printf '%s' "$cmd" | grep -oE -- '(--body-file|--file|-F)[[:space:]=]+[^[:space:]]+' | sed -E 's#^(--body-file|--file|-F)[[:space:]=]+##'); do
     f="${f%\"}"; f="${f#\"}"; f="${f%\'}"; f="${f#\'}"
     case "$f" in /*|~*) ;; *) f="$workdir/$f" ;; esac
