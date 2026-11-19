@@ -81,7 +81,7 @@ instruction → skill → rule → hook):
 | New skill | A recurring workflow no asset covers | scaffold `{toolkit_repo}/skills/<name>/SKILL.md` |
 | Hook | The rule must be deterministic, not advisory | propose an entry for `{toolkit_repo}/hooks/hooks.json` + script under `scripts/hooks/` |
 | User CLAUDE.md | Needed in EVERY session, toolkit-independent | propose text for `~/.claude/CLAUDE.md` (apply only with approval) |
-| SDD handoff | Structural change too big for an inline edit | `cd {toolkit_repo} && /my:change "<title>"` |
+| Handoff | Structural change too big for an inline edit | write the proposed change (target files, steps, reason) into the report and stop; the user starts it as a separate task |
 
 Promotion is not only additive. When a cluster shows an existing rule
 causing the friction (asking for approval nobody needs, refusing a
@@ -131,7 +131,7 @@ plain conversation otherwise). `--dry-run` stops here.
 ## Step 8 — Report
 
 Summarize: clusters found / proposed / applied / archived, files edited
-(with paths), test results, and anything handed off to `/my:change`.
+(with paths), test results, and any change handed off as a separate task.
 
 ## Critical rules
 

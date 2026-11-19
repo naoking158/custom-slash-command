@@ -15,7 +15,7 @@ Two kinds of knowledge come out of a session. Only one belongs here:
 | Kind | Example | Where it goes |
 |------|---------|---------------|
 | **Project knowledge** — facts about the codebase, domain, or environment you are working in | "Homebrew 6 requires tap trust", "this repo's tests need `-race`" | **Native auto memory** (`~/.claude/projects/<project>/memory/`). Write it there as a normal memory; do not create a journal entry. |
-| **Toolkit signal** — evidence that a `my:*` asset should change | "/my:plan skipped baseline tests again", "reviewer keeps missing N+1 queries", "no skill covers DB migrations" | **The journal** (this skill). |
+| **Toolkit signal** — evidence that a `my:*` asset should change | "/my:review missed the migration rollback again", "reviewer keeps missing N+1 queries", "no skill covers DB migrations" | **The journal** (this skill). |
 
 If the input contains both, split it: memory for the project fact, journal
 for the toolkit signal. Tell the user which went where.
