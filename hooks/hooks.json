@@ -19,6 +19,17 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|mcp__.*notion-(create-pages|update-page|create-comment|update-comment)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/my}/scripts/hooks/outbound-guard.sh\""
+          }
+        ]
+      }
     ]
   }
 }
