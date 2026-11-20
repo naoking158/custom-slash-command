@@ -10,6 +10,7 @@ hook for pushes and outbound text, PdM skills, a session-knowledge loop
 
 | Skill | Purpose | Output |
 |-------|---------|--------|
+| `/my:autopilot` | Work toward a goal unattended: small PRs, each verified, AI-reviewed and fixed; merged on green in ship mode, stacked as drafts otherwise | PRs + `~/.local/state/autopilot/` log |
 | `/my:review` | Checklist review of specs/plans/code/commits/PRs/PRDs | `docs/reviews/{type}/` |
 | `/my:how` | Explain how part of a codebase works before changing it | answer with file references |
 | `/my:why` | Explain why code is the way it is, from the commit and PR record | answer with citations |
@@ -38,9 +39,18 @@ automatically when matching files are read — no invocation needed.
 
 | Event | Script | Purpose |
 |-------|--------|---------|
-| `PreToolUse` | `outbound-guard.sh` | Denies non-draft PRs, marking a PR ready, force-pushes and pushes to the default branch; blocks local paths, review IDs and untracked `docs/` paths in commit messages, PR/issue text and Notion writes |
+| `PreToolUse` | `outbound-guard.sh` | Denies force-pushes and pushes to the default branch; in strict repos also non-draft PRs, marking a PR ready and merging; blocks local paths, review IDs and untracked `docs/` paths in commit messages, PR/issue text and Notion writes |
 | `SessionEnd` | `session-end.sh` | Appends a session index for `/my:retro` |
 | `UserPromptSubmit` | `prompt-capture.sh` | Queues corrections for `/my:retro` |
+
+## Autonomy modes
+
+Every repository is **strict** unless the machine-local
+`~/.claude/my-toolkit/autonomy.conf` opts it into **ship** with a line
+`ship <owner/name glob>`. Strict keeps PRs as drafts for a human to land;
+ship lets the agent open normal PRs and merge them once CI is green.
+`scripts/lib/autonomy.sh <dir>` prints a checkout's mode. The config stays
+off the repository so it never names private repositories.
 
 ## Rules
 
@@ -165,6 +175,7 @@ custom-slash-command/
 │   ├── review/                    # + template.md, checklists/, review-json.md,
 │   │                              #   scripts/ (diff-hunks, build-screen, render-report),
 │   │                              #   assets/review-screen.html
+│   ├── autopilot/                 # + goal-template.md
 │   ├── how/  why/  blast-radius/
 │   ├── create-verification-skill/ # + references/
 │   ├── prd|product-spec|backlog|catchup/           # PdM flow, each with template.md

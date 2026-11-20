@@ -13,6 +13,15 @@
 #     not track.
 # Notion MCP writes get the same leak check (without the git-tracked test).
 #
+# Autonomy modes. A repository is in `strict` mode unless the machine-local
+# config ($MY_AUTONOMY_CONF, default ~/.claude/my-toolkit/autonomy.conf) has a
+# line `ship <owner/name glob>` matching it. The repository is the one a gh
+# command names with -R / --repo, else the origin of the command's workdir.
+#   strict: the PR rules above apply and `gh pr merge` (or a merge through the
+#           API) is denied; PRs stay drafts for a human to land.
+#   ship:   non-draft PRs, `gh pr ready` and `gh pr merge` are allowed. Pushes
+#           to the default branch, force pushes and the leak checks still apply.
+#
 # Emits a PreToolUse permissionDecision JSON on stdout when it objects;
 # stays silent (allow by default) otherwise. Never exits non-zero.
 # Dependencies: bash, jq, grep, sed, git.
@@ -76,6 +85,9 @@ lead_cd="$(printf '%s' "$cmd" | sed -nE '1s#^[[:space:]]*cd[[:space:]]+("([^"]+)
 git_c="$(printf '%s' "$cmd" | sed -nE 's#.*git[[:space:]]+-C[[:space:]]+("([^"]+)"|([^[:space:]]+)).*#\2\3#p' | head -n1)"
 [ -n "$git_c" ] && workdir="${git_c/#\~/$HOME}"
 
+# shellcheck source=../lib/autonomy.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/autonomy.sh"
+
 # Command shape: heredoc bodies and quoted strings emptied, so that a message
 # that mentions `gh pr create` or `git push` is not mistaken for running it.
 shape="$(printf '%s' "$cmd" | perl -0777 -pe '
@@ -85,6 +97,21 @@ shape="$(printf '%s' "$cmd" | perl -0777 -pe '
 ')"
 
 # --- PR state ------------------------------------------------------------------
+target_repo="$(printf '%s' "$shape" | sed -nE 's#.*(^|[[:space:]])(-R|--repo)[[:space:]=]+([^[:space:];&|]+).*#\3#p' | head -n1)"
+case "$target_repo" in
+  "") target_repo="$(repo_slug "$workdir")" ;;
+  *\"*|*\'*) target_repo="" ;;
+esac
+mode="$(autonomy_mode "$target_repo")"
+
+if [ "$mode" = "strict" ]; then
+if printf '%s' "$shape" | grep -qE '(^|[^A-Za-z0-9_-])gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'; then
+  decide deny "このリポジトリでは PR をマージしない。draft のまま本人に渡す"
+fi
+if printf '%s' "$shape" | grep -qE 'gh[[:space:]]+api' \
+  && printf '%s' "$cmd" | grep -qiE 'mergePullRequest|enablePullRequestAutoMerge|pulls/[0-9]+/merge'; then
+  decide deny "API 経由でも PR をマージしない"
+fi
 if printf '%s' "$shape" | grep -qE '(^|[^A-Za-z0-9_-])gh[[:space:]]+pr[[:space:]]+ready([[:space:]]|$)'; then
   decide deny "PR を ready にしない。ready への変更は本人がセルフレビュー後に行う"
 fi
@@ -100,6 +127,7 @@ if printf '%s' "$shape" | grep -qE '(^|[^A-Za-z0-9_-])gh[[:space:]]+pr[[:space:]
   if ! printf '%s' "$create_seg" | grep -qE -- '(^|[[:space:]])(--draft|-d)([[:space:]=]|$)'; then
     decide deny "PR は draft で作る。gh pr create に --draft を付ける"
   fi
+fi
 fi
 
 # --- git push ------------------------------------------------------------------
@@ -136,7 +164,7 @@ if [ -n "$push_seg" ]; then
   fi
   for d in "${dests[@]}"; do
     for p in $protected; do
-      [ "$d" = "$p" ] && decide deny "既定の branch（${d}）へは push しない。作業 branch から draft PR を出す"
+      [ "$d" = "$p" ] && decide deny "既定の branch（${d}）へは push しない。作業 branch から PR を出す"
     done
   done
 fi

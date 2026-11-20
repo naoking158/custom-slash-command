@@ -19,6 +19,13 @@ setup() {
   git -C "$REPO" add docs/log/tracked.md
   git -C "$REPO" -c user.email=t@example.com -c user.name=t commit -q -m docs
   git -C "$REPO" checkout -q -b feature/x
+  export MY_AUTONOMY_CONF="$TMP/autonomy.conf"
+}
+
+# ship_repo — opt REPO into ship mode as me/app.
+ship_repo() {
+  git -C "$REPO" remote add origin git@github.com:me/app.git
+  echo 'ship me/*' >"$MY_AUTONOMY_CONF"
 }
 
 teardown() {
@@ -198,4 +205,68 @@ decision() {
 @test "malformed payload never fails" {
   run bash -c 'printf "not json" | "$1"' _ "$GUARD"
   [ "$status" -eq 0 ]
+}
+
+# ============================================================================
+# autonomy modes
+# ============================================================================
+
+@test "strict: gh pr merge is denied" {
+  run_guard "$(bash_payload 'gh pr merge 3 --squash')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "strict: merging through the API is denied" {
+  run_guard "$(bash_payload 'gh api -X PUT repos/o/r/pulls/3/merge')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "strict: a repo absent from the config stays strict" {
+  git -C "$REPO" remote add origin git@github.com:work/app.git
+  echo 'ship me/*' >"$MY_AUTONOMY_CONF"
+  run_guard "$(bash_payload 'gh pr create --title t --body b')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "ship: non-draft PR, ready and merge are allowed" {
+  ship_repo
+  run_guard "$(bash_payload 'gh pr create --title t --body b')"
+  [ -z "$output" ]
+  run_guard "$(bash_payload 'gh pr ready 3')"
+  [ -z "$output" ]
+  run_guard "$(bash_payload 'gh pr merge 3 --squash --delete-branch')"
+  [ -z "$output" ]
+}
+
+@test "ship: pushing to the default branch is still denied" {
+  ship_repo
+  run_guard "$(bash_payload 'git push origin main')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "ship: force push is still denied" {
+  ship_repo
+  run_guard "$(bash_payload 'git push --force-with-lease origin feature/x')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "ship: leak checks still apply" {
+  ship_repo
+  run_guard "$(bash_payload 'gh pr create --title t --body "see /Users/me/x.md"')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "ship cwd: gh -R naming another repo is judged as that repo" {
+  ship_repo
+  run_guard "$(bash_payload 'gh pr merge 3 -R work/app')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "ship cwd: cd into a strict repo is judged as that repo" {
+  ship_repo
+  WORK="$TMP/work"
+  git init -q -b main "$WORK"
+  git -C "$WORK" remote add origin https://github.com/work/app.git
+  run_guard "$(bash_payload "cd $WORK && gh pr merge 3")"
+  [ "$(decision)" = "deny" ]
 }
