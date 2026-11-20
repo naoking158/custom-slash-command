@@ -6,7 +6,7 @@ paths: ["**/*.go", "**/go.mod"]
 
 # Go Coding Rules
 
-When editing Go code, consult the relevant reference before writing non-trivial code; follow these rules over general habits.
+When editing Go code, consult the relevant reference before writing non-trivial code; follow these rules over general habits. Where the repository's existing code or its own guidance (its CLAUDE.md, or team-provided skills) sets a different convention — its error-wrapping or assertion library, for example — follow the repository.
 
 ## INDEX
 
