@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "meta": {
+    "id": "script-tag",
+    "title": "差分に </script> を含むケース",
+    "target": {
+      "kind": "code",
+      "spec": "",
+      "diff_command": "git -c core.quotepath=false diff",
+      "context_paths": []
+    },
+    "reviewed_at": "2026-07-25T10:10:00+09:00",
+    "checklists": [
+      "maint.md"
+    ],
+    "passes": 1,
+    "assessment": "PASS",
+    "diff_sha": "a38cef87ce44"
+  },
+  "stats": {
+    "files": 1,
+    "hunks": 1,
+    "insertions": 7,
+    "deletions": 1
+  },
+  "groups": [
+    {
+      "id": "g1",
+      "title": "レンダラの文字列を差し替え",
+      "summary": "HTML 断片を返すヘルパを追加した",
+      "intent": "テスト用に HTML 断片を含む文字列を返す関数を足している。",
+      "intent_unclear": false,
+      "risk": "Low",
+      "tags": [
+        "test"
+      ],
+      "hunks": [
+        "h001"
+      ]
+    }
+  ],
+  "ungrouped_hunks": [],
+  "findings": []
+}

@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "meta": {
+    "id": "sample-review",
+    "title": "認証まわりの差分レビュー",
+    "target": {
+      "kind": "code",
+      "spec": "docs/specs/sample.md",
+      "diff_command": "git -c core.quotepath=false diff",
+      "context_paths": [
+        "docs/plans/features/sample.md"
+      ]
+    },
+    "reviewed_at": "2026-07-25T10:00:00+09:00",
+    "checklists": [
+      "be.md",
+      "maint.md"
+    ],
+    "passes": 1,
+    "assessment": "PASS",
+    "diff_sha": "35e60d914d98"
+  },
+  "stats": {
+    "files": 3,
+    "hunks": 5,
+    "insertions": 7,
+    "deletions": 4
+  },
+  "groups": [
+    {
+      "id": "g2",
+      "title": "ユーティリティの整理",
+      "summary": "URL の明示 import と不要な TODO の削除",
+      "intent": "host() が使う URL を明示的に import し、対応済みの TODO コメントを消している。",
+      "intent_unclear": false,
+      "risk": "Low",
+      "tags": [
+        "refactor",
+        "chore"
+      ],
+      "hunks": [
+        "h003",
+        "h004"
+      ]
+    },
+    {
+      "id": "g1",
+      "title": "ログインのトークン検証追加",
+      "summary": "login() に token 引数と検証呼び出しを追加した",
+      "intent": "認証時にトークンを必ず検証するため、login のシグネチャを変更している。あわせて LEGACY フラグを落として新経路へ寄せている。",
+      "intent_unclear": false,
+      "risk": "High",
+      "tags": [
+        "feat",
+        "security"
+      ],
+      "hunks": [
+        "h001",
+        "h002"
+      ]
+    }
+  ],
+  "ungrouped_hunks": [
+    "h005"
+  ],
+  "findings": [
+    {
+      "id": "M001",
+      "severity": "Medium",
+      "title": "LEGACY フラグ反転の影響範囲が追えない",
+      "group": "g1",
+      "anchor": {
+        "hunk": "h002",
+        "side": "new",
+        "line": 24,
+        "file": "src/auth.ts",
+        "display": "src/auth.ts（新L24〜）"
+      },
+      "impact": "LEGACY を false に変えた影響が差分だけでは判断できず、参照側の挙動が変わる可能性がある。",
+      "recommendation": "LEGACY を参照している箇所を洗い出し、切り替えの意図をコメントで残す。",
+      "source_pass": 2,
+      "plan_status": "none"
+    }
+  ]
+}

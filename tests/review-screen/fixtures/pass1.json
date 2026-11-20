@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "findings": [
+    {
+      "id": "H001",
+      "severity": "High",
+      "title": "token を渡さない既存呼び出しが壊れる",
+      "anchor": {
+        "hunk": "h001",
+        "side": "new",
+        "line": 3,
+        "file": "src/auth.ts",
+        "display": "src/auth.ts（新L3〜）"
+      },
+      "impact": "login() の必須引数が増えたが、差分には呼び出し側の更新が含まれていないため、既存の呼び出しはすべて型エラーになる。",
+      "recommendation": "token を optional にして段階移行するか、同じ変更で全呼び出し箇所を更新する。"
+    },
+    {
+      "id": "M001",
+      "severity": "Medium",
+      "title": "LEGACY フラグ反転の影響範囲が追えない",
+      "anchor": {
+        "hunk": "h002",
+        "side": "new",
+        "line": 24,
+        "file": "src/auth.ts",
+        "display": "src/auth.ts（新L24〜）"
+      },
+      "impact": "LEGACY を false に変えた影響が差分だけでは判断できず、参照側の挙動が変わる可能性がある。",
+      "recommendation": "LEGACY を参照している箇所を洗い出し、切り替えの意図をコメントで残す。"
+    }
+  ]
+}

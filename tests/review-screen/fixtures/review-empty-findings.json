@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "meta": {
+    "id": "sample-clean",
+    "title": "指摘なしの差分レビュー",
+    "target": {
+      "kind": "code",
+      "spec": "",
+      "diff_command": "git -c core.quotepath=false diff",
+      "context_paths": []
+    },
+    "reviewed_at": "2026-07-25T10:05:00+09:00",
+    "checklists": [
+      "maint.md"
+    ],
+    "passes": 1,
+    "assessment": "PASS",
+    "diff_sha": "35e60d914d98"
+  },
+  "stats": {
+    "files": 3,
+    "hunks": 5,
+    "insertions": 7,
+    "deletions": 4
+  },
+  "groups": [
+    {
+      "id": "g1",
+      "title": "認証とユーティリティの整理",
+      "summary": "トークン検証の追加と周辺の整理",
+      "intent": "トークン検証を追加し、あわせて周辺のインポートと不要コメントを整理している。",
+      "intent_unclear": false,
+      "risk": "Low",
+      "tags": [
+        "feat",
+        "refactor"
+      ],
+      "hunks": [
+        "h001",
+        "h002",
+        "h003",
+        "h004",
+        "h005"
+      ]
+    }
+  ],
+  "ungrouped_hunks": [],
+  "findings": []
+}

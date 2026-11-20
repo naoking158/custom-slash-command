@@ -1,0 +1,3 @@
+# Regenerable review build artifacts (the .md report is the committed one)
+docs/reviews/**/*.html
+docs/reviews/**/*.json

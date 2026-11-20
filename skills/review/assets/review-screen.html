@@ -1,0 +1,1359 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Empty inline icon: without it a browser still issues one /favicon.ico
+     request, which would make the "no network traffic" check (AC-001) false. -->
+<link rel="icon" href="data:,">
+<title>DIFF REVIEW</title>
+<style>
+:root {
+  --bg: #fbfbfa;
+  --panel: #ffffff;
+  --ink: #1c1c1a;
+  --muted: #6b6b66;
+  --line: #e2e2dd;
+  --accent: #2f6f4f;
+  --add-bg: #e8f6ec;
+  --del-bg: #fdeceb;
+  --gutter: #f3f3f0;
+  --crit: #b3261e;
+  --high: #c2540a;
+  --med: #8a6d1f;
+  --low: #4a6b8a;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP",
+          "Yu Gothic UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16171a;
+    --panel: #1d1f23;
+    --ink: #e6e6e2;
+    --muted: #9a9a94;
+    --line: #32343a;
+    --accent: #6fbf8f;
+    --add-bg: #17321f;
+    --del-bg: #3a1d1c;
+    --gutter: #232529;
+    --crit: #ff7a70;
+    --high: #ffab63;
+    --med: #e0c463;
+    --low: #8fb6d9;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { overflow-x: hidden; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.7;
+}
+main { max-width: 1180px; margin: 0 auto; padding: 0 20px 120px; }
+
+/* --- header ---------------------------------------------------------------- */
+.hdr {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  padding: 10px 20px;
+}
+.hdr-in { max-width: 1180px; margin: 0 auto; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.hdr-brand { font-family: var(--mono); font-size: 11px; letter-spacing: .18em; color: var(--muted); }
+.hdr-title { font-weight: 700; font-size: 15px; margin-right: auto; }
+.hdr-stats { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.hdr-progress { display: flex; align-items: center; gap: 8px; }
+.bar { width: 120px; height: 6px; border-radius: 3px; background: var(--gutter); overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+.hdr-count { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+.iconbtn {
+  font: inherit; cursor: pointer; border: 1px solid var(--line);
+  background: transparent; color: var(--ink);
+  border-radius: 6px; padding: 2px 9px; line-height: 1.5;
+}
+.iconbtn:hover { border-color: var(--accent); }
+
+/* --- banners --------------------------------------------------------------- */
+.banners { max-width: 1180px; margin: 0 auto; padding: 0 20px; }
+.banner {
+  margin-top: 12px; padding: 9px 13px; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--panel);
+  font-size: 13px; color: var(--muted);
+}
+.banner.warn { border-color: var(--high); color: var(--high); }
+
+/* --- sections -------------------------------------------------------------- */
+section { margin-top: 40px; }
+.sec-h {
+  font-family: var(--mono); font-size: 12px; letter-spacing: .1em;
+  color: var(--muted); border-bottom: 1px solid var(--line);
+  padding-bottom: 6px; margin: 0 0 14px;
+}
+
+/* --- risk / severity chips -------------------------------------------------- */
+.chip {
+  display: inline-block; font-family: var(--mono); font-size: 11px;
+  padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor;
+  white-space: nowrap;
+}
+.r-Critical, .s-Critical { color: var(--crit); }
+.r-High,     .s-High     { color: var(--high); }
+.r-Medium,   .s-Medium   { color: var(--med); }
+.r-Low,      .s-Low      { color: var(--low); }
+.tag {
+  display: inline-block; font-family: var(--mono); font-size: 11px;
+  padding: 1px 6px; border-radius: 4px; background: var(--gutter); color: var(--muted);
+}
+
+/* --- 01 group list ---------------------------------------------------------- */
+.glist { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--panel); }
+.grow {
+  display: grid; grid-template-columns: 4px 1fr auto; gap: 0 14px;
+  align-items: start; padding: 0; cursor: pointer;
+  border-top: 1px solid var(--line);
+}
+.grow:first-child { border-top: 0; }
+.grow:hover { background: var(--gutter); }
+.grow-accent { align-self: stretch; background: currentColor; }
+.grow-main { padding: 11px 0; min-width: 0; }
+.grow-title { font-weight: 600; }
+.grow-summary { color: var(--muted); font-size: 13px; }
+.grow-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.grow-side {
+  padding: 11px 14px 11px 0; text-align: right;
+  font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap;
+}
+.grow-side .n-find { color: var(--ink); }
+
+/* --- 02 group detail -------------------------------------------------------- */
+.card {
+  border: 1px solid var(--line); border-radius: 9px; background: var(--panel);
+  margin-bottom: 16px; overflow: hidden;
+}
+.card.approved .card-body { display: none; }
+.card.approved.peek .card-body { display: block; }
+.card.approved { opacity: .72; }
+.card-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 11px 14px; border-bottom: 1px solid var(--line);
+}
+.card.approved .card-head { border-bottom: 0; }
+.card-title { font-weight: 700; margin-right: auto; }
+.approve { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.card-body { padding: 12px 14px 16px; }
+.intent { margin: 0 0 14px; }
+.intent-label { font-weight: 700; color: var(--accent); }
+.hunk-toggle {
+  font: inherit; cursor: pointer; background: transparent; color: var(--accent);
+  border: 1px dashed var(--line); border-radius: 6px; padding: 5px 11px; width: 100%;
+  text-align: left;
+}
+.hunks[hidden] { display: none; }
+
+/* --- diff renderer ---------------------------------------------------------- */
+.hunk { border: 1px solid var(--line); border-radius: 7px; margin-bottom: 12px; overflow: hidden; }
+.hunk-head {
+  display: flex; gap: 12px; flex-wrap: wrap; align-items: baseline;
+  padding: 6px 10px; background: var(--gutter);
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+}
+.hunk-head .hid { color: var(--accent); }
+.hunk-head .hfile { color: var(--ink); }
+.hunk-head .hrename { font-style: italic; }
+.dline { display: grid; grid-template-columns: 46px 46px 16px 1fr 30px; align-items: start; }
+.dline.add { background: var(--add-bg); }
+.dline.del { background: var(--del-bg); }
+.dline.note { color: var(--muted); font-style: italic; }
+.ln {
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  text-align: right; padding: 0 6px; user-select: none;
+  border-right: 1px solid var(--line);
+}
+.gut {
+  font-family: var(--mono); font-size: 12px; color: var(--muted);
+  text-align: center; user-select: none;
+}
+.code {
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
+  white-space: pre; overflow-x: auto; padding: 0 8px; min-width: 0;
+}
+.inline-finding {
+  display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+  padding: 7px 10px; border-top: 1px solid var(--line); background: var(--panel);
+  font-size: 13px;
+}
+.inline-finding .f-title { margin-right: auto; }
+.linkbtn {
+  font: inherit; font-size: 12px; cursor: pointer; background: transparent;
+  color: var(--accent); border: 0; padding: 0; text-decoration: underline;
+}
+.binary-list { border: 1px dashed var(--line); border-radius: 7px; padding: 10px 14px; color: var(--muted); }
+.binary-list div { font-family: var(--mono); font-size: 12px; }
+
+/* --- 03 findings ------------------------------------------------------------ */
+.filters {
+  display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+  padding: 9px 13px; margin-bottom: 12px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+  font-size: 13px;
+}
+.filters fieldset { border: 0; margin: 0; padding: 0; display: flex; gap: 10px; align-items: center; }
+.filters legend { display: contents; color: var(--muted); font-size: 12px; }
+.filters label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.flist { display: grid; gap: 10px; }
+.frow {
+  border: 1px solid var(--line); border-left-width: 3px; border-radius: 8px;
+  background: var(--panel); padding: 10px 13px;
+}
+.frow[hidden] { display: none; }
+.frow.b-Critical { border-left-color: var(--crit); }
+.frow.b-High     { border-left-color: var(--high); }
+.frow.b-Medium   { border-left-color: var(--med); }
+.frow.b-Low      { border-left-color: var(--low); }
+.frow-head { display: flex; gap: 9px; align-items: baseline; flex-wrap: wrap; }
+.frow-title { font-weight: 600; margin-right: auto; }
+.frow-id { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.badge {
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 4px; padding: 0 6px;
+}
+.frow-note { font-size: 12.5px; color: var(--high); margin-top: 3px; }
+.frow-loc { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 3px; }
+.frow-body { font-size: 13px; margin-top: 5px; }
+.frow-body div + div { margin-top: 2px; }
+.frow-foot { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+
+/* --- 04 plan check ---------------------------------------------------------- */
+.pctable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pctable th, .pctable td {
+  text-align: left; vertical-align: top; padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.pctable th { color: var(--muted); font-weight: 600; font-size: 12px; }
+.pctable td.hunks { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.pc-implemented { color: var(--accent); }
+.pc-missing { color: var(--crit); }
+.pc-deviated { color: var(--high); }
+.pc-extra { color: var(--med); }
+.na { color: var(--muted); }
+
+/* --- triage & comments ------------------------------------------------------ */
+.triage { display: inline-flex; gap: 10px; align-items: center; font-size: 12.5px; }
+.triage label { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; }
+.reason {
+  font: inherit; font-size: 12.5px; flex: 1 1 220px; min-width: 160px;
+  padding: 3px 7px; border: 1px solid var(--line); border-radius: 5px;
+  background: var(--bg); color: var(--ink);
+}
+.reason[hidden] { display: none; }
+.cmt-btn {
+  font: inherit; font-size: 12px; cursor: pointer; line-height: 1;
+  background: transparent; border: 1px solid transparent; border-radius: 5px;
+  padding: 1px 5px; opacity: .45;
+}
+.cmt-btn:hover { opacity: 1; border-color: var(--line); }
+.cmt-btn.has { opacity: 1; color: var(--accent); border-color: var(--accent); }
+.dline .cmt-btn { justify-self: start; opacity: 0; }
+.dline:hover .cmt-btn { opacity: .55; }
+.dline .cmt-btn.has { opacity: 1; }
+.cmt-box {
+  border-top: 1px solid var(--line); background: var(--gutter);
+  padding: 9px 11px; display: grid; gap: 7px;
+}
+.cmt-box[hidden] { display: none; }
+.cmt-item { font-size: 12.5px; white-space: pre-wrap; border-left: 2px solid var(--accent); padding-left: 8px; }
+.cmt-item .at { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+.cmt-box textarea {
+  font: inherit; font-size: 13px; width: 100%; min-height: 60px; resize: vertical;
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel); color: var(--ink);
+}
+.cmt-actions { display: flex; gap: 8px; }
+.btn {
+  font: inherit; font-size: 12.5px; cursor: pointer; padding: 4px 11px;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel); color: var(--ink);
+}
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* --- 05 feedback ------------------------------------------------------------ */
+.fb-bar {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;
+}
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-right: auto; }
+#fb-out {
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.6;
+  width: 100%; min-height: 220px; resize: vertical; padding: 11px 13px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); color: var(--ink);
+}
+.fb-msg { font-size: 12.5px; color: var(--muted); margin-top: 6px; min-height: 1.4em; }
+
+/* --- help overlay ----------------------------------------------------------- */
+.help {
+  position: fixed; inset: 0; z-index: 40; display: grid; place-items: center;
+  background: rgba(0, 0, 0, .45);
+}
+.help[hidden] { display: none; }
+.help-box {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 18px 22px; max-width: 440px; font-size: 13px;
+}
+.help-box h2 { margin: 0 0 10px; font-size: 14px; }
+.help-box dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; }
+.help-box dt { font-family: var(--mono); color: var(--accent); }
+.help-box dd { margin: 0; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="hdr-in">
+    <span class="hdr-brand">DIFF REVIEW</span>
+    <span class="hdr-title" id="hdr-title"></span>
+    <span class="hdr-stats" id="hdr-stats"></span>
+    <span class="hdr-progress">
+      <span class="bar"><i id="hdr-bar"></i></span>
+      <span class="hdr-count" id="hdr-count"></span>
+    </span>
+    <button class="iconbtn" id="help-toggle" type="button" title="ヘルプ">?</button>
+  </div>
+</header>
+
+<div class="banners" id="banners"></div>
+
+<main>
+  <section id="sec-01">
+    <h2 class="sec-h">01 / 変更グループ一覧</h2>
+    <div class="glist" id="group-list"></div>
+  </section>
+
+  <section id="sec-02">
+    <h2 class="sec-h">02 / 変更グループ詳細</h2>
+    <div id="group-cards"></div>
+    <div id="binary-changes"></div>
+  </section>
+
+  <section id="sec-03">
+    <h2 class="sec-h">03 / 指摘一覧</h2>
+    <div class="filters" id="filters">
+      <fieldset id="sev-filter"><legend>severity</legend></fieldset>
+      <label><input type="checkbox" id="f-untriaged"><span>未判定のみ</span></label>
+      <label><input type="checkbox" id="f-withfindings"><span>指摘のあるグループのみ</span></label>
+    </div>
+    <div class="flist" id="finding-list"></div>
+  </section>
+
+  <section id="sec-04">
+    <h2 class="sec-h">04 / plan 照合</h2>
+    <div id="plan-check"></div>
+  </section>
+
+  <section id="sec-05">
+    <h2 class="sec-h">05 / フィードバック組み立て</h2>
+    <div class="fb-bar">
+      <div class="chips" id="counts"></div>
+      <button class="btn primary" id="fb-gen" type="button">フィードバックを生成</button>
+      <button class="btn" id="fb-copy" type="button">クリップボードにコピー</button>
+    </div>
+    <textarea id="fb-out" readonly placeholder="「フィードバックを生成」で、採用した指摘とコメントが 1 つの Markdown にまとまります。"></textarea>
+    <div class="fb-msg" id="fb-msg"></div>
+  </section>
+</main>
+
+<div class="help" id="help" hidden>
+  <div class="help-box">
+    <h2>キーボード操作</h2>
+    <dl>
+      <dt>?</dt><dd>このヘルプの表示 / 非表示</dd>
+      <dt>j / k</dt><dd>次 / 前の hunk へ移動</dd>
+      <dt>a</dt><dd>現在のグループを承認</dd>
+      <dt>Esc</dt><dd>ヘルプを閉じる</dd>
+    </dl>
+  </div>
+</div>
+
+<script id="review-payload" type="application/json">
+__MY_REVIEW_PAYLOAD__
+</script>
+
+<script>
+"use strict";
+
+/* ---------------------------------------------------------------------------
+ * Payload
+ * ------------------------------------------------------------------------ */
+
+var DATA = JSON.parse(document.getElementById("review-payload").textContent);
+var REVIEW = DATA.review;
+var DIFF = DATA.diff;
+var META = REVIEW.meta;
+
+var RISK_LABEL = {
+  Critical: "要注意(Critical)",
+  High: "要注意(High)",
+  Medium: "注意",
+  Low: "低リスク"
+};
+var SEVERITY_ORDER = ["Critical", "High", "Medium", "Low"];
+
+/* ---------------------------------------------------------------------------
+ * DOM helper — the only element constructor in this file. Text always goes in
+ * through textContent so nothing from the diff can be parsed as markup.
+ * ------------------------------------------------------------------------ */
+
+function el(tag, cls, text) {
+  var n = document.createElement(tag);
+  if (cls) { n.className = cls; }
+  if (text !== undefined && text !== null) { n.textContent = String(text); }
+  return n;
+}
+
+/* ---------------------------------------------------------------------------
+ * Hunk index
+ *
+ * Mirrors skills/review/scripts/diff-hunks.sh: the same pattern, the same
+ * ordering, the same zero-padding width. Keep the marker below byte-identical
+ * to the script's — tests/review-screen asserts it.
+ * ------------------------------------------------------------------------ */
+
+// HUNK_RE: ^@@ -[0-9]+(,[0-9]+)? \+[0-9]+(,[0-9]+)? @@
+var HUNK_RE = /^@@ -[0-9]+(,[0-9]+)? \+[0-9]+(,[0-9]+)? @@/;
+var HUNK_NUMS_RE = /^@@ -([0-9]+)(?:,[0-9]+)? \+([0-9]+)(?:,[0-9]+)? @@/;
+var DIFF_GIT_RE = /^diff --git a\/(.+) b\/(.+)$/;
+
+function stripPrefix(p) {
+  return (p.slice(0, 2) === "a/" || p.slice(0, 2) === "b/") ? p.slice(2) : p;
+}
+
+function buildIndex(diffText) {
+  var lines = diffText.split("\n");
+  var files = [];
+  var hunks = [];
+  var file = null;
+  var hunk = null;
+  var inHunk = false;
+  var pathOld = "";
+  var pathNew = "";
+  var renameFrom = "";
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+
+    if (line.indexOf("diff --git ") === 0) {
+      inHunk = false;
+      pathOld = "";
+      pathNew = "";
+      renameFrom = "";
+      var dg = DIFF_GIT_RE.exec(line);
+      file = { path: dg ? dg[2] : "", oldPath: "", binary: false, hunks: [] };
+      files.push(file);
+      continue;
+    }
+    if (!file) { continue; }
+
+    if (!inHunk && line.indexOf("rename from ") === 0) {
+      renameFrom = line.slice(12);
+      continue;
+    }
+    if (!inHunk && line.indexOf("Binary files ") === 0) {
+      file.binary = true;
+      continue;
+    }
+    if (!inHunk && line.indexOf("--- ") === 0) {
+      var po = line.slice(4);
+      pathOld = (po === "/dev/null") ? "" : stripPrefix(po);
+      continue;
+    }
+    if (!inHunk && line.indexOf("+++ ") === 0) {
+      var pn = line.slice(4);
+      pathNew = (pn === "/dev/null") ? "" : stripPrefix(pn);
+      file.path = pathNew || pathOld;
+      file.oldPath = renameFrom;
+      continue;
+    }
+
+    if (HUNK_RE.test(line)) {
+      inHunk = true;
+      var nums = HUNK_NUMS_RE.exec(line);
+      hunk = {
+        id: "",
+        file: pathNew || pathOld || file.path,
+        oldPath: renameFrom,
+        header: line,
+        oldStart: parseInt(nums[1], 10),
+        newStart: parseInt(nums[2], 10),
+        lines: []
+      };
+      hunks.push(hunk);
+      file.hunks.push(hunk);
+      continue;
+    }
+
+    if (inHunk && hunk) { hunk.lines.push(line); }
+  }
+
+  var width = Math.max(3, String(hunks.length).length);
+  for (var k = 0; k < hunks.length; k++) {
+    var n = String(k + 1);
+    while (n.length < width) { n = "0" + n; }
+    hunks[k].id = "h" + n;
+  }
+  return { files: files, hunks: hunks };
+}
+
+var INDEX = buildIndex(DIFF);
+var HUNK_BY_ID = {};
+INDEX.hunks.forEach(function (h) { HUNK_BY_ID[h.id] = h; });
+var GROUP_BY_ID = {};
+REVIEW.groups.forEach(function (g) { GROUP_BY_ID[g.id] = g; });
+
+function findingsOfGroup(groupId) {
+  return REVIEW.findings.filter(function (f) { return f.group === groupId; });
+}
+
+/* ---------------------------------------------------------------------------
+ * State — approval, triage, comments
+ *
+ * Keyed by {id}:{diff_sha} so a regenerated screen for a changed diff never
+ * restores judgements that were made about different code (AC-017).
+ * ------------------------------------------------------------------------ */
+
+var STATE = { approved: {}, triage: {}, rejectReasons: {}, comments: [] };
+var STORE_PREFIX = "my-review:" + META.id + ":";
+var STORE_KEY = STORE_PREFIX + META.diff_sha;
+var storageOk = true;
+var storageWarned = false;
+
+function loadState() {
+  var discarded = false;
+  try {
+    var raw = localStorage.getItem(STORE_KEY);
+    if (raw) {
+      var saved = JSON.parse(raw);
+      STATE.approved = saved.approved || {};
+      STATE.triage = saved.triage || {};
+      STATE.rejectReasons = saved.rejectReasons || {};
+      STATE.comments = saved.comments || [];
+    }
+    var stale = [];
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf(STORE_PREFIX) === 0 && k !== STORE_KEY) { stale.push(k); }
+    }
+    stale.forEach(function (k) { localStorage.removeItem(k); });
+    discarded = stale.length > 0;
+  } catch (e) {
+    storageOk = false;
+  }
+  return discarded;
+}
+
+function save() {
+  if (!storageOk) { return; }
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(STATE));
+  } catch (e) {
+    storageOk = false;
+    warnNoStorage();
+  }
+}
+
+function warnNoStorage() {
+  if (storageWarned) { return; }
+  storageWarned = true;
+  addBanner("この環境では状態が保存されません", "warn");
+}
+
+/* ---------------------------------------------------------------------------
+ * Comments
+ * ------------------------------------------------------------------------ */
+
+var CMT_BTNS = [];
+
+function anchorKey(a) {
+  return [a.kind, a.id || "", a.hunk || "", a.side || "", a.line || ""].join("|");
+}
+
+function commentsFor(a) {
+  var key = anchorKey(a);
+  return STATE.comments.filter(function (c) { return anchorKey(c.anchor) === key; });
+}
+
+function anchorLabel(a) {
+  if (a.kind === "group") {
+    var g = GROUP_BY_ID[a.id];
+    return g ? g.title : a.id;
+  }
+  if (a.kind === "finding") {
+    var f = REVIEW.findings.filter(function (x) { return x.id === a.id; })[0];
+    return f ? f.title : a.id;
+  }
+  var h = HUNK_BY_ID[a.hunk];
+  var file = h ? h.file : a.hunk;
+  return file + "（" + (a.side === "old" ? "旧" : "新") + "L" + a.line + "）";
+}
+
+function anchorRef(a) {
+  return a.kind === "hunkline" ? a.hunk : a.id;
+}
+
+// Every marker button registers here once, at build time, so adding a comment
+// can refresh all of them without rebuilding the DOM.
+function commentButton(anchor, host, afterNode) {
+  var btn = el("button", "cmt-btn", "💬");
+  btn.type = "button";
+  btn.title = "コメントを追加";
+  btn.addEventListener("click", function () { toggleCommentBox(host, anchor, afterNode); });
+  CMT_BTNS.push({ btn: btn, anchor: anchor });
+  updateMarker(btn, anchor);
+  return btn;
+}
+
+function updateMarker(btn, anchor) {
+  var n = commentsFor(anchor).length;
+  btn.textContent = n > 0 ? "💬" + n : "💬";
+  btn.classList.toggle("has", n > 0);
+}
+
+function refreshMarkers() {
+  CMT_BTNS.forEach(function (e) { updateMarker(e.btn, e.anchor); });
+}
+
+function toggleCommentBox(host, anchor, afterNode) {
+  var existing = host.querySelector(':scope > .cmt-box[data-key="' + anchorKey(anchor) + '"]');
+  if (existing) { existing.remove(); return; }
+  var box = buildCommentBox(host, anchor);
+  if (afterNode) { host.insertBefore(box, afterNode.nextSibling); } else { host.appendChild(box); }
+}
+
+function buildCommentBox(host, anchor) {
+  var box = el("div", "cmt-box");
+  box.setAttribute("data-key", anchorKey(anchor));
+
+  commentsFor(anchor).forEach(function (c) {
+    var item = el("div", "cmt-item", c.body);
+    item.appendChild(el("div", "at", c.at));
+    box.appendChild(item);
+  });
+
+  var ta = el("textarea");
+  ta.placeholder = anchorLabel(anchor) + " へのコメント";
+  box.appendChild(ta);
+
+  var actions = el("div", "cmt-actions");
+  var ok = el("button", "btn primary", "保存");
+  ok.type = "button";
+  ok.addEventListener("click", function () {
+    var body = ta.value.trim();
+    if (body === "") { return; }
+    STATE.comments.push({ anchor: anchor, body: body, at: new Date().toISOString() });
+    save();
+    refreshMarkers();
+    updateCounts();
+    box.remove();
+  });
+  var cancel = el("button", "btn", "閉じる");
+  cancel.type = "button";
+  cancel.addEventListener("click", function () { box.remove(); });
+  actions.appendChild(ok);
+  actions.appendChild(cancel);
+  box.appendChild(actions);
+
+  return box;
+}
+
+/* ---------------------------------------------------------------------------
+ * Banners
+ * ------------------------------------------------------------------------ */
+
+function addBanner(text, kind) {
+  var host = document.getElementById("banners");
+  var b = el("div", "banner" + (kind ? " " + kind : ""), text);
+  host.appendChild(b);
+}
+
+/* ---------------------------------------------------------------------------
+ * Header
+ * ------------------------------------------------------------------------ */
+
+function renderHeader() {
+  document.getElementById("hdr-title").textContent = META.title;
+  var s = REVIEW.stats;
+  document.getElementById("hdr-stats").textContent =
+    s.files + " files / " + s.hunks + " hunks +" + s.insertions + " −" + s.deletions;
+  document.title = "DIFF REVIEW — " + META.title;
+}
+
+function renderProgress() {
+  var total = REVIEW.groups.length;
+  var done = REVIEW.groups.filter(function (g) { return STATE.approved[g.id]; }).length;
+  document.getElementById("hdr-count").textContent = "承認 " + done + "/" + total;
+  var pct = total === 0 ? 0 : Math.round((done / total) * 100);
+  document.getElementById("hdr-bar").style.width = pct + "%";
+}
+
+/* ---------------------------------------------------------------------------
+ * 01 / 変更グループ一覧
+ *
+ * Rendered strictly in REVIEW.groups order — the reviewer already ordered them
+ * by risk and the screen must not second-guess that (AC-003).
+ * ------------------------------------------------------------------------ */
+
+function renderGroupList() {
+  var host = document.getElementById("group-list");
+  host.textContent = "";
+
+  REVIEW.groups.forEach(function (g) {
+    var row = el("div", "grow");
+    row.setAttribute("data-group", g.id);
+
+    var accent = el("div", "grow-accent r-" + g.risk);
+    row.appendChild(accent);
+
+    var main = el("div", "grow-main");
+    main.appendChild(el("div", "grow-title", g.title));
+    main.appendChild(el("div", "grow-summary", g.summary));
+
+    var meta = el("div", "grow-meta");
+    meta.appendChild(el("span", "chip r-" + g.risk, RISK_LABEL[g.risk] || g.risk));
+    (g.tags || []).forEach(function (t) { meta.appendChild(el("span", "tag", t)); });
+    if (g.intent_unclear) { meta.appendChild(el("span", "chip r-High", "要改善")); }
+    main.appendChild(meta);
+    row.appendChild(main);
+
+    var nFind = findingsOfGroup(g.id).length;
+    var side = el("div", "grow-side");
+    side.appendChild(el("div", null, g.hunks.length + " hunks"));
+    side.appendChild(el("div", "n-find", "指摘 " + nFind));
+    row.appendChild(side);
+
+    row.addEventListener("click", function () { jumpToGroup(g.id); });
+    host.appendChild(row);
+  });
+}
+
+function jumpToGroup(groupId) {
+  var card = CARD_BY_GROUP[groupId];
+  if (card) { card.scrollIntoView({ block: "start" }); }
+}
+
+/* ---------------------------------------------------------------------------
+ * 02 / 変更グループ詳細
+ * ------------------------------------------------------------------------ */
+
+var HUNK_ELS = [];
+
+// Element registries, populated as the DOM is built. Looking elements up here
+// rather than with an attribute selector keeps ids that contain quotes or
+// brackets from turning into a broken selector at click time.
+var CARD_BY_GROUP = {};
+var HUNK_EL_BY_ID = {};
+var FROW_BY_ID = {};
+
+function renderGroupCards() {
+  var host = document.getElementById("group-cards");
+  host.textContent = "";
+  HUNK_ELS = [];
+  CARD_BY_GROUP = {};
+  HUNK_EL_BY_ID = {};
+
+  REVIEW.groups.forEach(function (g) {
+    host.appendChild(buildCard(g.id, g.title, g.risk, g.intent, g.intent_unclear, g.hunks, true));
+  });
+
+  var loose = REVIEW.ungrouped_hunks || [];
+  if (loose.length > 0) {
+    host.appendChild(buildCard(
+      "__ungrouped__", "未分類の hunk", "Low",
+      "どの変更グループにも割り当てられなかった hunk です。", false, loose, false));
+  }
+}
+
+// approvable=false for the ungrouped bucket: it is not one of the N groups the
+// progress counter is measured against, so it must not offer an approval box.
+function buildCard(groupId, title, risk, intent, intentUnclear, hunkIds, approvable) {
+  var card = el("div", "card");
+  card.setAttribute("data-group-card", groupId);
+
+  var head = el("div", "card-head");
+  head.appendChild(el("span", "chip r-" + risk, RISK_LABEL[risk] || risk));
+  head.appendChild(el("span", "card-title", title));
+  if (intentUnclear) { head.appendChild(el("span", "chip r-High", "要改善")); }
+
+  if (approvable) {
+    var label = el("label", "approve");
+    var box = el("input");
+    box.type = "checkbox";
+    box.checked = !!STATE.approved[groupId];
+    box.addEventListener("change", function () { setApproved(groupId, box.checked); });
+    label.appendChild(box);
+    label.appendChild(el("span", null, "確認して承認"));
+    head.appendChild(label);
+  }
+  head.appendChild(commentButton({ kind: "group", id: groupId }, card, null));
+  card.appendChild(head);
+
+  var body = el("div", "card-body");
+  var p = el("p", "intent");
+  p.appendChild(el("span", "intent-label", "意図: "));
+  p.appendChild(el("span", null, intent));
+  body.appendChild(p);
+
+  var box2 = el("div", "hunks");
+  hunkIds.forEach(function (hid) {
+    var h = HUNK_BY_ID[hid];
+    if (!h) { return; }
+    var node = buildHunk(h);
+    HUNK_ELS.push(node);
+    box2.appendChild(node);
+  });
+
+  // Large groups start folded so a 100-file review is still scannable.
+  if (hunkIds.length > 10) {
+    box2.hidden = true;
+    var toggle = el("button", "hunk-toggle", "▸ " + hunkIds.length + " hunks を表示");
+    toggle.type = "button";
+    toggle.addEventListener("click", function () {
+      box2.hidden = !box2.hidden;
+      toggle.textContent = (box2.hidden ? "▸ " : "▾ ") + hunkIds.length +
+        (box2.hidden ? " hunks を表示" : " hunks を隠す");
+    });
+    body.appendChild(toggle);
+  }
+  body.appendChild(box2);
+
+  card.appendChild(body);
+  if (approvable && STATE.approved[groupId]) { card.classList.add("approved"); }
+  CARD_BY_GROUP[groupId] = card;
+  return card;
+}
+
+function buildHunk(h) {
+  var wrap = el("div", "hunk");
+  wrap.setAttribute("data-hunk", h.id);
+
+  var head = el("div", "hunk-head");
+  head.appendChild(el("span", "hid", h.id));
+  head.appendChild(el("span", "hfile", h.file));
+  if (h.oldPath && h.oldPath !== h.file) {
+    head.appendChild(el("span", "hrename", h.oldPath + " → " + h.file));
+  }
+  head.appendChild(el("span", null, h.header));
+  wrap.appendChild(head);
+
+  wrap.appendChild(buildDiffLines(h));
+
+  REVIEW.findings
+    .filter(function (f) { return f.anchor.hunk === h.id; })
+    .forEach(function (f) { wrap.appendChild(buildInlineFinding(f)); });
+
+  HUNK_EL_BY_ID[h.id] = wrap;
+  return wrap;
+}
+
+function buildDiffLines(h) {
+  var box = el("div", "dlines");
+  var oldNo = h.oldStart;
+  var newNo = h.newStart;
+
+  h.lines.forEach(function (raw) {
+    var kind = "ctx";
+    var content = raw;
+    if (raw.charAt(0) === "\\") {
+      kind = "note";
+    } else if (raw.charAt(0) === "+") {
+      kind = "add";
+      content = raw.slice(1);
+    } else if (raw.charAt(0) === "-") {
+      kind = "del";
+      content = raw.slice(1);
+    } else {
+      content = raw.slice(1);
+    }
+
+    var row = el("div", "dline " + kind);
+    var lo = "";
+    var ln = "";
+    if (kind === "add") {
+      ln = String(newNo); newNo += 1;
+    } else if (kind === "del") {
+      lo = String(oldNo); oldNo += 1;
+    } else if (kind === "ctx") {
+      lo = String(oldNo); ln = String(newNo); oldNo += 1; newNo += 1;
+    }
+
+    var side = (kind === "del") ? "old" : "new";
+    var lineNo = (kind === "del") ? lo : ln;
+    row.setAttribute("data-line", lineNo);
+    row.setAttribute("data-side", side);
+    row.appendChild(el("span", "ln", lo));
+    row.appendChild(el("span", "ln", ln));
+    row.appendChild(el("span", "gut", kind === "add" ? "+" : (kind === "del" ? "−" : "")));
+    row.appendChild(el("span", "code", content));
+    if (kind === "note") {
+      row.appendChild(el("span"));
+    } else {
+      row.appendChild(commentButton(
+        { kind: "hunkline", id: "", hunk: h.id, side: side, line: lineNo }, box, row));
+    }
+    box.appendChild(row);
+  });
+
+  return box;
+}
+
+function buildInlineFinding(f) {
+  var row = el("div", "inline-finding");
+  row.appendChild(el("span", "chip s-" + f.severity, f.severity));
+  row.appendChild(el("span", "f-title", "[" + f.id + "] " + f.title));
+  var jump = el("button", "linkbtn", "指摘一覧へ");
+  jump.type = "button";
+  jump.addEventListener("click", function () { jumpToFinding(f.id); });
+  row.appendChild(jump);
+  return row;
+}
+
+function renderBinaryChanges() {
+  var host = document.getElementById("binary-changes");
+  host.textContent = "";
+  var bins = INDEX.files.filter(function (f) { return f.binary; });
+  if (bins.length === 0) { return; }
+  var box = el("div", "binary-list");
+  bins.forEach(function (f) { box.appendChild(el("div", null, "バイナリ変更: " + f.path)); });
+  host.appendChild(box);
+}
+
+function setApproved(groupId, on) {
+  if (on) { STATE.approved[groupId] = true; } else { delete STATE.approved[groupId]; }
+  var card = CARD_BY_GROUP[groupId];
+  if (card) {
+    card.classList.toggle("approved", !!on);
+    if (!on) { card.classList.remove("peek"); }
+  }
+  renderProgress();
+  save();
+}
+
+function jumpToHunk(hunkId) {
+  var node = HUNK_EL_BY_ID[hunkId];
+  if (!node) { return; }
+  var card = node.closest(".card");
+  if (card) {
+    // An approved card is folded and a big group starts collapsed; reveal the
+    // hunk without discarding the approval itself.
+    card.classList.add("peek");
+    var hunks = card.querySelector(".hunks");
+    if (hunks && hunks.hidden) { hunks.hidden = false; }
+  }
+  node.scrollIntoView({ block: "center" });
+}
+
+function jumpToFinding(findingId) {
+  var node = FROW_BY_ID[findingId];
+  if (node) { node.scrollIntoView({ block: "center" }); }
+}
+
+/* ---------------------------------------------------------------------------
+ * 03 / 指摘一覧
+ * ------------------------------------------------------------------------ */
+
+var PLAN_NOTE = "plan 上は意図的な変更だが、実装として改善を求める";
+
+function sortedFindings() {
+  return REVIEW.findings.slice().sort(function (a, b) {
+    return SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity);
+  });
+}
+
+function renderSeverityFilter() {
+  var host = document.getElementById("sev-filter");
+  host.textContent = "";
+  host.appendChild(el("span", null, "severity"));
+  SEVERITY_ORDER.forEach(function (s) {
+    var label = el("label", "s-" + s);
+    var box = el("input");
+    box.type = "checkbox";
+    box.checked = true;
+    box.setAttribute("data-sev", s);
+    box.addEventListener("change", applyFilters);
+    label.appendChild(box);
+    label.appendChild(el("span", null, s));
+    host.appendChild(label);
+  });
+}
+
+function renderFindingList() {
+  var host = document.getElementById("finding-list");
+  host.textContent = "";
+  FROW_BY_ID = {};
+
+  var all = sortedFindings();
+  if (all.length === 0) {
+    host.appendChild(el("div", "na", "指摘はありません。"));
+    return;
+  }
+
+  all.forEach(function (f) {
+    var row = el("div", "frow b-" + f.severity);
+    row.setAttribute("data-finding", f.id);
+    row.setAttribute("data-severity", f.severity);
+
+    var head = el("div", "frow-head");
+    head.appendChild(el("span", "chip s-" + f.severity, f.severity));
+    head.appendChild(el("span", "frow-id", f.id));
+    head.appendChild(el("span", "frow-title", f.title));
+    head.appendChild(el("span", "badge", "Pass " + f.source_pass));
+    row.appendChild(head);
+
+    if (f.plan_status === "justified") {
+      row.appendChild(el("div", "frow-note", "備考: " + PLAN_NOTE));
+    }
+
+    row.appendChild(el("div", "frow-loc", f.anchor.display + " [" + f.anchor.hunk + "]"));
+
+    var body = el("div", "frow-body");
+    body.appendChild(el("div", null, "指摘: " + f.impact));
+    body.appendChild(el("div", null, "改善案: " + f.recommendation));
+    row.appendChild(body);
+
+    var foot = el("div", "frow-foot");
+    foot.appendChild(buildTriage(f));
+    var jump = el("button", "linkbtn", "該当 hunk へ");
+    jump.type = "button";
+    jump.addEventListener("click", function () { jumpToHunk(f.anchor.hunk); });
+    foot.appendChild(jump);
+    foot.appendChild(commentButton({ kind: "finding", id: f.id }, row, null));
+    row.appendChild(foot);
+
+    var reason = el("input", "reason");
+    reason.type = "text";
+    reason.placeholder = "却下理由";
+    reason.value = STATE.rejectReasons[f.id] || "";
+    reason.hidden = STATE.triage[f.id] !== "rejected";
+    reason.addEventListener("input", function () {
+      STATE.rejectReasons[f.id] = reason.value;
+      save();
+    });
+    foot.appendChild(reason);
+
+    FROW_BY_ID[f.id] = row;
+    host.appendChild(row);
+  });
+}
+
+// Three states, "未判定" being the absence of a decision — an untriaged
+// finding must never reach the generated feedback (spec §3.5).
+function buildTriage(f) {
+  var wrap = el("div", "triage");
+  var states = [["", "未判定"], ["adopted", "採用"], ["rejected", "却下"]];
+
+  states.forEach(function (pair) {
+    var value = pair[0];
+    var label = el("label");
+    var radio = el("input");
+    radio.type = "radio";
+    radio.name = "tri-" + f.id;
+    radio.value = value;
+    radio.checked = (STATE.triage[f.id] || "") === value;
+    radio.addEventListener("change", function () {
+      if (value === "") { delete STATE.triage[f.id]; } else { STATE.triage[f.id] = value; }
+      var row = FROW_BY_ID[f.id];
+      var input = row ? row.querySelector(".reason") : null;
+      if (input) { input.hidden = value !== "rejected"; }
+      save();
+      updateCounts();
+      applyFilters();
+    });
+    label.appendChild(radio);
+    label.appendChild(el("span", null, pair[1]));
+    wrap.appendChild(label);
+  });
+
+  return wrap;
+}
+
+function activeSeverities() {
+  var on = {};
+  var boxes = document.querySelectorAll("#sev-filter input[data-sev]");
+  for (var i = 0; i < boxes.length; i++) {
+    if (boxes[i].checked) { on[boxes[i].getAttribute("data-sev")] = true; }
+  }
+  return on;
+}
+
+function applyFilters() {
+  var sev = activeSeverities();
+  var untriagedOnly = document.getElementById("f-untriaged").checked;
+  var withFindingsOnly = document.getElementById("f-withfindings").checked;
+
+  var rows = document.querySelectorAll("#finding-list .frow");
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var id = row.getAttribute("data-finding");
+    var ok = !!sev[row.getAttribute("data-severity")];
+    if (ok && untriagedOnly && STATE.triage[id]) { ok = false; }
+    row.hidden = !ok;
+  }
+
+  // "指摘のあるグループのみ" also narrows section 02 so the two views agree.
+  REVIEW.groups.forEach(function (g) {
+    var card = CARD_BY_GROUP[g.id];
+    if (!card) { return; }
+    card.hidden = withFindingsOnly && findingsOfGroup(g.id).length === 0;
+  });
+}
+
+/* ---------------------------------------------------------------------------
+ * 04 / plan 照合
+ * ------------------------------------------------------------------------ */
+
+function renderPlanCheck() {
+  var host = document.getElementById("plan-check");
+  host.textContent = "";
+
+  var rows = REVIEW.plan_check || [];
+  if (rows.length === 0) {
+    host.appendChild(el("div", "na", "N/A: plan なし"));
+    return;
+  }
+
+  var table = el("table", "pctable");
+  var thead = el("thead");
+  var htr = el("tr");
+  ["plan 項目", "状態", "補足", "根拠 hunk"].forEach(function (h) {
+    htr.appendChild(el("th", null, h));
+  });
+  thead.appendChild(htr);
+  table.appendChild(thead);
+
+  var tbody = el("tbody");
+  rows.forEach(function (r) {
+    var tr = el("tr");
+    tr.appendChild(el("td", null, r.item));
+    var st = el("td");
+    st.appendChild(el("span", "chip pc-" + r.status, r.status));
+    tr.appendChild(st);
+    tr.appendChild(el("td", null, r.note || ""));
+    tr.appendChild(el("td", "hunks", (r.hunks || []).join(", ")));
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  host.appendChild(table);
+}
+
+/* ---------------------------------------------------------------------------
+ * 05 / フィードバック組み立て
+ * ------------------------------------------------------------------------ */
+
+function triageCounts() {
+  var adopted = 0;
+  var rejected = 0;
+  REVIEW.findings.forEach(function (f) {
+    if (STATE.triage[f.id] === "adopted") { adopted += 1; }
+    else if (STATE.triage[f.id] === "rejected") { rejected += 1; }
+  });
+  return {
+    adopted: adopted,
+    rejected: rejected,
+    untriaged: REVIEW.findings.length - adopted - rejected,
+    comments: STATE.comments.length
+  };
+}
+
+function updateCounts() {
+  var host = document.getElementById("counts");
+  if (!host) { return; }
+  var c = triageCounts();
+  host.textContent = "";
+  [["採用", c.adopted], ["却下", c.rejected], ["未判定", c.untriaged], ["コメント", c.comments]]
+    .forEach(function (pair) {
+      host.appendChild(el("span", "chip", pair[0] + " " + pair[1]));
+    });
+}
+
+// Spec §3.5. Untriaged findings are deliberately omitted: handing an agent a
+// list nobody decided on makes it start fixing everything.
+function buildFeedback() {
+  var adopted = REVIEW.findings.filter(function (f) { return STATE.triage[f.id] === "adopted"; });
+  var rejected = REVIEW.findings.filter(function (f) { return STATE.triage[f.id] === "rejected"; });
+  var comments = STATE.comments;
+
+  if (adopted.length === 0 && comments.length === 0) {
+    return "レビューの結果、修正依頼はありません。";
+  }
+
+  var out = [];
+  out.push("# レビューフィードバック: " + META.title);
+  out.push("");
+  out.push("## 依頼");
+  out.push("");
+  out.push("- 以下の指摘が忖度なしで妥当かどうか精査してください。妥当でないものは指摘してください");
+  out.push("- 対応方針に迷う点があれば、実装前に確認してください");
+  out.push("");
+
+  if (adopted.length > 0) {
+    out.push("## 採用された指摘");
+    out.push("");
+    adopted.forEach(function (f, i) {
+      out.push("### " + (i + 1) + ". [" + f.severity + "] " + f.title);
+      out.push("- 場所: " + f.anchor.display + " [" + f.anchor.hunk + "]");
+      var g = GROUP_BY_ID[f.group];
+      if (g) { out.push("- 変更グループの意図: " + g.intent); }
+      if (f.plan_status === "justified") { out.push("- 備考: " + PLAN_NOTE); }
+      out.push("- 指摘: " + f.impact);
+      out.push("- 改善案: " + f.recommendation);
+      out.push("");
+    });
+  }
+
+  if (comments.length > 0) {
+    out.push("## レビュアーのコメント");
+    out.push("");
+    comments.forEach(function (c, i) {
+      out.push("### C-" + (i + 1) + ". " + anchorLabel(c.anchor) + " [" + anchorRef(c.anchor) + "]");
+      out.push(c.body);
+      out.push("");
+    });
+  }
+
+  if (rejected.length > 0) {
+    out.push("## 対応不要と判断した指摘");
+    out.push("");
+    rejected.forEach(function (f) {
+      var reason = (STATE.rejectReasons[f.id] || "").trim() || "(理由未記入)";
+      out.push("- [" + f.severity + "] " + f.title + " — 却下理由: " + reason);
+    });
+    out.push("");
+  }
+
+  return out.join("\n").replace(/\n+$/, "\n");
+}
+
+function setFeedbackMessage(text) {
+  document.getElementById("fb-msg").textContent = text;
+}
+
+function selectFeedback() {
+  var ta = document.getElementById("fb-out");
+  ta.focus();
+  ta.select();
+}
+
+document.getElementById("fb-gen").addEventListener("click", function () {
+  document.getElementById("fb-out").value = buildFeedback();
+  setFeedbackMessage("生成しました。内容を確認してコピーしてください。");
+});
+
+document.getElementById("fb-copy").addEventListener("click", function () {
+  var ta = document.getElementById("fb-out");
+  if (ta.value === "") { ta.value = buildFeedback(); }
+  var text = ta.value;
+
+  if (!navigator.clipboard || !navigator.clipboard.writeText) {
+    selectFeedback();
+    setFeedbackMessage("手動でコピーしてください");
+    return;
+  }
+  navigator.clipboard.writeText(text).then(function () {
+    setFeedbackMessage("コピーしました。作業セッションに貼り戻してください。");
+  }, function () {
+    selectFeedback();
+    setFeedbackMessage("手動でコピーしてください");
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * Keyboard
+ * ------------------------------------------------------------------------ */
+
+var cursor = -1;
+
+function visibleHunks() {
+  return HUNK_ELS.filter(function (n) { return n.offsetParent !== null; });
+}
+
+function moveCursor(delta) {
+  var list = visibleHunks();
+  if (list.length === 0) { return; }
+  cursor = Math.min(Math.max(cursor + delta, 0), list.length - 1);
+  list[cursor].scrollIntoView({ block: "center" });
+}
+
+function currentGroupId() {
+  var list = visibleHunks();
+  if (cursor < 0 || cursor >= list.length) { return null; }
+  var card = list[cursor].closest("[data-group-card]");
+  return card ? card.getAttribute("data-group-card") : null;
+}
+
+document.addEventListener("keydown", function (ev) {
+  var t = ev.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) {
+    return;
+  }
+  if (ev.metaKey || ev.ctrlKey || ev.altKey) { return; }
+
+  if (ev.key === "?") { toggleHelp(); ev.preventDefault(); return; }
+  if (ev.key === "Escape") { toggleHelp(false); return; }
+  if (ev.key === "j") { moveCursor(1); ev.preventDefault(); return; }
+  if (ev.key === "k") { moveCursor(-1); ev.preventDefault(); return; }
+  if (ev.key === "a") {
+    var gid = currentGroupId();
+    if (gid && gid !== "__ungrouped__") {
+      setApproved(gid, !STATE.approved[gid]);
+      var card = CARD_BY_GROUP[gid];
+      var box = card ? card.querySelector(".approve input") : null;
+      if (box) { box.checked = !!STATE.approved[gid]; }
+    }
+    ev.preventDefault();
+  }
+});
+
+/* ---------------------------------------------------------------------------
+ * Help overlay
+ * ------------------------------------------------------------------------ */
+
+function toggleHelp(force) {
+  var h = document.getElementById("help");
+  h.hidden = (force === undefined) ? !h.hidden : !force;
+}
+
+document.getElementById("help-toggle").addEventListener("click", function () {
+  toggleHelp();
+});
+document.getElementById("help").addEventListener("click", function () {
+  toggleHelp(false);
+});
+
+/* ---------------------------------------------------------------------------
+ * Boot
+ * ------------------------------------------------------------------------ */
+
+var discardedStale = loadState();
+
+renderHeader();
+renderGroupList();
+renderGroupCards();
+renderBinaryChanges();
+renderSeverityFilter();
+renderFindingList();
+renderPlanCheck();
+renderProgress();
+updateCounts();
+applyFilters();
+
+document.getElementById("f-untriaged").addEventListener("change", applyFilters);
+document.getElementById("f-withfindings").addEventListener("change", applyFilters);
+
+if (discardedStale) { addBanner("前回の差分と変わったため状態を破棄しました"); }
+if (!storageOk) { warnNoStorage(); }
+</script>
+</body>
+</html>
