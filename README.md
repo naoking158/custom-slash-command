@@ -52,6 +52,44 @@ ship lets the agent open normal PRs and merge them once CI is green.
 `scripts/lib/autonomy.sh <dir>` prints a checkout's mode. The config stays
 off the repository so it never names private repositories.
 
+### Setup for `/my:autopilot`
+
+1. Opt repositories into ship mode (skip for strict-only use):
+
+   ```bash
+   echo 'ship <your-github-user>/*' >> ~/.claude/my-toolkit/autonomy.conf
+   ```
+
+2. Allow the commands an unattended run needs, so it does not stall on a
+   permission prompt. Put them in a **local, uncommitted** settings file:
+   `~/.claude/settings.local.json` (every repository) or a repository's
+   `.claude/settings.local.json` (that repository only). Never put them in a
+   committed `.claude/settings.json`: that would let the agent merge PRs for
+   everyone who clones the repository.
+
+   ```json
+   {
+     "permissions": {
+       "allow": [
+         "Bash(gh pr create *)",
+         "Bash(gh pr merge *)",
+         "Bash(gh run list *)",
+         "Bash(gh run watch *)",
+         "Bash(gh run view *)",
+         "Bash(git worktree *)"
+       ]
+     }
+   }
+   ```
+
+   These allows are safe in strict repositories only because
+   `outbound-guard.sh` still denies merges and non-draft PRs there. With the
+   allows at the user level, keep the plugin's hooks enabled.
+
+3. Give the repository a `verify-<app>` skill (`/my:create-verification-skill`)
+   on its default branch, so each task can be verified in the real app.
+   Without one, autopilot records every task as unverified.
+
 ## Rules
 
 `rules/*.md` are working principles that apply in every session. Plugins
