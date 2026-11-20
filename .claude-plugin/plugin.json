@@ -1,6 +1,6 @@
 {
   "name": "my",
-  "description": "Personal toolkit: review, learn/retro knowledge loop, outbound guard hook, PdM skills, and path-triggered language rules.",
+  "description": "Personal toolkit: review, verifier agent, learn/retro knowledge loop, outbound guard hook, working principles, PdM skills, and path-triggered language rules.",
   "version": "1.0.0",
   "author": { "name": "naoking158" },
   "repository": "https://github.com/naoking158/custom-slash-command",

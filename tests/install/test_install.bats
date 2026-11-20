@@ -190,3 +190,31 @@ assert_links_to_repo() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"Usage:"* ]]
 }
+
+# ============================================================================
+# rules file links
+# ============================================================================
+
+@test "install: links each rules file into ~/.claude/rules" {
+  run "$INSTALL"
+  [ "$status" -eq 0 ]
+  [ -L "$HOME/.claude/rules/principles.md" ]
+  [ "$(readlink "$HOME/.claude/rules/principles.md")" = "$REPO_ROOT/rules/principles.md" ]
+}
+
+@test "install: refuses to overwrite a real rules file" {
+  mkdir -p "$HOME/.claude/rules"
+  echo mine > "$HOME/.claude/rules/principles.md"
+  run "$INSTALL"
+  [ "$status" -ne 0 ]
+  [ "$(cat "$HOME/.claude/rules/principles.md")" = "mine" ]
+}
+
+@test "uninstall: removes rules links and keeps other rules files" {
+  run "$INSTALL"
+  echo mine > "$HOME/.claude/rules/other.md"
+  run "$INSTALL" --uninstall
+  [ "$status" -eq 0 ]
+  [ ! -e "$HOME/.claude/rules/principles.md" ]
+  [ -f "$HOME/.claude/rules/other.md" ]
+}

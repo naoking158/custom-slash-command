@@ -3,6 +3,9 @@
 #
 #   $HOME/.claude/skills/my -> <repo>   (single symlink; plugin is discovered
 #                                        in place, so repo edits apply live)
+#   $HOME/.claude/rules/<f>.md -> <repo>/rules/<f>.md
+#                                       (plugins cannot ship rules, so each
+#                                        file is linked on its own)
 #
 # Also cleans up symlinks from the pre-plugin layout when they point into
 # this repo:
@@ -25,6 +28,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 
 CLAUDE_DIR="$HOME/.claude"
 PLUGIN_LINK="$CLAUDE_DIR/skills/my"
+RULES_DIR="$CLAUDE_DIR/rules"
 
 # Symlinks from the pre-plugin layout. Removed when they point into this repo
 # (including dangling links left behind after the repo restructure).
@@ -41,8 +45,9 @@ usage() {
   cat <<'EOF'
 Usage: scripts/install.sh [--check | --uninstall] [--force] [-h|--help]
 
-Creates this symlink (idempotent):
+Creates these symlinks (idempotent):
   $HOME/.claude/skills/my -> <repo>
+  $HOME/.claude/rules/<f>.md -> <repo>/rules/<f>.md   (one per rules file)
 
 and removes legacy symlinks ($HOME/.prompts, $HOME/.claude/commands,
 $HOME/.claude/agents) when they point into this repo.
@@ -184,6 +189,61 @@ check_plugin_link() {
   esac
 }
 
+# Echo one of: absent | ok | wrong-symlink:<actual> | real-path (for files)
+inspect_file_link() {
+  local target="$1" want="$2"
+  if [ -L "$target" ]; then
+    local actual
+    actual="$(abs_target "$target")"
+    if [ "$actual" = "$want" ]; then printf 'ok'; else printf 'wrong-symlink:%s' "$actual"; fi
+  elif [ -e "$target" ]; then
+    printf 'real-path'
+  else
+    printf 'absent'
+  fi
+}
+
+# Usage: rule_link <install|uninstall|check> <target> <want>
+rule_link() {
+  local mode="$1" target="$2" want="$3" state
+  state="$(inspect_file_link "$target" "$want")"
+  case "$mode:$state" in
+    install:ok)        printf '  OK     already linked: %s\n' "$target" ;;
+    install:absent)
+      mkdir -p "$(dirname "$target")"
+      ln -s "$want" "$target"
+      printf '  OK     created:        %s -> %s\n' "$target" "$want" ;;
+    install:wrong-symlink:*)
+      if [ "$FORCE" -eq 1 ]; then
+        rm "$target"; ln -s "$want" "$target"
+        printf '  OK     replaced:       %s -> %s\n' "$target" "$want"
+      else
+        printf '  ERROR  points elsewhere: %s -> %s\n' "$target" "${state#wrong-symlink:}" >&2
+        printf '         re-run with --force to replace.\n' >&2
+        return 1
+      fi ;;
+    install:real-path)
+      printf '  ERROR  real file at %s — refusing to touch.\n' "$target" >&2
+      printf '         move or remove it manually, then re-run.\n' >&2
+      return 1 ;;
+    uninstall:ok)      rm "$target"; printf '  OK     removed:        %s\n' "$target" ;;
+    uninstall:*)       printf '  SKIP   not ours:       %s\n' "$target" ;;
+    check:ok)          printf '  OK        %s -> %s\n' "$target" "$want" ;;
+    check:absent)      printf '  MISSING   %s\n' "$target"; return 1 ;;
+    check:wrong-symlink:*) printf '  WRONG     %s -> %s\n' "$target" "${state#wrong-symlink:}"; return 1 ;;
+    check:real-path)   printf '  CONFLICT  %s (real file)\n' "$target"; return 1 ;;
+  esac
+}
+
+for_each_rule() {
+  local mode="$1" src rc=0
+  for src in "$REPO_ROOT"/rules/*.md; do
+    [ -e "$src" ] || continue
+    rule_link "$mode" "$RULES_DIR/$(basename "$src")" "$src" || rc=1
+  done
+  return "$rc"
+}
+
 # Legacy links may dangle (their old targets under the repo no longer exist),
 # so classify by literal target path instead of resolving directories.
 legacy_points_into_repo() {
@@ -227,18 +287,21 @@ failed=0
 case "$MODE" in
   install)
     install_plugin_link "$PLUGIN_LINK" "$REPO_ROOT" || failed=1
+    for_each_rule install || failed=1
     for legacy in "${LEGACY_LINKS[@]}"; do
       cleanup_legacy "$legacy"
     done
     ;;
   uninstall)
     uninstall_plugin_link "$PLUGIN_LINK" "$REPO_ROOT" || failed=1
+    for_each_rule uninstall || failed=1
     for legacy in "${LEGACY_LINKS[@]}"; do
       cleanup_legacy "$legacy"
     done
     ;;
   check)
     check_plugin_link "$PLUGIN_LINK" "$REPO_ROOT" || failed=1
+    for_each_rule check || failed=1
     for legacy in "${LEGACY_LINKS[@]}"; do
       check_legacy "$legacy" || failed=1
     done
