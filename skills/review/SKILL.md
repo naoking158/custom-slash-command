@@ -73,6 +73,22 @@ Checklist items are tagged with their default severity. A checklist is a
 lens, not a form: evaluate every item, but only violations appear in the
 report. Skip items marked `[web]` when the project has no web/API surface.
 
+### Check findings against what surrounds the diff
+
+A diff alone hides fixes that live elsewhere. Before keeping a finding on a
+diff target, check it here: in Pass 2, in a one-pass review, and with
+`--no-screen`. Never hand any of this to the Pass 1 `diff-reviewer`; its
+blindness is the point.
+
+- `pr:` targets: read the base branch. When the base is another PR's branch
+  (`gh pr view {number} --json baseRefName`), read that PR's diff too.
+- Code the diff relies on but does not contain (a submodule, a vendored or
+  generated copy, another repository): read the upstream default branch, not
+  the pinned copy, and name the version you read in the finding.
+- A finding the base or upstream already resolves: drop it in a one-pass or
+  `--no-screen` review. In Pass 2 it stays, since Pass 1 findings are never
+  deleted: lower it one step and say in `impact` where it is resolved.
+
 ## Step 3 — Diff targets: screen + two-pass
 
 Applies to `code:` / `commit:` / `pr:` **without** `--no-screen`. Doc targets
