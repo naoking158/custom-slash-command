@@ -29,10 +29,3 @@ Observable outcomes only (a screen, a command's output, a test that runs).
 | # | Task | Branch | PR | State |
 |---|------|--------|----|-------|
 | 1 | {small change} | | | todo |
-
-## Found
-
-Improvements noticed outside the current task. ship: taken as tasks after the goal's tasks while budget remains. strict: reported only.
-
-| Where | Why it matters | Size | State |
-|-------|----------------|------|-------|

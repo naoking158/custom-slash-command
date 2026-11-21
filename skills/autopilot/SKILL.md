@@ -20,9 +20,10 @@ Run without asking the user anything until a stop condition below is reached. De
 
    It prints `ship <owner/name>` or `strict <owner/name>`. Strict runs the **stack** loop; ship runs the **ship** loop. The outbound-guard hook enforces the same split, so a denied command means you picked the wrong loop, not that you should work around it.
 
-2. State lives outside the repository in `S=~/.local/state/autopilot/<owner>-<name>/<goal-slug>/`:
+2. State lives outside the repository in `R=~/.local/state/autopilot/<owner>-<name>/`, one directory per goal in `S=$R/<goal-slug>/`:
    - `goal.md` from [`goal-template.md`](goal-template.md). Fill purpose, done criteria (observable), scope, out of scope and the budget. Derive what the user did not say and mark it `(derived)`. With `resume <goal-slug>`, read the existing files instead and continue from the log.
    - `progress.md`: append one entry per task (task, branch, PR, review rounds, verify verdict, CI, outcome) and one line per decision you made on the user's behalf.
+   - `$R/found.md`: the repository's Found list, shared by every goal, so that no goal has to know where another one wrote. Read it at every start, resume included, and log how many rows are open. Missing → create it with the header `| Goal | Where | Why it matters | Size | State |`, then move the rows of any `## Found` section still left in an earlier goal's `goal.md` into it, tagged with that goal's slug, and delete those sections.
 
 3. Work in a dedicated worktree so the user's checkout is never touched: `git -C <repo> worktree add <repo>-autopilot-<goal-slug> origin/<default>` (reuse it on resume).
 
@@ -49,7 +50,7 @@ For every task, in order:
 
 Keep each PR to its task. When you notice something worth improving that the current task does not need, do not fix it in this PR; route it:
 
-- **The repository's code** (a smell, a missing test, dead code, a confusing name outside the diff): append it to `## Found` in `goal.md` with location, why it matters, and a size guess (S/M/L). A repository-local `verify-<app>` skill counts as repository code.
+- **The repository's code** (a smell, a missing test, dead code, a confusing name outside the diff): append it to `$R/found.md` with this goal's slug, location, why it matters, and a size guess (S/M/L). A repository-local `verify-<app>` skill counts as repository code.
 - **A `my:*` asset** (this skill, `my:review`, `my:verifier`, the guard): run `/my:learn` with the category and target, then keep going. `/my:retro` decides on the change later with the user.
 - **Any other tool outside the repository** (a personal skill, global settings): record it under `## Tool friction` in `progress.md`.
 
@@ -58,7 +59,7 @@ Never edit toolkit skills, personal skills, settings or CLAUDE.md during a run: 
 ## 2. Mode rules
 
 **ship**
-- When the goal's tasks are done and budget remains, take `## Found` items that sit inside the scope as further tasks through the same loop, smallest and highest-value first. Mark each in `goal.md` as done, skipped (why) or left.
+- When the goal's tasks are done and budget remains, take open `found.md` rows that sit inside the scope, whichever goal recorded them, as further tasks through the same loop, smallest and highest-value first. Mark each row as done (PR), skipped (why) or left.
 - Fix forward: after each merge, watch the default branch's CI run (`gh run list --branch <default> -L1`, `gh run watch`). If it goes red, the next task is fixing it (or `git revert` of the culprit through a PR) before anything else.
 - Never create tags or releases, and never push to the default branch directly; everything lands through a PR.
 
@@ -66,7 +67,7 @@ Never edit toolkit skills, personal skills, settings or CLAUDE.md during a run: 
 - When a lower PR changes (review fix, rework), bring each PR above it up to date with `git merge <parent branch>` and push. Never rebase or force-push an open stack; after the user lands the bottom PR they restack themselves.
 - At most 5 open PRs in one stack. At the cap, stop.
 - Verification is serial (one app stack at a time); do not run tasks in parallel.
-- Do not turn `## Found` items into PRs: an unrequested PR in the stack costs the user review time. They go in the final report.
+- Do not turn `found.md` rows into PRs: an unrequested PR in the stack costs the user review time. They go in the final report.
 
 ## 3. Stop conditions
 
@@ -86,6 +87,6 @@ Append to `progress.md` and show the user:
 - PRs in order with their state (merged / draft, review rounds, remaining Medium/Low).
 - Why it stopped, and what a human has to do next (land the stack bottom-up, provide data, renew a login).
 - Decisions made on the user's behalf.
-- `## Found` items not done (all of them in stack mode), `/my:learn` signals captured, and `## Tool friction` entries.
+- `found.md` rows still open across the repository (count, and the rows this run added), `/my:learn` signals captured, and `## Tool friction` entries.
 
 Clean up: remove the worktree only when everything in it is pushed (`git worktree remove`), and stop any app stack a verify run left behind.
