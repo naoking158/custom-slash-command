@@ -211,10 +211,17 @@ Return / report:
 - Findings by severity: Critical {n} / High {n} / Medium {n} / Low {n} — with
   one-line summaries of every Critical/High finding inline
 - `assessment`: PASS | NEEDS_REVISION
+- `recommended`: the findings worth fixing now (every Critical/High, plus
+  Medium/Low that are real and cheap to fix), and for each other finding a
+  one-line reason to leave it. The user should not have to sort the list
+  themselves.
 - Diff targets that built a screen also return `screen_path` (an absolute
   `file://` URL), `json_path`, and `passes`. Tell the user to open the screen,
   work through it, and paste the generated Markdown back into the session
   where the work was done.
 - Next step: NEEDS_REVISION → fix and re-review; PASS → proceed
   (implement from the document for doc reviews; commit and open a draft PR
-  for code reviews)
+  for code reviews). When the change is the user's own (their working tree,
+  or a PR whose author is the `gh api user` login), the caller fixes the
+  `recommended` findings and re-reviews without asking first; on someone
+  else's PR, stop at the report.
