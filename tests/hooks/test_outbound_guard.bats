@@ -82,6 +82,11 @@ decision() {
   [ -z "$output" ]
 }
 
+@test "a read-only API query for the ready-for-review event passes" {
+  run_guard "$(bash_payload "gh api graphql -f query='{ repository(owner:\"o\",name:\"r\") { pullRequest(number:1) { timelineItems(itemTypes:[READY_FOR_REVIEW_EVENT], first:5) { nodes { __typename } } } } }'")"
+  [ -z "$output" ]
+}
+
 # --- git push ------------------------------------------------------------------
 
 @test "push of a feature branch is allowed" {
@@ -190,6 +195,52 @@ decision() {
   printf 'see docs/reviews/r.md\n' >"$TMP/body.md"
   run_guard "$(bash_payload "gh pr create --draft --title t --body-file $TMP/body.md")"
   [ "$(decision)" = "deny" ]
+}
+
+@test "paths in commands after a heredoc commit are not a leak" {
+  cmd="$(printf 'git commit -q -F - <<%sEOF%s\nfix: x\nEOF\ngit push -q 2>&1 | tail -1; cat /private/tmp/claude-1/x/out.txt' "'" "'")"
+  run_guard "$(bash_payload "$cmd")"
+  [ -z "$output" ]
+}
+
+@test "paths in commands after a PR body are not a leak" {
+  cmd="$(printf 'gh pr create --draft --title t --body "$(cat <<%sEOF%s\nbody\nEOF\n)"; cat /private/tmp/claude-1/x/out.txt' "'" "'")"
+  run_guard "$(bash_payload "$cmd")"
+  [ -z "$output" ]
+}
+
+@test "a path in the PR body is denied even with later commands" {
+  run_guard "$(bash_payload 'gh pr create --draft --title t --body "see /Users/me/x.md" && cat /private/tmp/claude-1/x/out.txt')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "a path inside a heredoc commit message is denied" {
+  cmd="$(printf 'git commit -q -F - <<%sEOF%s\nsee /Users/me/notes.md\nEOF\ngit push -q' "'" "'")"
+  run_guard "$(bash_payload "$cmd")"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "a path in a body continued onto the next line is denied" {
+  cmd="$(printf 'gh pr create --draft \\\n  --title t \\\n  --body "see /Users/me/x.md"')"
+  run_guard "$(bash_payload "$cmd")"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "a path in a heredoc whose operator line goes on is denied" {
+  cmd="$(printf 'git commit -q -F - <<%sEOF%s && git push -q\nsee /Users/me/notes.md\nEOF' "'" "'")"
+  run_guard "$(bash_payload "$cmd")"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "a path in a body piped into the outbound command is denied" {
+  cmd="$(printf 'cat <<%sEOF%s | gh pr create --draft --title t --body-file -\nsee /Users/me/notes.md\nEOF' "'" "'")"
+  run_guard "$(bash_payload "$cmd")"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "an env prefix before the commit is not a leak" {
+  run_guard "$(bash_payload 'GIT_INDEX_FILE=/Users/me/idx git commit -m "add guard"')"
+  [ -z "$output" ]
 }
 
 @test "notion page update with a local path is denied" {

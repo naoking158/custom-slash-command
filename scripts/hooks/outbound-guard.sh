@@ -116,7 +116,7 @@ if printf '%s' "$shape" | grep -qE '(^|[^A-Za-z0-9_-])gh[[:space:]]+pr[[:space:]
   decide deny "PR を ready にしない。ready への変更は本人がセルフレビュー後に行う"
 fi
 if printf '%s' "$shape" | grep -qE 'gh[[:space:]]+api' \
-  && printf '%s' "$cmd" | grep -qiE 'markPullRequestReadyForReview|ready_for_review|"?draft"?[[:space:]]*[:=][[:space:]]*false'; then
+  && printf '%s' "$cmd" | grep -qiE 'markPullRequestReadyForReview|"?draft"?[[:space:]]*[:=][[:space:]]*false'; then
   decide deny "API 経由でも PR を ready にしない"
 fi
 if printf '%s' "$shape" | grep -qE '(^|[^A-Za-z0-9_-])gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'; then
@@ -170,11 +170,30 @@ if [ -n "$push_seg" ]; then
 fi
 
 # --- outbound text ---------------------------------------------------------------
-if printf '%s' "$shape" | grep -qE 'git([[:space:]]+-C[[:space:]]+[^[:space:]]+)?[[:space:]]+commit|gh[[:space:]]+(pr|issue)[[:space:]]+(create|comment|edit|review)'; then
-  # Only what follows the outbound command can be its text; earlier setup steps
-  # (git init <dir>, cp <path> ...) address the machine.
-  text="$(printf '%s' "$cmd" | perl -0777 -pe 's/\A.*?(?=git(\s+-C\s+\S+)?\s+commit|gh\s+(pr|issue)\s+(create|comment|edit|review))//s')"
-  for f in $(printf '%s' "$cmd" | grep -oE -- '(--body-file|--file|-F)[[:space:]=]+[^[:space:]]+' | sed -E 's#^(--body-file|--file|-F)[[:space:]=]+##'); do
+# Only the outbound commands themselves carry text out. Each one runs from its
+# own name (an env prefix addresses the machine) to the next top-level ; && ||
+# & or newline, plus the pipeline stages that feed it, with its quoted strings
+# and heredoc bodies put back. The other commands on the line address the machine.
+text="$(printf '%s' "$cmd" | perl -0777 -ne '
+  my @lit;
+  my $hold = sub { push @lit, $_[0]; "\x00" . $#lit . "\x00" };
+  s/(<<-?\s*(["\x27]?)(\w+)\2)([^\n]*)\n(.*?)\n[ \t]*\3[ \t]*(?=\n|\z)/$1 . $hold->($5) . $4/gse;
+  s/"(?:[^"\\]|\\.)*"/$hold->($&)/gse;
+  s/\x27[^\x27]*\x27/$hold->($&)/gse;
+  s/\\\n/ /g;
+  my $out = qr/(?<![\w-])git(?:\s+-[Cc]\s+\S+)*\s+commit(?![\w-])|(?<![\w-])gh\s+(?:pr|issue)\s+(?:create|comment|edit|review)(?![\w-])/;
+  for my $seg (split /&&|\|\||;|\n|(?<![<>|])&(?![>&])/) {
+    my @stages = split /\|&?/, $seg;
+    my ($k) = grep { $stages[$_] =~ $out } 0 .. $#stages;
+    next unless defined $k;
+    $stages[$k] =~ $out;
+    my $s = join " | ", @stages[0 .. $k - 1], substr($stages[$k], $-[0]);
+    1 while $s =~ s/\x00(\d+)\x00/$lit[$1]/g;
+    print $s, "\n";
+  }
+')"
+if [ -n "$text" ]; then
+  for f in $(printf '%s' "$text" | grep -oE -- '(--body-file|--file|-F)[[:space:]=]+[^[:space:]]+' | sed -E 's#^(--body-file|--file|-F)[[:space:]=]+##'); do
     f="${f%\"}"; f="${f#\"}"; f="${f%\'}"; f="${f#\'}"
     case "$f" in /*|~*) ;; *) f="$workdir/$f" ;; esac
     f="${f/#\~/$HOME}"
@@ -182,7 +201,6 @@ if printf '%s' "$shape" | grep -qE 'git([[:space:]]+-C[[:space:]]+[^[:space:]]+)
   done
   # Drop the parts that address the machine, not the reader.
   text="$(printf '%s' "$text" \
-    | sed -E 's#(^|&&|;)[[:space:]]*cd[[:space:]]+("[^"]*"|[^[:space:];&]+)##g' \
     | sed -E 's#-C[[:space:]]+("[^"]*"|[^[:space:]]+)##g' \
     | sed -E 's#(--body-file|--file|-F)[[:space:]=]+[^[:space:]]+##g')"
   reason="$(leak_reason "$text" "$workdir")"
