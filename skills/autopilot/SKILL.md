@@ -42,7 +42,7 @@ For every task, in order:
 5. **Push and open the PR.** Body: 課題 → 対応 → 設計判断, short, plus for stack mode one line `Stack: n/N, base #<parent PR>`. ship: `gh pr create --base <default>`. stack: `gh pr create --draft --base <parent branch>`.
 6. **Review and fix.** Run the `my:review` skill with `pr:<number> --no-screen`. Fix every Critical/High finding, push, and review again — at most 2 fix rounds. Medium/Low: fix when cheap, otherwise list them in the progress log. Never cite finding IDs or report paths in commits or PR text.
 7. **Land.**
-   - ship: `gh pr checks <n> --watch`; green → `gh pr merge <n> --squash --delete-branch`, then update the default branch. Red → fix on the branch (counts toward the failure limit).
+   - ship: run `gh pr checks <n> --watch` with `run_in_background` and continue when it reports; never wait with `sleep N && gh pr checks`, which the harness blocks. Green → `gh pr merge <n> -R <owner/name> --squash --delete-branch`. With `-R`, gh leaves local branches alone and deletes only the remote branch; without it, gh tries the local branch first, and when the worktree still has it checked out that fails before the remote is deleted. Then update the default branch, and delete the local branch with `git branch -D` once the worktree has moved to the next task's branch. Red → fix on the branch (counts toward the failure limit).
    - stack: leave the draft open. Never mark it ready and never merge it.
 8. **Log** the task in `progress.md`, then pick the next task.
 
@@ -60,7 +60,7 @@ Never edit toolkit skills, personal skills, settings or CLAUDE.md during a run: 
 
 **ship**
 - When the goal's tasks are done and budget remains, take open `found.md` rows that sit inside the scope, whichever goal recorded them, as further tasks through the same loop, smallest and highest-value first. Mark each row as done (PR), skipped (why) or left.
-- Fix forward: after each merge, watch the default branch's CI run (`gh run list --branch <default> -L1`, `gh run watch`). If it goes red, the next task is fixing it (or `git revert` of the culprit through a PR) before anything else.
+- Fix forward: after each merge, watch the default branch's CI run (`gh run list --branch <default> -L1`, then `gh run watch <id>` with `run_in_background`). If it goes red, the next task is fixing it (or `git revert` of the culprit through a PR) before anything else.
 - Never create tags or releases, and never push to the default branch directly; everything lands through a PR.
 
 **stack**
