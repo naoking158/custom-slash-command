@@ -7,7 +7,8 @@
 # converts the payload to the Claude Code shape outbound-guard.sh reads and
 # converts its permissionDecision back. When the guard has no objection, or the
 # payload cannot be read, it answers "allow", which hands the call to
-# Antigravity's own permission policy.
+# Antigravity's own permission policy. The guard's "ask" becomes "force_ask":
+# Antigravity's "ask" is skipped when the user has set "Always Allow".
 # Dependencies: bash, jq, and those of outbound-guard.sh.
 set -u
 
@@ -28,7 +29,8 @@ guard="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/outbound-guard.sh"
 verdict="$(printf '%s' "$claude_payload" | "$guard" 2>/dev/null | jq -c '
   .hookSpecificOutput
   | select(.permissionDecision == "deny" or .permissionDecision == "ask")
-  | {decision: .permissionDecision, reason: .permissionDecisionReason}' 2>/dev/null)"
+  | {decision: (if .permissionDecision == "ask" then "force_ask" else .permissionDecision end),
+     reason: .permissionDecisionReason}' 2>/dev/null)"
 [ -n "$verdict" ] || allow
 printf '%s\n' "$verdict"
 exit 0

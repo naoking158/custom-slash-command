@@ -4,7 +4,8 @@
 #
 # Contract under test:
 #   - A run_command call that outbound-guard.sh objects to gets its decision
-#     (deny / ask) and reason back in Antigravity's {decision, reason} shape.
+#     and reason back in Antigravity's {decision, reason} shape; "ask" becomes
+#     "force_ask" so an "Always Allow" setting cannot skip it.
 #   - Every other call, and unreadable input, gets {"decision":"allow"}.
 #   - The hook always exits 0 (Antigravity ignores a failing hook).
 
@@ -50,9 +51,9 @@ run_hook() {
   [ "$(printf '%s' "$output" | jq -r .decision)" = "deny" ]
 }
 
-@test "tag push asks" {
+@test "tag push always asks" {
   run_hook "$(run_command_payload 'git push --tags')"
-  [ "$(printf '%s' "$output" | jq -r .decision)" = "ask" ]
+  [ "$(printf '%s' "$output" | jq -r .decision)" = "force_ask" ]
 }
 
 @test "a command the guard allows is passed to Antigravity's own policy" {
@@ -85,4 +86,10 @@ run_hook() {
   cmd="$(jq -r '."outbound-guard".PreToolUse[0].hooks[0].command' "$REPO_ROOT/hooks.json")"
   [[ "$cmd" == ./* ]]
   [ -x "$REPO_ROOT/$cmd" ]
+}
+
+@test "the Antigravity manifest names the plugin my and keeps to the schema's keys" {
+  local m="$REPO_ROOT/.antigravity-plugin/plugin.json"
+  [ "$(jq -r .name "$m")" = "my" ]
+  [ "$(jq -r '[keys[] | select(IN("$schema","name","displayName","description","version","disabled","logo","suggestedPrompts","skills","author","homepage","repository","license","keywords","extensions") | not)] | length' "$m")" = "0" ]
 }
