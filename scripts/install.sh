@@ -5,7 +5,8 @@
 #                                        in place, so repo edits apply live)
 #   $HOME/.claude/rules/<f>.md -> <repo>/rules/<f>.md
 #                                       (plugins cannot ship rules, so each
-#                                        file is linked on its own)
+#                                        file except AGENTS.md is linked
+#                                        on its own)
 #
 # Also cleans up symlinks from the pre-plugin layout when they point into
 # this repo:
@@ -47,7 +48,7 @@ Usage: scripts/install.sh [--check | --uninstall] [--force] [-h|--help]
 
 Creates these symlinks (idempotent):
   $HOME/.claude/skills/my -> <repo>
-  $HOME/.claude/rules/<f>.md -> <repo>/rules/<f>.md   (one per rules file)
+  $HOME/.claude/rules/<f>.md -> <repo>/rules/<f>.md   (one per rules file, except AGENTS.md)
 
 and removes legacy symlinks ($HOME/.prompts, $HOME/.claude/commands,
 $HOME/.claude/agents) when they point into this repo.
@@ -235,8 +236,6 @@ rule_link() {
   esac
 }
 
-# rules/AGENTS.md is Antigravity's always-on plugin rule and links to files
-# Claude Code already gets, so it is not linked for Claude Code.
 for_each_rule() {
   local mode="$1" src rc=0
   for src in "$REPO_ROOT"/rules/*.md; do
