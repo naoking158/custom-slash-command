@@ -35,6 +35,28 @@ assert_links_to_repo() {
   assert_links_to_repo "$HOME/$PLUGIN_LINK"
 }
 
+@test "install: fresh HOME also links the repo as an Antigravity plugin" {
+  run "$INSTALL"
+  [ "$status" -eq 0 ]
+  assert_links_to_repo "$HOME/.gemini/config/plugins/my"
+}
+
+@test "check: a missing Antigravity plugin link fails the check" {
+  "$INSTALL" >/dev/null
+  rm "$HOME/.gemini/config/plugins/my"
+  run "$INSTALL" --check
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"MISSING"*".gemini/config/plugins/my"* ]]
+}
+
+@test "uninstall: removes the Antigravity plugin link" {
+  "$INSTALL" >/dev/null
+  run "$INSTALL" --uninstall
+  [ "$status" -eq 0 ]
+  [ ! -e "$HOME/.gemini/config/plugins/my" ]
+  [ ! -L "$HOME/.gemini/config/plugins/my" ]
+}
+
 @test "install: second run is idempotent and reports already linked" {
   run "$INSTALL"
   [ "$status" -eq 0 ]

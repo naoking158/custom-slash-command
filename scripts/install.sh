@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# install.sh — Install this toolkit as a skills-directory plugin.
+# install.sh — Install this toolkit as a Claude Code skills-directory plugin
+# and as an Antigravity plugin.
 #
 #   $HOME/.claude/skills/my -> <repo>   (single symlink; plugin is discovered
 #                                        in place, so repo edits apply live)
+#   $HOME/.gemini/config/plugins/my -> <repo>
+#                                       (the same repo as an Antigravity plugin)
 #   $HOME/.claude/rules/<f>.md -> <repo>/rules/<f>.md
 #                                       (plugins cannot ship rules, so each
 #                                        file except the Antigravity-only
@@ -30,6 +33,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 
 CLAUDE_DIR="$HOME/.claude"
 PLUGIN_LINK="$CLAUDE_DIR/skills/my"
+ANTIGRAVITY_PLUGIN_LINK="$HOME/.gemini/config/plugins/my"
 RULES_DIR="$CLAUDE_DIR/rules"
 
 # Symlinks from the pre-plugin layout. Removed when they point into this repo
@@ -49,6 +53,7 @@ Usage: scripts/install.sh [--check | --uninstall] [--force] [-h|--help]
 
 Creates these symlinks (idempotent):
   $HOME/.claude/skills/my -> <repo>
+  $HOME/.gemini/config/plugins/my -> <repo>   (Antigravity plugin)
   $HOME/.claude/rules/<f>.md -> <repo>/rules/<f>.md   (one per rules file, except
                                                         AGENTS.md and antigravity.md)
 
@@ -56,7 +61,7 @@ and removes legacy symlinks ($HOME/.prompts, $HOME/.claude/commands,
 $HOME/.claude/agents) when they point into this repo.
 
 Modes:
-  (default)     Install the link if missing. Clean legacy links.
+  (default)     Install the links if missing. Clean legacy links.
   --check       Report state and exit non-zero if anything is missing/wrong.
   --uninstall   Remove only the symlinks we manage. Never touch real files
                 or symlinks pointing elsewhere.
@@ -282,15 +287,16 @@ check_legacy() {
 # --- main --------------------------------------------------------------------
 
 case "$MODE" in
-  install)   printf 'Installing plugin symlink (repo: %s)\n' "$REPO_ROOT" ;;
-  uninstall) printf 'Uninstalling plugin symlink\n' ;;
-  check)     printf 'Checking plugin symlink (repo: %s)\n' "$REPO_ROOT" ;;
+  install)   printf 'Installing plugin symlinks (repo: %s)\n' "$REPO_ROOT" ;;
+  uninstall) printf 'Uninstalling plugin symlinks\n' ;;
+  check)     printf 'Checking plugin symlinks (repo: %s)\n' "$REPO_ROOT" ;;
 esac
 
 failed=0
 case "$MODE" in
   install)
     install_plugin_link "$PLUGIN_LINK" "$REPO_ROOT" || failed=1
+    install_plugin_link "$ANTIGRAVITY_PLUGIN_LINK" "$REPO_ROOT" || failed=1
     for_each_rule install || failed=1
     for legacy in "${LEGACY_LINKS[@]}"; do
       cleanup_legacy "$legacy"
@@ -298,6 +304,7 @@ case "$MODE" in
     ;;
   uninstall)
     uninstall_plugin_link "$PLUGIN_LINK" "$REPO_ROOT" || failed=1
+    uninstall_plugin_link "$ANTIGRAVITY_PLUGIN_LINK" "$REPO_ROOT" || failed=1
     for_each_rule uninstall || failed=1
     for legacy in "${LEGACY_LINKS[@]}"; do
       cleanup_legacy "$legacy"
@@ -305,6 +312,7 @@ case "$MODE" in
     ;;
   check)
     check_plugin_link "$PLUGIN_LINK" "$REPO_ROOT" || failed=1
+    check_plugin_link "$ANTIGRAVITY_PLUGIN_LINK" "$REPO_ROOT" || failed=1
     for_each_rule check || failed=1
     for legacy in "${LEGACY_LINKS[@]}"; do
       check_legacy "$legacy" || failed=1
@@ -322,7 +330,7 @@ if [ "$failed" -ne 0 ]; then
 fi
 
 case "$MODE" in
-  install)   printf '\nDone. Restart Claude Code (or run /reload-plugins) to pick up the plugin.\n' ;;
+  install)   printf '\nDone. Restart Claude Code (or run /reload-plugins) and start a new Antigravity conversation to pick up the plugin.\n' ;;
   uninstall) printf '\nDone.\n' ;;
   check)     printf '\nAll good.\n' ;;
 esac
