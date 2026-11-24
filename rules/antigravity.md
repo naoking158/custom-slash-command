@@ -19,6 +19,7 @@ read its Claude Code terms as follows.
 - A step that starts a Claude Code agent (`Agent`, `Task`, `my:reviewer`,
   `my:diff-reviewer`, `my:verifier`) or a skill marked `context: fork`: do the
   step yourself in this conversation, following `agents/<name>.md` in the plugin
-  root, and keep its return contract.
+  root (`<name>` without `my:`), and keep its return contract. For an agent with
+  no file there, such as `Explore`, follow the brief the skill gives it.
 - `CLAUDE.md`: also read `AGENTS.md` and `GEMINI.md`, which hold the same kind
   of instructions here.
