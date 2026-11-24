@@ -61,7 +61,7 @@ and removes legacy symlinks ($HOME/.prompts, $HOME/.claude/commands,
 $HOME/.claude/agents) when they point into this repo.
 
 Modes:
-  (default)     Install the link if missing. Clean legacy links.
+  (default)     Install the links if missing. Clean legacy links.
   --check       Report state and exit non-zero if anything is missing/wrong.
   --uninstall   Remove only the symlinks we manage. Never touch real files
                 or symlinks pointing elsewhere.
@@ -287,9 +287,9 @@ check_legacy() {
 # --- main --------------------------------------------------------------------
 
 case "$MODE" in
-  install)   printf 'Installing plugin symlink (repo: %s)\n' "$REPO_ROOT" ;;
-  uninstall) printf 'Uninstalling plugin symlink\n' ;;
-  check)     printf 'Checking plugin symlink (repo: %s)\n' "$REPO_ROOT" ;;
+  install)   printf 'Installing plugin symlinks (repo: %s)\n' "$REPO_ROOT" ;;
+  uninstall) printf 'Uninstalling plugin symlinks\n' ;;
+  check)     printf 'Checking plugin symlinks (repo: %s)\n' "$REPO_ROOT" ;;
 esac
 
 failed=0
@@ -330,7 +330,7 @@ if [ "$failed" -ne 0 ]; then
 fi
 
 case "$MODE" in
-  install)   printf '\nDone. Restart Claude Code (or run /reload-plugins) to pick up the plugin.\n' ;;
+  install)   printf '\nDone. Restart Claude Code (or run /reload-plugins) and start a new Antigravity conversation to pick up the plugin.\n' ;;
   uninstall) printf '\nDone.\n' ;;
   check)     printf '\nAll good.\n' ;;
 esac
