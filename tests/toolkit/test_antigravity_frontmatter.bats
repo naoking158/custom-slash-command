@@ -9,6 +9,7 @@
 #   - Antigravity's always-on rule rules/AGENTS.md carries the principles, and
 #     the principles file has no frontmatter (Claude Code drops a rule whose
 #     frontmatter lacks paths).
+#   - rules/antigravity.md is an always-on rule for Antigravity.
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
@@ -37,4 +38,8 @@ frontmatter() {
 @test "rules/AGENTS.md is the principles file and the principles have no frontmatter" {
   [ "$(readlink "$REPO_ROOT/rules/AGENTS.md")" = "principles.md" ]
   [ "$(head -n1 "$REPO_ROOT/rules/principles.md")" != "---" ]
+}
+
+@test "rules/antigravity.md is always on in Antigravity" {
+  frontmatter "$REPO_ROOT/rules/antigravity.md" | grep -qx 'trigger: always_on'
 }
