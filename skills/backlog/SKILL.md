@@ -1,4 +1,5 @@
 ---
+name: backlog
 description: Decompose a PRD or product spec into backlog tickets (epics → INVEST stories with Given/When/Then acceptance criteria and S/M/L estimates), review them as a table, and file approved ones to the configured destination (Notion DB / GitHub Issues). quick mode drafts a single ticket from a sentence or Slack thread. Trigger words: backlog, 起票, チケット, バックログ.
 argument-hint: "<spec/prd id | path> | quick <一言 | Slack thread URL>"
 ---

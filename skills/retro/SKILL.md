@@ -1,4 +1,5 @@
 ---
+name: retro
 description: Run the toolkit improvement loop — cluster accumulated journal signals and captured corrections, propose concrete edits to toolkit assets, and apply approved ones directly. Trigger words: retro, retrospective, promote, 振り返り, 昇格.
 argument-hint: "[--since <Nd|YYYY-MM-DD>] [--deep] [--dry-run]"
 disable-model-invocation: true

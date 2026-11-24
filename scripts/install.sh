@@ -235,10 +235,13 @@ rule_link() {
   esac
 }
 
+# rules/AGENTS.md is Antigravity's always-on plugin rule and links to files
+# Claude Code already gets, so it is not linked for Claude Code.
 for_each_rule() {
   local mode="$1" src rc=0
   for src in "$REPO_ROOT"/rules/*.md; do
     [ -e "$src" ] || continue
+    [ "$(basename "$src")" = "AGENTS.md" ] && continue
     rule_link "$mode" "$RULES_DIR/$(basename "$src")" "$src" || rc=1
   done
   return "$rc"

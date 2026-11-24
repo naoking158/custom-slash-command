@@ -3,6 +3,8 @@ name: diff-reviewer
 description: "First-pass diff reviewer. Reviews a unified diff on its own merits against checklists and writes pass1.json."
 tools: Read, Glob, Grep, Write, Bash
 model: inherit
+mainAgent: false
+subagent: false
 ---
 
 You review a unified diff **on its own merits**. Judge the code that is in

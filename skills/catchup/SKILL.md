@@ -1,4 +1,5 @@
 ---
+name: catchup
 description: Digest of everything that happened in Slack and Notion since the last run — mentions and threads waiting on your reply, decisions in flight, meeting-note action items — grouped by urgency with links and proposed next actions. Trigger words: catchup, キャッチアップ, 情報整理, 朝会, ダイジェスト.
 argument-hint: "[window: 8h|2d|…] [--post] [--quiet]"
 ---

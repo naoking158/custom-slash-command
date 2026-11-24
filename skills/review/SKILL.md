@@ -1,4 +1,5 @@
 ---
+name: review
 description: Review an artifact (spec, plan, code, commit, PR, PRD) against perspective checklists and write a review report. Use for any request to review, critique, or verify a document or a change — self-review and adversarial checks included — whether it is phrased in English or Japanese (レビュー, 検証).
 argument-hint: "[perspective:]<target> [--no-screen]  e.g. code:user-auth, commit:abc1234, pr:current"
 context: fork

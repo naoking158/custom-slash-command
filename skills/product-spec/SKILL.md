@@ -1,4 +1,5 @@
 ---
+name: product-spec
 description: Create a functional specification (機能仕様書) from a PRD — user flows, numbered functional requirements, a systematic edge-case sweep, Given/When/Then acceptance criteria, and measurement requirements. Trigger words: product spec, 機能仕様, 仕様策定, 詳細仕様.
 argument-hint: "<prd id | path>  e.g. 20260711-price-alert"
 ---

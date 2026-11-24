@@ -1,4 +1,5 @@
 ---
+name: autopilot
 description: Work toward a goal autonomously for a long stretch — split it into small changes and, for each one, implement, test, verify in the real app, open a PR, run an AI review and fix what it finds. In ship-mode repositories the agent merges each PR once CI is green; elsewhere it stacks draft PRs for a human to land. Use for /my:autopilot, "このゴールで自律的に進めて", "PR を積んで進めて", or any request to keep working unattended until a goal is met.
 argument-hint: "<goal>  |  resume <goal-slug>"
 disable-model-invocation: true

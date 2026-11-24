@@ -1,4 +1,5 @@
 ---
+name: rules-typescript
 description: "Coding rules for TypeScript: type system, error handling, async patterns, style/naming, antipatterns. Loaded automatically when working with TypeScript files."
 user-invocable: false
 paths: ["**/*.ts", "**/*.tsx"]

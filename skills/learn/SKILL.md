@@ -1,4 +1,5 @@
 ---
+name: learn
 description: Capture a toolkit improvement signal — a moment where a my:* skill, agent, hook, or rule misbehaved, was missing, or worked notably well — into the machine-local journal that /my:retro promotes from. Invoke when the user corrects toolkit-driven behavior, hits toolkit friction, or says learn/学び/ジャーナル. Do NOT invoke for project knowledge (auto memory handles that).
 argument-hint: "[--category <mistake|gap|friction|pattern|question>] [--target <skills/...|agents/...|hooks|CLAUDE.md>] [free-text memo]"
 ---

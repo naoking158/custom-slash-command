@@ -1,4 +1,5 @@
 ---
+name: rules-react
 description: "Coding rules for React: components, state management, performance, testing, accessibility, security. Loaded automatically when working with React files."
 user-invocable: false
 paths: ["**/*.jsx", "**/*.tsx"]

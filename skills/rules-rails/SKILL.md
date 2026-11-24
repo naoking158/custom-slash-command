@@ -1,4 +1,5 @@
 ---
+name: rules-rails
 description: "Coding rules for Rails: ActiveRecord, architecture, API design, migrations, security, performance, testing, Ruby style, antipatterns. Loaded automatically when working with Rails files."
 user-invocable: false
 paths: ["**/*.rb", "**/Gemfile", "**/*.rake", "**/config/routes.rb"]

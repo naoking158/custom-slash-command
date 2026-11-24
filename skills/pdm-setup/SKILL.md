@@ -1,4 +1,5 @@
 ---
+name: pdm-setup
 description: First-run configuration for the PdM skills (prd / product-spec / backlog / catchup) — sets the workspace directory, backlog destination (Notion DB / GitHub Issues / draft-only), priority Slack channels, and digest preferences in a machine-local config. Trigger words: pdm setup, PdM設定, PdM 初期設定.
 argument-hint: "[--show]"
 ---

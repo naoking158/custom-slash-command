@@ -1,4 +1,5 @@
 ---
+name: rules-go
 description: "Coding rules for Go: error handling, concurrency, interfaces, testing, performance, security, style/naming, comments, antipatterns. Loaded automatically when working with Go files."
 user-invocable: false
 paths: ["**/*.go", "**/go.mod"]

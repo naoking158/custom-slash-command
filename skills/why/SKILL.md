@@ -1,4 +1,5 @@
 ---
+name: why
 description: Explain why code is the way it is — design rationale, why an option was picked, when and why a regression came in, where a threshold came from — from the commit and PR record, with citations. Use for "why does X work this way", "why did we pick Y", postmortems and regressions, in English or Japanese (なぜこうなっている, 経緯, 理由). Use how for runtime behavior.
 argument-hint: "<question>"
 ---

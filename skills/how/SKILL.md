@@ -1,4 +1,5 @@
 ---
+name: how
 description: Explain how part of a codebase works — subsystem architecture, runtime flow, where something lives, which package or layer owns it — before changing it. Use for "how does X work", code walkthroughs, onboarding to an unfamiliar area, and placement questions ("where should this live", "is this the right layer"), in English or Japanese (どう動いている, 仕組み, どこに置くべき). Use why for motivation and history.
 argument-hint: "<question>"
 ---
