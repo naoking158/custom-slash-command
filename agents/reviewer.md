@@ -5,6 +5,8 @@ tools: Read, Glob, Grep, Write, Bash, Task
 model: inherit
 skills:
   - my:review
+mainAgent: false
+subagent: false
 ---
 
 Execute the `review` skill exactly. If its content is not already in context,

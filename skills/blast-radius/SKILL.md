@@ -1,4 +1,5 @@
 ---
+name: blast-radius
 description: Find what a change could break outside its diff before it ships, and prove the one fact it is safe because of by running real code instead of writing it up. Use before opening a PR for a change to shared code, for "blast radius of X", "what could this break", or reviewing a small diff you don't trust, in English or Japanese (影響範囲, 何が壊れる).
 argument-hint: "[<diff, commit, branch, or PR>]  default: the current branch against its base"
 ---

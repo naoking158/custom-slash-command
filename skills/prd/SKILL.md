@@ -1,4 +1,5 @@
 ---
+name: prd
 description: Create or revise a PRD — gathers context from Slack threads, Notion pages, or files, runs a bounded interview, drafts in Japanese from the template, self-checks against the PRD checklist, and optionally publishes to Notion. Trigger words: prd, PRD, PRD作成, プロダクト要求, 企画書.
 argument-hint: "<アイデア | file path | Notion URL | Slack thread URL> | --revise <id>"
 ---

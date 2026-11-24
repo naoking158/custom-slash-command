@@ -1,4 +1,5 @@
 ---
+name: create-verification-skill
 description: Generate a verification skill (verify-<app>) that launches an app and drives it the way a user does, so agents can prove behavior with evidence. Use for /my:create-verification-skill, "make a verify skill for this repo", or when a project has no scripted way to prove UI, CLI, or service behavior.
 argument-hint: "[<repo path>] [--personal]"
 disable-model-invocation: true
