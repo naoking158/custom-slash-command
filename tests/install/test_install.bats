@@ -202,10 +202,11 @@ assert_links_to_repo() {
   [ "$(readlink "$HOME/.claude/rules/principles.md")" = "$REPO_ROOT/rules/principles.md" ]
 }
 
-@test "install: does not link the Antigravity rules/AGENTS.md for Claude Code" {
+@test "install: does not link the Antigravity-only rules for Claude Code" {
   run "$INSTALL"
   [ "$status" -eq 0 ]
   [ ! -e "$HOME/.claude/rules/AGENTS.md" ]
+  [ ! -e "$HOME/.claude/rules/antigravity.md" ]
 }
 
 @test "install: refuses to overwrite a real rules file" {
