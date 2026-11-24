@@ -1,0 +1,9 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "my",
+  "version": "1.0.0",
+  "description": "Personal toolkit: review, code-reading and PdM skills, outbound guard hook, working principles, and path-triggered language rules.",
+  "author": { "name": "naoking158" },
+  "repository": "https://github.com/naoking158/custom-slash-command",
+  "license": "MIT"
+}
