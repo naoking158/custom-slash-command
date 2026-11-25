@@ -13,10 +13,18 @@
 #     not track.
 # Notion MCP writes get the same leak check (without the git-tracked test).
 #
+# Every push and PR command on the line is judged, each in the directory it
+# runs in: the session cwd, moved by the `cd`s before the command (with the
+# NAME=value assignments made earlier on the line expanded) and by its own
+# `git -C`. A push or PR command whose directory or arguments the line does not
+# show (`cd "$(mktemp -d)"`, a refspec from a command substitution) is denied
+# with the way to rewrite it: judging it in the session cwd would apply another
+# repository's rules.
+#
 # Autonomy modes. A repository is in `strict` mode unless the machine-local
 # config ($MY_AUTONOMY_CONF, default ~/.claude/my-toolkit/autonomy.conf) has a
 # line `ship <owner/name glob>` matching it. The repository is the one a gh
-# command names with -R / --repo, else the origin of the command's workdir.
+# command names with -R / --repo, else the origin of the directory it runs in.
 #   strict: the PR rules above apply and `gh pr merge` (or a merge through the
 #           API) is denied; PRs stay drafts for a human to land.
 #   ship:   non-draft PRs, `gh pr ready` and `gh pr merge` are allowed. Pushes
@@ -25,7 +33,7 @@
 # Emits a PreToolUse permissionDecision JSON on stdout when it objects;
 # stays silent (allow by default) otherwise. Never exits non-zero.
 # Dependencies: bash, jq, grep, sed, git.
-set -u
+set -uf
 
 payload="$(cat)" || exit 0
 tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)" || exit 0
@@ -78,96 +86,164 @@ fi
 cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
 
-# Working directory the command acts on: `git -C <dir>`, else a leading `cd <dir>`, else cwd.
-workdir="$cwd"
-lead_cd="$(printf '%s' "$cmd" | sed -nE '1s#^[[:space:]]*cd[[:space:]]+("([^"]+)"|([^[:space:];&]+)).*#\2\3#p')"
-[ -n "$lead_cd" ] && workdir="${lead_cd/#\~/$HOME}"
-git_c="$(printf '%s' "$cmd" | sed -nE 's#.*git[[:space:]]+-C[[:space:]]+("([^"]+)"|([^[:space:]]+)).*#\2\3#p' | head -n1)"
-[ -n "$git_c" ] && workdir="${git_c/#\~/$HOME}"
-
 # shellcheck source=../lib/autonomy.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/autonomy.sh"
 
-# Command shape: heredoc bodies and quoted strings emptied, so that a message
-# that mentions `gh pr create` or `git push` is not mistaken for running it.
-shape="$(printf '%s' "$cmd" | perl -0777 -pe '
+# The commands on the line that send something out, one per line:
+#   push <TAB> dir <TAB> its arguments, quotes removed and assignments expanded
+#   pr   <TAB> dir <TAB> the gh command, quoted strings emptied
+#   text <TAB> dir       the first command that carries a message
+# dir is where the command runs, "?" when the line does not show it; a push
+# argument the line does not show is "?" as well. Heredoc bodies and quoted
+# strings are set aside first, so that a message that mentions `gh pr create`
+# or `git push` is not mistaken for running it.
+commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
+  my (@lit, @saved, $text_seen);
+  my $depth = 0;
+  my %var = (HOME => $ENV{HOME});
+  my $dir = length $ENV{CWD} ? $ENV{CWD} : undef;
+  my $hold = sub { push @lit, [@_]; "\x00" . $#lit . "\x00" };
   s/(<<-?\s*(["\x27]?)(\w+)\2)([^\n]*)\n.*?\n[ \t]*\3[ \t]*(?=\n|\z)/$1$4/gs;
-  s/"(?:[^"\\]|\\.)*"/""/gs;
-  s/\x27[^\x27]*\x27/\x27\x27/gs;
+  s/"((?:[^"\\]|\\.)*)"|\x27([^\x27]*)\x27/defined $1 ? $hold->($1, 1) : $hold->($2, 0)/gse;
+  s/\\\n/ /g;
+  my $value = sub {
+    my ($word, $out) = ($_[0], "");
+    $word =~ s/^~(?=\/|$)/$ENV{HOME}/;
+    for my $part (split /(\x00\d+\x00)/, $word) {
+      my ($s, $expand) = $part =~ /^\x00(\d+)\x00$/ ? @{ $lit[$1] } : ($part, 1);
+      if ($expand) {
+        return undef if $s =~ /`|\$\(/;
+        my $known = 1;
+        $s =~ s/\$\{(\w+)\}|\$(\w+)/my $n = defined $1 ? $1 : $2; defined $var{$n} ? $var{$n} : do { $known = 0; "" }/ge;
+        return undef if !$known || $s =~ /\$/;
+      }
+      $out .= $s;
+    }
+    $out;
+  };
+  my $enter = sub {
+    my ($base, $path) = ($_[0], $value->($_[1]));
+    return undef unless defined $path && length $path && $path ne "-";
+    $path =~ /^\// ? $path : defined $base ? "$base/$path" : undef;
+  };
+  for my $seg (split /&&|\|\||;|\n|(?<!>)\|&?|(?<![<>|&])&(?![>&])/) {
+    my $nesting = ($seg =~ tr/(//) - ($seg =~ tr/)//);
+    push @saved, [$depth, $dir, {%var}] if $seg =~ s/^\s*\(\s*//;
+    $seg =~ s/^\s+|\s+$//g;
+    $seg =~ s/^(?:(?:then|do|else|time|!|\{)\s+)+//;
+    if ($seg =~ /^(?:export\s+)?(\w+)=(\S*)$/) {
+      $var{$1} = $value->($2);
+    } elsif ($seg =~ /^(?:cd|pushd)(?:\s+(?:-[LP]\s+|--\s+)*([^\s)]+))?(?:\s+\d*[<>]&?\S*)*\s*\)?$/) {
+      $dir = defined $1 ? $enter->($dir, $1) : $ENV{HOME};
+    } elsif ($seg =~ /^(?:cd|pushd|popd)\b/) {
+      $dir = undef;
+    } else {
+      $var{$1} = undef if $seg =~ /^(?:export\s+)?(\w+)=/ || $seg =~ /^for\s+(\w+)\s/;
+      if ($seg =~ /(?<![\w-])git((?:\s+-[Cc]\s+\S+)*)\s+push(?![\w-])([^)]*)/) {
+        my ($opts, $args) = ($1, $2);
+        my $at = $opts =~ /\s-C\s+(\S+)/ ? $enter->($dir, $1) : $dir;
+        my @args = map { my $v = $value->($_); defined $v && $v !~ /\s/ ? $v : "?" } grep { !/^\d*[<>]/ } split " ", $args;
+        print join("\t", "push", defined $at ? $at : "?", "@args"), "\n";
+      }
+      if ($seg =~ /(?<![\w-])(gh\s+(?:pr\s+(?:create|merge|ready)|api)(?![\w-]).*)/) {
+        my $gh = $1;
+        $gh =~ s/\x00(\d+)\x00/$lit[$1][1] ? q("") : "\x27\x27"/ge;
+        $gh =~ s/\s+/ /g;
+        print join("\t", "pr", defined $dir ? $dir : "?", $gh), "\n";
+      }
+      if (!$text_seen && $seg =~ /(?<![\w-])git((?:\s+-[Cc]\s+\S+)*)\s+commit(?![\w-])|(?<![\w-])gh\s+(?:pr|issue)\s+(?:create|comment|edit|review)(?![\w-])/) {
+        my $at = defined $1 && $1 =~ /\s-C\s+(\S+)/ ? $enter->($dir, $1) : $dir;
+        print "text\t", defined $at ? $at : "?", "\n";
+        $text_seen = 1;
+      }
+    }
+    $depth += $nesting;
+    $depth = 0 if $depth < 0;
+    while (@saved && $depth <= $saved[-1][0]) { (undef, $dir, my $v) = @{ pop @saved }; %var = %$v }
+  }
 ')"
 
 # --- PR state ------------------------------------------------------------------
-target_repo="$(printf '%s' "$shape" | sed -nE 's#.*(^|[[:space:]])(-R|--repo)[[:space:]=]+([^[:space:];&|]+).*#\3#p' | head -n1)"
-case "$target_repo" in
-  "") target_repo="$(repo_slug "$workdir")" ;;
-  *\"*|*\'*) target_repo="" ;;
-esac
-mode="$(autonomy_mode "$target_repo")"
-
-if [ "$mode" = "strict" ]; then
-if printf '%s' "$shape" | grep -qE '(^|[^A-Za-z0-9_-])gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'; then
-  decide deny "このリポジトリでは PR をマージしない。draft のまま本人に渡す"
-fi
-if printf '%s' "$shape" | grep -qE 'gh[[:space:]]+api' \
-  && printf '%s' "$cmd" | grep -qiE 'mergePullRequest|enablePullRequestAutoMerge|pulls/[0-9]+/merge'; then
-  decide deny "API 経由でも PR をマージしない"
-fi
-if printf '%s' "$shape" | grep -qE '(^|[^A-Za-z0-9_-])gh[[:space:]]+pr[[:space:]]+ready([[:space:]]|$)'; then
-  decide deny "PR を ready にしない。ready への変更は本人がセルフレビュー後に行う"
-fi
-if printf '%s' "$shape" | grep -qE 'gh[[:space:]]+api' \
-  && printf '%s' "$cmd" | grep -qiE 'markPullRequestReadyForReview|"?draft"?[[:space:]]*[:=][[:space:]]*false'; then
-  decide deny "API 経由でも PR を ready にしない"
-fi
-if printf '%s' "$shape" | grep -qE '(^|[^A-Za-z0-9_-])gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'; then
-  create_seg="$(printf '%s' "$shape" | sed -nE 's#.*(gh[[:space:]]+pr[[:space:]]+create.*)#\1#p' | head -n1)"
-  if printf '%s' "$create_seg" | grep -qE -- '--draft=(false|0)'; then
-    decide deny "PR は draft で作る（--draft=false は使わない）"
-  fi
-  if ! printf '%s' "$create_seg" | grep -qE -- '(^|[[:space:]])(--draft|-d)([[:space:]=]|$)'; then
-    decide deny "PR は draft で作る。gh pr create に --draft を付ける"
-  fi
-fi
-fi
+# judge_pr DIR COMMAND — deny what a strict repository does not allow.
+judge_pr() {
+  local dir="$1" gh="$2" reason="" repo
+  case "$gh" in
+    "gh pr merge"|"gh pr merge "*) reason="このリポジトリでは PR をマージしない。draft のまま本人に渡す" ;;
+    "gh pr ready"|"gh pr ready "*) reason="PR を ready にしない。ready への変更は本人がセルフレビュー後に行う" ;;
+    "gh pr create"|"gh pr create "*)
+      if printf '%s' "$gh" | grep -qE -- '--draft=(false|0)'; then
+        reason="PR は draft で作る（--draft=false は使わない）"
+      elif ! printf '%s' "$gh" | grep -qE -- '(^|[[:space:]])(--draft|-d)([[:space:]=]|$)'; then
+        reason="PR は draft で作る。gh pr create に --draft を付ける"
+      fi ;;
+    "gh api"|"gh api "*)
+      if printf '%s' "$cmd" | grep -qiE 'mergePullRequest|enablePullRequestAutoMerge|pulls/[0-9]+/merge'; then
+        reason="API 経由でも PR をマージしない"
+      elif printf '%s' "$cmd" | grep -qiE 'markPullRequestReadyForReview|"?draft"?[[:space:]]*[:=][[:space:]]*false'; then
+        reason="API 経由でも PR を ready にしない"
+      fi ;;
+  esac
+  [ -n "$reason" ] || return 0
+  repo="$(printf '%s' "$gh" | sed -nE 's#.*(^|[[:space:]])(-R|--repo)[[:space:]=]+([^[:space:]]+).*#\3#p')"
+  case "$repo" in
+    "")
+      [ "$dir" != "?" ] || decide deny "gh を実行するリポジトリを判定できない。-R <owner/name> を付ける"
+      repo="$(repo_slug "$dir")" ;;
+    *\"*|*\'*) repo="" ;;
+  esac
+  [ "$(autonomy_mode "$repo")" = "strict" ] && decide deny "$reason"
+  return 0
+}
 
 # --- git push ------------------------------------------------------------------
-push_seg="$(printf '%s' "$shape" | grep -oE '(^|[^A-Za-z0-9_-])git([[:space:]]+-C[[:space:]]+[^[:space:]]+)?[[:space:]]+push([[:space:]][^;&|]*)?' | head -n1)"
-if [ -n "$push_seg" ]; then
-  args="$(printf '%s' "$push_seg" | sed -E 's#.*push##')"
-  protected="main master"
-  default_ref="$(git -C "$workdir" symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null)"
-  [ -n "$default_ref" ] && protected="$protected ${default_ref##*/}"
-  positional=()
-  for tok in $args; do
+# judge_push DIR ARGS — deny force pushes and pushes to the default branch.
+judge_push() {
+  local dir="$1" tok cur dst p default_ref protected="main master"
+  local unknown_dir="git push を実行する directory を判定できない。cd <絶対パス> で始めるか git -C <絶対パス> push と書く"
+  local -a positional=() dests=()
+  for tok in $2; do
     case "$tok" in
       -f|--force|--force-with-lease|--force-with-lease=*|--force-if-includes|--mirror|--all|--delete|-d|--prune)
         decide deny "git push $tok は使わない（取り消せない、または既定の branch に及ぶ）" ;;
       --tags) decide ask "tag の push は deploy を起こしうる" ;;
+      "?") decide deny "git push の引数を判定できない。remote と branch を直接書く" ;;
       -*) ;;
       +*) decide deny "+ 付きの refspec は force-push になる" ;;
       *) positional+=("$tok") ;;
     esac
   done
-  dests=()
+  [ "$dir" != "?" ] || decide deny "$unknown_dir"
+  default_ref="$(git -C "$dir" symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null)"
+  [ -n "$default_ref" ] && protected="$protected ${default_ref##*/}"
   if [ "${#positional[@]}" -ge 2 ]; then
-    for spec in "${positional[@]:1}"; do
-      case "$spec" in :*) decide deny "refspec $spec は remote の branch を消す" ;; esac
-      dst="${spec##*:}"; dst="${dst#refs/heads/}"
-      [ "$dst" = "HEAD" ] && dst="$(git -C "$workdir" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+    for tok in "${positional[@]:1}"; do
+      case "$tok" in :*) decide deny "refspec $tok は remote の branch を消す" ;; esac
+      dst="${tok##*:}"; dst="${dst#refs/heads/}"
+      [ "$dst" = "HEAD" ] && dst="$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null)"
       dests+=("$dst")
     done
   else
-    cur="$(git -C "$workdir" rev-parse --abbrev-ref HEAD 2>/dev/null)"
-    [ -n "$cur" ] || decide ask "push 先の branch を判定できない"
+    cur="$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+    [ -n "$cur" ] || decide deny "$unknown_dir"
     [ "$cur" = "HEAD" ] && decide deny "detached HEAD からは push しない"
     dests+=("$cur")
   fi
-  for d in "${dests[@]}"; do
+  for dst in "${dests[@]}"; do
     for p in $protected; do
-      [ "$d" = "$p" ] && decide deny "既定の branch（${d}）へは push しない。作業 branch から PR を出す"
+      [ "$dst" = "$p" ] && decide deny "既定の branch（${dst}）へは push しない。作業 branch から PR を出す"
     done
   done
-fi
+  return 0
+}
+
+text_dir=""
+while IFS=$'\t' read -r kind dir rest; do
+  case "$kind" in
+    pr) judge_pr "$dir" "$rest" ;;
+    push) judge_push "$dir" "$rest" ;;
+    text) [ "$dir" = "?" ] || text_dir="$dir" ;;
+  esac
+done <<<"$commands"
 
 # --- outbound text ---------------------------------------------------------------
 # Only the outbound commands themselves carry text out. Each one runs from its
@@ -178,8 +254,7 @@ text="$(printf '%s' "$cmd" | perl -0777 -ne '
   my @lit;
   my $hold = sub { push @lit, $_[0]; "\x00" . $#lit . "\x00" };
   s/(<<-?\s*(["\x27]?)(\w+)\2)([^\n]*)\n(.*?)\n[ \t]*\3[ \t]*(?=\n|\z)/$1 . $hold->($5) . $4/gse;
-  s/"(?:[^"\\]|\\.)*"/$hold->($&)/gse;
-  s/\x27[^\x27]*\x27/$hold->($&)/gse;
+  s/"(?:[^"\\]|\\.)*"|\x27[^\x27]*\x27/$hold->($&)/gse;
   s/\\\n/ /g;
   my $out = qr/(?<![\w-])git(?:\s+-[Cc]\s+\S+)*\s+commit(?![\w-])|(?<![\w-])gh\s+(?:pr|issue)\s+(?:create|comment|edit|review)(?![\w-])/;
   for my $seg (split /&&|\|\||;|\n|(?<![<>|])&(?![>&])/) {
@@ -195,7 +270,7 @@ text="$(printf '%s' "$cmd" | perl -0777 -ne '
 if [ -n "$text" ]; then
   for f in $(printf '%s' "$text" | grep -oE -- '(--body-file|--file|-F)[[:space:]=]+[^[:space:]]+' | sed -E 's#^(--body-file|--file|-F)[[:space:]=]+##'); do
     f="${f%\"}"; f="${f#\"}"; f="${f%\'}"; f="${f#\'}"
-    case "$f" in /*|~*) ;; *) f="$workdir/$f" ;; esac
+    case "$f" in /*|~*) ;; *) f="$text_dir/$f" ;; esac
     f="${f/#\~/$HOME}"
     [ -f "$f" ] && text="$text"$'\n'"$(cat "$f")"
   done
@@ -203,7 +278,7 @@ if [ -n "$text" ]; then
   text="$(printf '%s' "$text" \
     | sed -E 's#-C[[:space:]]+("[^"]*"|[^[:space:]]+)##g' \
     | sed -E 's#(--body-file|--file|-F)[[:space:]=]+[^[:space:]]+##g')"
-  reason="$(leak_reason "$text" "$workdir")"
+  reason="$(leak_reason "$text" "$text_dir")"
   [ -n "$reason" ] && decide deny "$reason"
 fi
 
