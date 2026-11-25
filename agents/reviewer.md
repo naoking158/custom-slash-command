@@ -1,7 +1,13 @@
 ---
 name: reviewer
 description: "Review artifacts (specs, plans, code, commits, PRs) against checklists. Use for review, レビュー, 品質チェック tasks."
-tools: Read, Glob, Grep, Write, Bash, Task
+tools:
+  - Read
+  - Glob
+  - Grep
+  - Write
+  - Bash
+  - Task
 model: inherit
 skills:
   - my:review

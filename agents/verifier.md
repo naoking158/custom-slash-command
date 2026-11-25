@@ -1,7 +1,12 @@
 ---
 name: verifier
 description: Independent judge that proves or disproves a change by running the real app through the repo's verify-<app> skill. Use after implementing a user-visible change in a repository that has a verify-<app> skill, before opening a draft PR. Give it the checkout path and the completion criteria. Returns PASS, FAIL, or BLOCKED with evidence; never edits code.
-tools: Bash, Read, Glob, Grep, Skill
+tools:
+  - Bash
+  - Read
+  - Glob
+  - Grep
+  - Skill
 mainAgent: false
 subagent: false
 ---
