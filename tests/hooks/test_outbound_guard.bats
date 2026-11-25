@@ -45,6 +45,18 @@ decision() {
   printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision'
 }
 
+# payload_in DIR COMMAND — a Bash payload whose session cwd is DIR.
+payload_in() {
+  jq -cn --arg c "$2" --arg d "$1" '{tool_name:"Bash",cwd:$d,tool_input:{command:$c}}'
+}
+
+# main_and_worktree — put REPO on main and add WT, a worktree on feature/x.
+main_and_worktree() {
+  git -C "$REPO" checkout -q main
+  WT="$TMP/wt"
+  git -C "$REPO" worktree add -q "$WT" feature/x
+}
+
 # --- PR state ------------------------------------------------------------------
 
 @test "gh pr create without --draft is denied" {
@@ -143,6 +155,89 @@ decision() {
   [ "$(decision)" = "deny" ]
 }
 
+@test "bare push after an assignment and cd is judged in that directory" {
+  main_and_worktree
+  run_guard "$(bash_payload "W=$WT; cd \$W && git add f && git commit -q -m \"msg\" && git push -q && echo pushed")"
+  [ -z "$output" ]
+}
+
+@test "bare push after a later cd into a checkout on the default branch is denied" {
+  main_and_worktree
+  run_guard "$(payload_in "$WT" "M=$REPO; cd \"\$M\" && git push -q")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$WT" "export X=1; cd $REPO && git push -q")"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "git -C with a relative path is resolved from the preceding cd" {
+  main_and_worktree
+  run_guard "$(payload_in / "cd $TMP && git -C wt push -q")"
+  [ -z "$output" ]
+  run_guard "$(payload_in / "cd $TMP && git -C repo push -q")"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "a cd after the push does not move it" {
+  main_and_worktree
+  run_guard "$(payload_in "$WT" "git push -q && cd $REPO && git fetch -q")"
+  [ -z "$output" ]
+}
+
+@test "a cd inside a subshell ends with the subshell" {
+  main_and_worktree
+  run_guard "$(payload_in "$WT" "(cd $REPO && make) ; git push -q")"
+  [ -z "$output" ]
+  run_guard "$(payload_in "$WT" "(cd $REPO && git push -q)")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$WT" "(cd $REPO && echo \$(true && true) && git push -q)")"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "a push whose directory cannot be followed is denied" {
+  run_guard "$(bash_payload 'cd "$(mktemp -d)" && git push -q origin feature/x')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "every push on the line is judged" {
+  run_guard "$(bash_payload 'git push origin feature/x && git push origin main')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'git push origin feature/x; git push --force origin feature/x')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "git -c before push is still a push" {
+  run_guard "$(bash_payload 'git -c credential.helper=x push origin main')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'git -c credential.helper=x push origin feature/x')"
+  [ -z "$output" ]
+}
+
+@test "a quoted refspec is read" {
+  run_guard "$(bash_payload 'git push origin "main"')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload "git push origin 'HEAD:main'")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'git push origin "feature/x"')"
+  [ -z "$output" ]
+}
+
+@test "a refspec held in a variable is read when the line assigns it" {
+  run_guard "$(bash_payload 'B=main; git push origin "$B"')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'B=feature/x; git push origin $B')"
+  [ -z "$output" ]
+}
+
+@test "a push after a single-quoted string holding one double quote is still judged" {
+  run_guard "$(bash_payload "grep -n 'x \"' f.txt && git commit -q -m \"msg\" && git push origin main 2>&1 | grep -v '^remote'")"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "a push argument the line does not show is denied" {
+  run_guard "$(bash_payload 'git push origin "$(git branch --show-current)"')"
+  [ "$(decision)" = "deny" ]
+}
+
 # --- outbound text ---------------------------------------------------------------
 
 @test "commit message with a review finding ID is denied" {
@@ -238,6 +333,11 @@ decision() {
   [ "$(decision)" = "deny" ]
 }
 
+@test "a path in a message after a single-quoted string holding one double quote is denied" {
+  run_guard "$(bash_payload "grep -n 'x \"' f.txt && git commit -q -m \"see /Users/me/notes.md\"")"
+  [ "$(decision)" = "deny" ]
+}
+
 @test "an env prefix before the commit is not a leak" {
   run_guard "$(bash_payload 'GIT_INDEX_FILE=/Users/me/idx git commit -m "add guard"')"
   [ -z "$output" ]
@@ -320,4 +420,51 @@ decision() {
   git -C "$WORK" remote add origin https://github.com/work/app.git
   run_guard "$(bash_payload "cd $WORK && gh pr merge 3")"
   [ "$(decision)" = "deny" ]
+}
+
+@test "ship cwd: a later cd into a strict repo is judged as that repo" {
+  ship_repo
+  WORK="$TMP/work"
+  git init -q -b main "$WORK"
+  git -C "$WORK" remote add origin https://github.com/work/app.git
+  run_guard "$(bash_payload "S=$WORK; cd \$S && gh pr merge 3")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload "export X=1; cd $WORK && gh pr create --title t --body b")"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "strict cwd: a later cd into a ship repo is judged as that repo" {
+  SHIP="$TMP/ship"
+  git init -q -b main "$SHIP"
+  git -C "$SHIP" remote add origin git@github.com:me/app.git
+  echo 'ship me/*' >"$MY_AUTONOMY_CONF"
+  run_guard "$(bash_payload "S=$SHIP; cd \$S && gh pr merge 3 --squash")"
+  [ -z "$output" ]
+}
+
+@test "a PR command whose repository cannot be followed is denied unless -R names it" {
+  ship_repo
+  run_guard "$(bash_payload 'cd "$(mktemp -d)" && gh pr merge 3')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'cd "$(mktemp -d)" && gh pr merge 3 -R me/app')"
+  [ -z "$output" ]
+  run_guard "$(bash_payload 'cd "$(mktemp -d)" && gh pr view 3')"
+  [ -z "$output" ]
+}
+
+@test "strict: every PR command on the line is judged" {
+  run_guard "$(bash_payload 'gh pr create --title a --body b; gh pr create --draft --title c --body d')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "a commit in a directory that cannot be followed is not denied for that" {
+  run_guard "$(bash_payload 'D="$(mktemp -d)"; cd "$D" && git init -q && git commit -q --allow-empty -m init')"
+  [ -z "$output" ]
+}
+
+@test "the tracked-docs test runs where the commit runs" {
+  run_guard "$(payload_in / "X=1; cd $REPO && git commit -m \"plan is in docs/plans/features/x.md\"")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in / "X=1; cd $REPO && git commit -m \"record the result in docs/log/tracked.md\"")"
+  [ -z "$output" ]
 }
