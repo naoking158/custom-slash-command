@@ -145,7 +145,8 @@ it into `~/.gemini/config/plugins/`.
 | `rules/principles.md` | Always on, through `rules/AGENTS.md` |
 | Outbound guard | Root `hooks.json` → `antigravity-guard.sh` on `run_command`. The guard's `ask` becomes `force_ask`; the Notion write check is not wired |
 | Agents | Hidden (`mainAgent: false`, `subagent: false`): their tool lists use Claude Code tool names. Skills that launch one run the step in the same conversation |
-| `/my:autopilot`, `/my:retro`, two-pass review | Not supported: they depend on Claude Code agents, background commands, or transcripts |
+| `/my:autopilot`, `/my:retro` | Not supported: they depend on Claude Code agents, background commands, or transcripts |
+| Two-pass diff review | Runs both passes in one conversation, so the first pass is not blind to the plan; use `--no-screen` for a single pass |
 | `SessionEnd` / `UserPromptSubmit` capture | Not wired: Antigravity has no matching event |
 
 This setup follows the Antigravity docs and has not been run in Antigravity yet.
