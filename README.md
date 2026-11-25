@@ -5,6 +5,8 @@ with a diff review screen, an independent verifier agent, code-reading skills
 (how / why / blast-radius), a generator for app verification skills, a guard
 hook for pushes and outbound text, PdM skills, a session-knowledge loop
 (learn / retro), working principles, and path-triggered language rules.
+The same repository also loads in Google Antigravity as a plugin (see
+[Antigravity](#antigravity)).
 
 ## Skills
 
@@ -42,6 +44,10 @@ automatically when matching files are read — no invocation needed.
 | `PreToolUse` | `outbound-guard.sh` | Denies force-pushes and pushes to the default branch; in strict repos also non-draft PRs, marking a PR ready and merging; blocks local paths, review IDs and untracked `docs/` paths in commit messages, PR/issue text and Notion writes |
 | `SessionEnd` | `session-end.sh` | Appends a session index for `/my:retro` |
 | `UserPromptSubmit` | `prompt-capture.sh` | Queues corrections for `/my:retro` |
+
+These are Claude Code hooks (`hooks/hooks.json`). Antigravity reads the root
+`hooks.json` instead, which runs `outbound-guard.sh` on `run_command` through
+`antigravity-guard.sh`.
 
 ## Autonomy modes
 
@@ -93,7 +99,15 @@ off the repository so it never names private repositories.
 ## Rules
 
 `rules/*.md` are working principles that apply in every session. Plugins
-cannot ship rules, so `install.sh` links each file into `~/.claude/rules/`.
+cannot ship rules, so `install.sh` links each file into `~/.claude/rules/`,
+except the two Antigravity-only files:
+
+- `rules/AGENTS.md` is a symlink to `principles.md`. Antigravity loads a
+  plugin's `rules/AGENTS.md` as an always-on rule. The principles themselves
+  carry no frontmatter, because Claude Code stops loading a rule whose
+  frontmatter has no `paths`.
+- `rules/antigravity.md` tells Antigravity how to read the Claude Code terms in
+  the skills (`${CLAUDE_SKILL_DIR}`, `$ARGUMENTS`, tool names, agent launches).
 
 ## Installation
 
@@ -109,13 +123,38 @@ The installer creates these symlinks and cleans up symlinks from the old
 | Path | State |
 |------|-------|
 | `~/.claude/skills/my` → `<repo>` | created (skills-directory plugin, referenced in place — repo edits apply live) |
-| `~/.claude/rules/<f>.md` → `<repo>/rules/<f>.md` | created, one per rules file |
+| `~/.gemini/config/plugins/my` → `<repo>` | created (Antigravity plugin, referenced in place) |
+| `~/.claude/rules/<f>.md` → `<repo>/rules/<f>.md` | created, one per rules file except `AGENTS.md` and `antigravity.md` |
 | `~/.prompts`, `~/.claude/commands`, `~/.claude/agents` | removed if they point into this repo (legacy layout) |
 
-Restart Claude Code (or `/reload-plugins`) after installing. Verify with
+Restart Claude Code (or `/reload-plugins`) and start a new Antigravity
+conversation after installing. Verify with
 `./scripts/install.sh --check`; remove with `--uninstall`. The installer
 never overwrites real files or foreign symlinks (`--force` retargets a stray
 symlink).
+
+## Antigravity
+
+The repository is also an Antigravity plugin: `.antigravity-plugin/plugin.json`
+names it `my`, so the skills keep their `my:<skill>` names. `install.sh` links
+it into `~/.gemini/config/plugins/`.
+
+| Part | In Antigravity |
+|------|----------------|
+| Skills | Load from `skills/`; `rules/antigravity.md` maps the Claude Code terms |
+| `rules/principles.md` | Always on, through `rules/AGENTS.md` |
+| Outbound guard | Root `hooks.json` → `antigravity-guard.sh` on `run_command`. The guard's `ask` becomes `force_ask`; the Notion write check is not wired |
+| Agents | Hidden (`mainAgent: false`, `subagent: false`): their tool lists use Claude Code tool names. Skills that launch one run the step in the same conversation |
+| `/my:autopilot`, `/my:retro`, two-pass review | Not supported: they depend on Claude Code agents, background commands, or transcripts |
+| `SessionEnd` / `UserPromptSubmit` capture | Not wired: Antigravity has no matching event |
+
+This setup follows the Antigravity docs and has not been run in Antigravity yet.
+To check it:
+
+```bash
+agy plugin validate ~/.gemini/config/plugins/my
+agy plugin list        # my should be enabled, with my:* skills
+```
 
 ## Usage
 
@@ -209,6 +248,7 @@ directory. Text promoted into the repo passes `redact.sh` first.
 ```
 custom-slash-command/
 ├── .claude-plugin/plugin.json     # plugin manifest (namespace "my")
+├── .antigravity-plugin/plugin.json # Antigravity plugin manifest (name "my")
 ├── skills/                        # one directory per skill (SKILL.md + assets)
 │   ├── review/                    # + template.md, checklists/, review-json.md,
 │   │                              #   scripts/ (diff-hunks, build-screen, render-report),
@@ -221,8 +261,10 @@ custom-slash-command/
 │   ├── retro/                     # + scripts/redact.sh, redact.denylist
 │   └── rules-{go,rails,react,typescript}/          # SKILL.md index + references/
 ├── agents/                        # reviewer, diff-reviewer, verifier
-├── rules/                         # working principles, linked into ~/.claude/rules/
+├── rules/                         # working principles, linked into ~/.claude/rules/;
+│                                  #   AGENTS.md, antigravity.md for Antigravity only
 ├── hooks/hooks.json               # PreToolUse guard, SessionEnd index, UserPromptSubmit capture
+├── hooks.json                     # Antigravity: PreToolUse guard on run_command
 ├── scripts/                       # install.sh, lib/, hooks/, pdm/ (scheduling)
 ├── tests/                         # bats: hooks / install / redact / review-screen / toolkit
 └── docs/                          # design notes and reviews of this repo itself
