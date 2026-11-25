@@ -5,7 +5,8 @@
 # Contract under test:
 #   - Every skill names itself after its folder (Antigravity requires it).
 #   - Agents are not offered to Antigravity: their tool lists use Claude Code
-#     tool names, which can hang an Antigravity subagent.
+#     tool names, which can hang an Antigravity subagent. Their tools are a
+#     YAML list; Antigravity skips an agent whose tools is a string.
 #   - Antigravity's always-on rule rules/AGENTS.md carries the principles, and
 #     the principles file has no frontmatter (Claude Code drops a rule whose
 #     frontmatter lacks paths).
@@ -32,6 +33,7 @@ frontmatter() {
   for f in "$REPO_ROOT"/agents/*.md; do
     frontmatter "$f" | grep -qx 'mainAgent: false' || { echo "mainAgent: $f"; return 1; }
     frontmatter "$f" | grep -qx 'subagent: false' || { echo "subagent: $f"; return 1; }
+    ! frontmatter "$f" | grep -qE '^tools: .+' || { echo "tools must be a YAML list: $f"; return 1; }
   done
 }
 
