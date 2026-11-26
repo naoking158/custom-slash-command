@@ -99,13 +99,20 @@ report. Skip items marked `[web]` when the project has no web/API surface.
 
 ### Check findings against what surrounds the diff
 
-A diff alone hides fixes that live elsewhere. Before keeping a finding on a
-diff target, check it here: in Pass 2, in a one-pass review, and with
-`--no-screen`. Never hand any of this to the Pass 1 `diff-reviewer`; its
-blindness is the point.
+A diff alone hides what lives elsewhere: a fix that already landed, or a
+change that breaks what the diff assumes. Check both here, in Pass 2, in a
+one-pass review, and with `--no-screen`. Never hand any of this to the Pass 1
+`diff-reviewer`; its blindness is the point.
 
 - `pr:` targets: read the base branch. When the base is another PR's branch
   (`gh pr view {number} --json baseRefName`), read that PR's diff too.
+- `pr:` targets: the base keeps moving while the PR is open. Fetch it and read
+  what landed after the PR branched, in the files the PR changes or calls into
+  (`git log {head}..origin/{base} -- {files}`), and list the open PRs that
+  touch those files (`gh pr list --json number,title,files`). A change that
+  merges without a text conflict can still break what the PR assumes: a
+  function whose meaning changed, a caller added elsewhere. Report that as a
+  finding that names the commit or PR.
 - Code the diff relies on but does not contain (a submodule, a vendored or
   generated copy, another repository): read the upstream default branch, not
   the pinned copy, and name the version you read in the finding.
