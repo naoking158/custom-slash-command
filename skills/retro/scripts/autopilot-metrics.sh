@@ -6,16 +6,20 @@
 #
 # Metrics, over the period --since..--until (inclusive; Nd is the N days ending
 # on --until; default the last 28 days):
-#   1. review rounds per change     autopilot progress logs
-#   2. verify outcomes              autopilot progress logs
+#   1. review rounds per change     autopilot tasks.tsv or progress logs
+#   2. verify outcomes              autopilot tasks.tsv or progress logs
 #   3. human pushback on auto/ PRs  gh
 #   4. reverts of auto/ PRs         git history of each --checkout
 #
 # Progress logs live in <state-dir>/<owner>-<name>/<goal>/ (default state dir
 # ~/.local/state/autopilot). A goal is in the period when the date on the
 # `Started:` line of its goal.md is; its repository is the `Repository:` line.
-# Only task heading sections (`## Task 2: ...`, `### T3 ...`, `### 1. ...`) are
-# read. Within a task, the review count is the largest of `review rN`, `rN:`,
+# A goal whose tasks.tsv (written by autopilot's log-task.sh) has at least one
+# data row is read from it: one task per task_id, the last row winning, with
+# review_rounds as the count and verify as the outcome (fail and unknown values
+# are 不明). Otherwise progress.md is read, where
+# only task heading sections (`## Task 2: ...`, `### T3 ...`, `### 1. ...`) count.
+# Within a task, the review count is the largest of `review rN`, `rN:`,
 # `round N`, `N rounds`, `review N 回` on lines mentioning review; the verify
 # outcome comes from lines starting with `verify`, in the order unverified
 # (unverified / skill なし / スキルなし), BLOCKED, FAIL then PASS, PASS.
@@ -80,9 +84,10 @@ repo_wanted() {
 # parse_goal <goal dir> — one JSON object: the goal's repository, start date,
 # whether it had task headings, and one {rounds, verify} per task.
 parse_goal() {
-  local goal_md="$1/goal.md" progress="$1/progress.md" head=""
+  local goal_md="$1/goal.md" progress="$1/progress.md" tsv="$1/tasks.tsv" head="" rows=""
   [ -f "$goal_md" ] && head="$(cat "$goal_md")"
-  { [ -f "$progress" ] && cat "$progress"; } | jq -Rs --arg goal "$head" '
+  [ -f "$tsv" ] && rows="$(cat "$tsv")"
+  { [ -f "$progress" ] && cat "$progress"; } | jq -Rs --arg goal "$head" --arg tsv "$rows" '
     def heading_level: capture("^(?<h>#+) ").h | length;
     def task_number:
       (capture("^#+ +(?:[Tt]ask|T) *(?<n>[0-9]+)") // capture("^#+ +(?<n>[0-9]+)\\.") // null)
@@ -112,10 +117,27 @@ parse_goal() {
           elif .cur then .tasks[.cur] += [$l]
           else . end)
       | .tasks ) as $tasks
+    | ( $tsv | split("\n") | map(rtrimstr("\r") | select(test("\\S")) | split("\t") | map(ltrimstr("\u0027")))
+        | (.[0] // []) as $h
+        | ($h | index("task_id")) as $id
+        | ($h | index("review_rounds")) as $rc
+        | ($h | index("verify")) as $vc
+        | if $id == null then []
+          else reduce .[1:][] as $row ({};
+              def cell($c): if $c == null then "" else $row[$c] // "" end;
+              cell($id) as $k
+              | if $k == "" then .
+                else .[$k] = {
+                  rounds: (cell($rc) | if test("^[0-9]+$") then tonumber else null end),
+                  verify: (cell($vc) | if IN("pass", "pass_after_fix", "blocked", "unverified") then . else "unknown" end) }
+                end)
+            | [ .[] ]
+          end ) as $logged
     | {
         repo: ($goal | capture("Repository: *(?<r>[^ \\n]+)").r // null),
         started: ($goal | capture("Started: *(?<d>[0-9]{4}-[0-9]{2}-[0-9]{2})").d // null),
-        tasks: [ $tasks[] | {rounds: rounds, verify: verify} ]
+        tasks: (if ($logged | length) > 0 then $logged
+                else [ $tasks[] | {rounds: rounds, verify: verify} ] end)
       }'
 }
 
