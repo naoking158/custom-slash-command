@@ -5,7 +5,7 @@
 # Contract under test:
 #   - A conversation is indexed in sessions.jsonl once, however many turns end.
 #   - The turn's user input reaches prompt-capture.sh, so a correction is
-#     queued with the conversation as its session.
+#     queued with the conversation as its session, once per conversation.
 #   - The hook prints {"decision":""} and exits 0, even on unreadable input.
 
 setup() {
@@ -45,6 +45,12 @@ run_hook() {
   run_hook "$(stop_payload '違う、そうじゃなくて list_dir を使って')"
   [ "$(jq -r .session_id "$MY_TOOLKIT_DATA/corrections.jsonl")" = "conv-1" ]
   [ "$(jq -r .prompt "$MY_TOOLKIT_DATA/corrections.jsonl")" = "違う、そうじゃなくて list_dir を使って" ]
+}
+
+@test "a turn ending twice for one input (a background command finished) queues it once" {
+  run_hook "$(stop_payload '違う、そうじゃなくて list_dir を使って')"
+  run_hook "$(stop_payload '違う、そうじゃなくて list_dir を使って')"
+  [ "$(wc -l <"$MY_TOOLKIT_DATA/corrections.jsonl")" -eq 1 ]
 }
 
 @test "an ordinary prompt is not queued" {

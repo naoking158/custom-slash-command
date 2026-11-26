@@ -3,7 +3,8 @@
 # registers it as an Antigravity PreToolUse hook.
 #
 # Contract under test:
-#   - A run_command call that outbound-guard.sh objects to gets its decision
+#   - A run_command call, or a manage_task send_input whose Input is a
+#     command, that outbound-guard.sh objects to gets its decision
 #     and reason back in Antigravity's {decision, reason} shape; "ask" becomes
 #     "force_ask" so an "Always Allow" setting cannot skip it.
 #   - Every other call, and unreadable input, gets {"decision":"allow"}.
