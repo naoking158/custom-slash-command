@@ -66,6 +66,9 @@ Data dir: `data="${MY_TOOLKIT_DATA:-$HOME/.claude/my-toolkit}"`.
   sessions) supporting it.
 - Rank: `mistake` clusters first, then `gap`, `friction`, `pattern`,
   `question`; within a group by recurrence desc, date desc.
+- **Six-month filter**: keep only signals that will still hold in six months
+  and would change what a future agent does. Drop one-off events tied to a
+  specific commit SHA, a count, or a temporary version.
 - Corrections that concern *project* behavior rather than toolkit assets
   are noted at the end as "not toolkit-related" — suggest the user let auto
   memory keep them; do not fabricate a toolkit change from them.
@@ -83,6 +86,12 @@ instruction → skill → rule → hook):
 | Hook | The rule must be deterministic, not advisory | propose an entry for `{toolkit_repo}/hooks/hooks.json` + script under `scripts/hooks/` |
 | User CLAUDE.md | Needed in EVERY session, toolkit-independent | propose text for `~/.claude/CLAUDE.md` (apply only with approval) |
 | Handoff | Structural change too big for an inline edit | write the proposed change (target files, steps, reason) into the report and stop; the user starts it as a separate task |
+
+When a `my:*` skill already covered the case but did not trigger (or
+triggered where it should not), classify the cluster as a **trigger fix**:
+adjust that skill's frontmatter `description` (trigger phrases, where it
+applies and where it does not) instead of restating its content in another
+skill or a general rule.
 
 Promotion is not only additive. When a cluster shows an existing rule
 causing the friction (asking for approval nobody needs, refusing a
