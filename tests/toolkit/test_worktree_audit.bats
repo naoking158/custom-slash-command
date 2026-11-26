@@ -194,6 +194,37 @@ audit() {
   [ "$(field "$TMP/target" BUCKET)" = "verify-recent-chat" ]
 }
 
+@test "a session that only cds into the worktree makes verify-recent-chat" {
+  add_wt cdonly
+  git -C "$REPO" merge -q --ff-only cdonly
+  local d="$HOME/.claude/projects/$(printf '%s' "$REPO" | sed 's/[^A-Za-z0-9]/-/g')"
+  mkdir -p "$d"
+  printf '{"command":"cd %s && ls"}\n' "$TMP/cdonly" >"$d/session.jsonl"
+  audit
+  [ "$(field "$TMP/cdonly" BUCKET)" = "verify-recent-chat" ]
+}
+
+@test "detached head with commits not in the base is review" {
+  add_wt detached
+  git -C "$TMP/detached" checkout -q --detach
+  git -C "$TMP/detached" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m loose
+  audit
+  [ "$(field "$TMP/detached" REMOTE)" = "detached" ]
+  [ "$(field "$TMP/detached" MERGED)" = "no" ]
+  [ "$(field "$TMP/detached" BUCKET)" = "review" ]
+}
+
+@test "an installed orca that does not answer puts every worktree in review" {
+  add_wt quiet
+  git -C "$REPO" merge -q --ff-only quiet
+  printf '#!/bin/bash\necho '"'"'{"ok":true,"result":{"runtime":{"reachable":false}}}'"'"'\n' >"$TMP/bin/orca"
+  chmod +x "$TMP/bin/orca"
+  audit
+  [[ "$output" == *"unavailable"* ]]
+  [ "$(field "$TMP/quiet" ORCA)" = "?" ]
+  [ "$(field "$TMP/quiet" BUCKET)" = "review" ]
+}
+
 @test "unmerged without PR or session is review" {
   add_wt lone
   audit

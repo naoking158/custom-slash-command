@@ -12,8 +12,8 @@
 #
 # Buckets, first match wins: hold-wip (tracked edits), hold-active (Orca pinned
 # or active), hold-open-pr, verify-recent-chat (a session in the last 4 days),
-# review (Orca list truncated and this worktree not in it, or git status
-# failed), safe (merged into the base, or its PR merged or closed and the
+# review (Orca state unknown: orca installed but unreachable, or its list
+# truncated without this worktree; or git status failed), safe (merged into the base, or its PR merged or closed and the
 # worktree has no commit beyond the PR's head), review.
 #
 # Exit: 0 table printed, 2 bad option, not a git repository or no base ref.
@@ -61,6 +61,9 @@ canon() { if [ -d "$1" ]; then (cd "$1" && pwd -P); else printf '%s\n' "$1"; fi;
 # slug PATH — the Claude Code projects directory name for a working directory.
 slug() { printf '%s' "$1" | sed 's/[^A-Za-z0-9]/-/g'; }
 
+# regex_quote TEXT — TEXT with ERE metacharacters escaped.
+regex_quote() { printf '%s' "$1" | sed 's/[][\.*^$+?(){}|]/\\&/g'; }
+
 # newest_ts FILE... on stdin — the largest mtime among the listed files, or 0.
 newest_ts() {
   local f t max=0
@@ -84,15 +87,19 @@ if command -v gh >/dev/null 2>&1 \
     state: (if .isDraft == true and .state == "OPEN" then "draft" else (.state | ascii_downcase) end)}]' >"$tmp/prs.json"
 fi
 
-# Orca state by canonical path, fetched once. Only when the runtime answers.
-orca_truncated=no
+# Orca state by canonical path, fetched once. Without orca the column is -;
+# with an orca that does not answer, every worktree's Orca state is unknown.
+orca_unknown=no
 : >"$tmp/orca.tsv"
-if command -v orca >/dev/null 2>&1 \
-  && orca status --json 2>/dev/null | jq -e '.ok == true and .result.runtime.reachable == true' >/dev/null 2>&1 \
+if command -v orca >/dev/null 2>&1 && ! {
+  orca status --json 2>/dev/null | jq -e '.ok == true and .result.runtime.reachable == true' >/dev/null 2>&1 \
   && raw=$(orca worktree ps --limit 500 --json 2>/dev/null) \
-  && printf '%s' "$raw" | jq -e '.result.worktrees | type == "array"' >/dev/null 2>&1; then
+  && printf '%s' "$raw" | jq -e '.result.worktrees | type == "array"' >/dev/null 2>&1; }; then
+  orca_unknown=yes
+  echo "warn: orca is installed but its worktree list is unavailable; every worktree is put in review" >&2
+elif command -v orca >/dev/null 2>&1; then
   if printf '%s' "$raw" | jq -e '.result.truncated == true' >/dev/null 2>&1; then
-    orca_truncated=yes
+    orca_unknown=yes
     echo "warn: orca worktree list is truncated; worktrees missing from it are put in review" >&2
   fi
   printf '%s' "$raw" | jq -r '.result.worktrees[] | [.path,
@@ -168,7 +175,7 @@ tail -n +2 "$tmp/worktrees.tsv" | while IFS=$'\t' read -r wt head branch; do
   cwt=$(canon "$wt")
   orca=$(awk -F'\t' -v p="$cwt" '$1 == p { print $2; exit }' "$tmp/orca.tsv")
   if [ -z "$orca" ]; then
-    if [ "$orca_truncated" = yes ]; then orca="?"; else orca="-"; fi
+    if [ "$orca_unknown" = yes ]; then orca="?"; else orca="-"; fi
   fi
 
   autopilot="-"
@@ -177,13 +184,15 @@ tail -n +2 "$tmp/worktrees.tsv" | while IFS=$'\t' read -r wt head branch; do
   # Sessions started in the worktree are stored under its own slug; sessions in
   # any other worktree that touched it mention its path followed by / or a quote.
   own_ts=0; mention_ts=0
+  mention_re="($(regex_quote "$wt")|$(regex_quote "$cwt"))([^A-Za-z0-9._-]|\$)"
   for d in "$projects/$(slug "$wt")" "$projects/$(slug "$cwt")"; do
     [ -d "$d" ] || continue
     t=$(find "$d" -type f -name '*.jsonl' 2>/dev/null | newest_ts)
     [ "$t" -gt "$own_ts" ] && own_ts="$t"
   done
   while IFS= read -r d; do
-    t=$(grep -rlF --include='*.jsonl' -e "$wt/" -e "$wt\"" "$d" 2>/dev/null | newest_ts)
+    t=$(grep -rlF --include='*.jsonl' -e "$wt" -e "$cwt" "$d" 2>/dev/null \
+      | while IFS= read -r f; do grep -qE "$mention_re" "$f" && printf '%s\n' "$f"; done | newest_ts)
     [ "$t" -gt "$mention_ts" ] && mention_ts="$t"
   done <"$tmp/sessiondirs"
   last_ts=$own_ts; [ "$mention_ts" -gt "$last_ts" ] && last_ts=$mention_ts
