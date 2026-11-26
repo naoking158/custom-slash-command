@@ -195,6 +195,12 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
   [ "$status" -eq 0 ]
 }
 
+@test "zero MY_ORCA_POLL_SECONDS: exit 2" {
+  export MY_ORCA_POLL_SECONDS=0
+  run_diff_reviewer
+  [ "$status" -eq 2 ]
+}
+
 @test "non-numeric MY_ORCA_POLL_SECONDS: exit 2" {
   export MY_ORCA_POLL_SECONDS=abc
   run_diff_reviewer
@@ -218,6 +224,13 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
   run_diff_reviewer
   [ "$status" -eq 1 ]
   [ "$(last_line)" = "[run-role] diff-reviewer exit=1 $OUT" ]
+  called "orchestration worker-release --dispatch ctx_fake"
+}
+
+@test "worker abandoned by Orca: exit 1 without waiting for --timeout" {
+  printf 'abandoned idle\n' >"$TMP/states"
+  run_diff_reviewer --timeout 3600
+  [ "$status" -eq 1 ]
   called "orchestration worker-release --dispatch ctx_fake"
 }
 

@@ -27,7 +27,7 @@
 #
 # Exit codes:
 #   0  the result file meets the role's contract
-#   1  the worker failed or stopped, or the result breaks the contract
+#   1  the worker failed, stopped or was abandoned, or the result breaks the contract
 #   2  usage or configuration error (profile, role, inputs, --cwd)
 #   3  Orca unusable: no orca command, runtime unreachable, no terminal
 #      handle, the worker could not start, or worker-show kept failing
@@ -109,7 +109,8 @@ esac
 [ "$OUT" != "-" ] || die 2 "--out is required"
 case "$timeout" in ''|*[!0-9]*) die 2 "--timeout takes whole seconds: $timeout" ;; esac
 poll="${MY_ORCA_POLL_SECONDS:-5}"
-case "$poll" in ''|.|*[!0-9.]*|*.*.*) die 2 "MY_ORCA_POLL_SECONDS takes seconds: $poll" ;; esac
+case "$poll" in ''|.|*[!0-9.]*|*.*.*) die 2 "MY_ORCA_POLL_SECONDS takes seconds above 0: $poll" ;; esac
+case "$poll" in *[1-9]*) ;; *) die 2 "MY_ORCA_POLL_SECONDS takes seconds above 0: $poll" ;; esac
 command -v jq >/dev/null 2>&1 || die 2 "jq is required"
 
 INPUTS=""
@@ -194,7 +195,7 @@ id="$(printf '%s' "$receipt" | jq -r '.result.dispatchId // empty' 2>/dev/null)"
 if [ -z "$id" ]; then
   { printf '%s\n' "$receipt"; cat "$WORK/start.err"; } >&2
   if [ "$(printf '%s' "$receipt" | jq -r '.error.code // empty' 2>/dev/null)" = selector_not_found ]; then
-    die 2 "--cwd is not an Orca workspace: $cwd"
+    die 2 "not an Orca workspace: ${cwd:-the workspace of the calling terminal}"
   fi
   die 3 "worker-start failed ($harness, $model)"
 fi
@@ -208,7 +209,7 @@ while :; do
   show="$(orca orchestration worker-show --dispatch "$id" --json 2>/dev/null)"
   state="$(printf '%s' "$show" | jq -r '.result.state // empty' 2>/dev/null)"
   activity="$(printf '%s' "$show" | jq -r '.result.activity // empty' 2>/dev/null)"
-  case "$state" in succeeded|failed|stopped) break ;; esac
+  case "$state" in succeeded|failed|stopped|abandoned) break ;; esac
   if [ -z "$state" ]; then
     misses=$((misses + 1))
     [ "$misses" -lt 3 ] || die 3 "worker-show failed 3 times in a row for $id"
