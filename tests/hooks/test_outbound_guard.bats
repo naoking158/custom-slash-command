@@ -306,6 +306,16 @@ main_and_worktree() {
   [ "$(decision)" = "deny" ]
 }
 
+@test "a redirection into a substitution or a brace list is not a refspec" {
+  main_and_worktree
+  run_guard "$(bash_payload 'git push origin > $(mktemp)')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'git push origin > >(tee log)')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$WT" 'git push origin {main,feature/x}')"
+  [ "$(decision)" = "deny" ]
+}
+
 @test "a tag push asks only when nothing on the line is denied" {
   run_guard "$(bash_payload 'git push --tags')"
   [ "$(decision)" = "ask" ]
@@ -581,4 +591,30 @@ main_and_worktree() {
   run_guard "$(bash_payload 'cd "$(mktemp -d)" && gh api -X PUT repos/me/app/pulls/3/merge')"
   [ "$(decision)" = "deny" ]
   [[ "$output" != *"-R"* ]]
+}
+
+@test "ship cwd: -R after a command substitution still names the repository" {
+  ship_repo
+  run_guard "$(bash_payload 'gh pr merge $(gh pr view 3 --json number -q .number) -R work/app')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'gh pr ready $(gh pr view --json number -q .number) -R work/app')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'gh pr merge $(gh pr view 3 --json number -q .number) -R me/app')"
+  [ -z "$output" ]
+  run_guard "$(bash_payload 'gh api x $(gh pr merge 3 -R work/app)')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "a PR command whose arguments are cut by a pipe inside a substitution is denied" {
+  ship_repo
+  cmd="gh pr merge \$(gh pr list --json number -q '.[0].number' | head -1) -R work/app --squash"
+  run_guard "$(bash_payload "$cmd")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'echo $(gh pr merge 3 -R me/app) $(true && true)')"
+  [ -z "$output" ]
+}
+
+@test "strict: --draft after a command substitution is seen" {
+  run_guard "$(bash_payload 'gh pr create --title $(echo t) --body b --draft')"
+  [ -z "$output" ]
 }

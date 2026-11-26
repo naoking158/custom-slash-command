@@ -93,7 +93,8 @@ cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null
 
 # The commands on the line that send something out, one per line:
 #   push <TAB> dir <TAB> its arguments, quotes removed and assignments expanded
-#   pr   <TAB> dir <TAB> the gh command, quoted strings emptied
+#   pr   <TAB> dir <TAB> the gh command, quoted strings and $( ) emptied; it
+#                      ends in " ?" when the line cuts its arguments short
 #   text <TAB> dir <TAB> git | gh, for each command that carries a message
 # dir is where the command runs, "?" when the line does not show it; a push
 # argument the line does not show is "?" as well. Heredoc bodies, quoted
@@ -130,16 +131,19 @@ commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
     $path =~ /^\// ? $path : defined $base ? "$base/$path" : undef;
   };
   my $emit = sub {
-    my ($text, $at) = @_;
+    my ($text, $at, $cut) = @_;
     if ($text =~ /(?<![\w-])git((?:\s+-[Cc]\s+\S+)*)\s+push(?![\w-])([^)]*)/) {
       my ($opts, $args) = ($1, $2);
       my $in = $opts =~ /\s-C\s+(\S+)/ ? $enter->($at, $1) : $at;
-      my @args = map { my $v = $value->($_); defined $v && $v !~ /\s/ ? $v : "?" } split " ", $args;
+      my @args = map { my $v = $value->($_); defined $v && $v !~ /[\s<>()]|\{.*,.*\}/ ? $v : "?" } split " ", $args;
       print join("\t", "push", defined $in ? $in : "?", "@args"), "\n";
     }
-    if ($text =~ /(?<![\w-])(gh\s+(?:pr\s+(?:create|new|merge|ready)|api)(?![\w-])[^)]*)/) {
-      my $gh = $1;
+    while ($text =~ /(?<![\w-])gh\s+(?:pr\s+(?:create|new|merge|ready)|api)(?![\w-])/g) {
+      my $gh = substr($text, $-[0]);
+      1 while $gh =~ s/\([^()]*\)/ /;
+      my $closed = $gh =~ s/\).*$//s;
       $gh =~ s/\x00(\d+)\x00/$lit[$1][1] ? q("") : "\x27\x27"/ge;
+      $gh .= " ?" if $cut && !$closed;
       $gh =~ s/\s+/ /g;
       $gh =~ s/ $//;
       print join("\t", "pr", defined $at ? $at : "?", $gh), "\n";
@@ -157,7 +161,7 @@ commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
     my $nesting = ($seg =~ tr/(//) - ($seg =~ tr/)//);
     if ($nesting > 0 && $seg =~ /^(.*)\((.*)$/s) {
       my ($before, $inside) = ($1, $2);
-      $emit->($before, $dir);
+      $emit->($before, $dir, 1);
       my %outer = %var;
       $outer{$1} = undef while $before =~ /(?:^|\s)(\w+)=/g;
       push @saved, [$depth, $before =~ $moves ? undef : $dir, \%outer];
@@ -188,7 +192,8 @@ commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
 # --- PR state ------------------------------------------------------------------
 # judge_pr DIR COMMAND — deny what a strict repository does not allow.
 judge_pr() {
-  local dir="$1" gh="$2" reason="" repo hint="-R <owner/name> を付けるか cd <絶対パス> で始める"
+  local dir="$1" gh="$2" reason="" repo cut="" hint="-R <owner/name> を付けるか cd <絶対パス> で始める"
+  case "$gh" in *" ?") cut=1; gh="${gh%" ?"}" ;; esac
   case "$gh" in
     "gh pr merge"|"gh pr merge "*) reason="このリポジトリでは PR をマージしない。draft のまま本人に渡す" ;;
     "gh pr ready"|"gh pr ready "*) reason="PR を ready にしない。ready への変更は本人がセルフレビュー後に行う" ;;
@@ -207,6 +212,7 @@ judge_pr() {
       fi ;;
   esac
   [ -n "$reason" ] || return 0
+  [ -z "$cut" ] || decide deny "gh の引数を判定できない。command substitution を使わず値を直接書く"
   repo="$(printf '%s' "$gh" | sed -nE 's#.*(^|[[:space:]])(-R|--repo)[[:space:]=]+([^[:space:]]+).*#\3#p')"
   case "$repo" in
     "")
