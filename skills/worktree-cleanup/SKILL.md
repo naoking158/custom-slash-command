@@ -22,6 +22,7 @@ Without `-b`, `MERGED` checks against `origin/HEAD`; pass `-b origin/<branch>` w
 | Bucket | Meaning | Default |
 |---|---|---|
 | `hold-wip` | tracked uncommitted edits | keep |
+| `hold-locked` | locked with `git worktree lock` | keep; never unlock it to remove it |
 | `hold-active` | Orca pinned, or with a live terminal or agent | keep |
 | `hold-open-pr` | its branch has an open or draft PR | keep |
 | `verify-recent-chat` | a Claude Code session touched it in the last 4 days | check (step 2) |
@@ -43,7 +44,7 @@ Show the table, then for every candidate:
 - ignored files that removal also deletes, such as `.env` (`git -C <wt> status --porcelain --ignored`, the `!!` lines);
 - `MERGED=no`: the commits not in the base (`git -C <wt> log --oneline <base>..HEAD`). When `REMOTE=detached`, no branch holds them: create one (`git -C <wt> branch <name>`) or drop the worktree from the list.
 
-Get the user's explicit approval of the exact list of paths to remove. Keep `hold-wip`, `hold-active` and `hold-open-pr` unless the user names them.
+Get the user's explicit approval of the exact list of paths to remove. Keep `hold-wip`, `hold-locked`, `hold-active` and `hold-open-pr` unless the user names them.
 
 ## 4. Remove the approved worktrees
 

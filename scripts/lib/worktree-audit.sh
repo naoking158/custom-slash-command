@@ -10,7 +10,8 @@
 #   -b sets the ref MERGED checks against. Without it: origin/HEAD, then
 #   origin/main, origin/master, HEAD.
 #
-# Buckets, first match wins: hold-wip (tracked edits), hold-active (Orca pinned
+# Buckets, first match wins: hold-wip (tracked edits), hold-locked (git
+# worktree lock), hold-active (Orca pinned
 # or active), hold-open-pr, verify-recent-chat (a session in the last 4 days),
 # review (Orca state unknown: orca installed but unreachable, or its list
 # truncated without this worktree; or git status failed), safe (merged into the base, or its PR merged or closed and the
@@ -111,10 +112,11 @@ elif command -v orca >/dev/null 2>&1; then
 fi
 
 git worktree list --porcelain | awk '
-  /^worktree / { if (p != "") print p "\t" h "\t" b; p = substr($0, 10); h = ""; b = "" }
+  /^worktree / { if (p != "") print p "\t" h "\t" l "\t" b; p = substr($0, 10); h = ""; l = "-"; b = "" }
+  /^locked/    { l = "locked" }
   /^HEAD /     { h = $2 }
   /^branch /   { b = substr($0, 8); sub(/^refs\/heads\//, "", b) }
-  END          { if (p != "") print p "\t" h "\t" b }' >"$tmp/worktrees.tsv"
+  END          { if (p != "") print p "\t" h "\t" l "\t" b }' >"$tmp/worktrees.tsv"
 
 projects="$HOME/.claude/projects"
 # Claude Code session directories of every worktree, the main one included.
@@ -129,7 +131,7 @@ now=$(date +%s)
 echo "# base: $base"
 printf 'SIZE\tAGE\tMERGED\tDIRTY\tREMOTE\tPR\tORCA\tAUTOPILOT\tLAST_CHAT\tBUCKET\tWORKTREE\n'
 
-tail -n +2 "$tmp/worktrees.tsv" | while IFS=$'\t' read -r wt head branch; do
+tail -n +2 "$tmp/worktrees.tsv" | while IFS=$'\t' read -r wt head lock branch; do
   kb=$(du -sk "$wt" 2>/dev/null | awk '{print $1}')
   [ -n "$kb" ] || kb=0
   size=$(awk -v k="$kb" 'BEGIN { if (k >= 1048576) printf "%.1fG", k/1048576; else if (k >= 1024) printf "%.0fM", k/1024; else printf "%dK", k }')
@@ -181,10 +183,12 @@ tail -n +2 "$tmp/worktrees.tsv" | while IFS=$'\t' read -r wt head branch; do
   autopilot="-"
   gitdir=$(git -C "$wt" rev-parse --absolute-git-dir 2>/dev/null) && [ -e "$gitdir/my-autopilot-worktree" ] && autopilot=goal
 
-  # Sessions started in the worktree are stored under its own slug; sessions in
-  # any other worktree that touched it mention its path followed by / or a quote.
+  # Sessions started in the worktree are stored under its own slug. A session
+  # elsewhere worked in it when it names a file inside it, quotes the path, or
+  # runs `cd <wt>` / `-C <wt>`; a bare listing of the path does not count.
   own_ts=0; mention_ts=0
-  mention_re="($(regex_quote "$wt")|$(regex_quote "$cwt"))([^A-Za-z0-9._-]|\$)"
+  paths="($(regex_quote "$wt")|$(regex_quote "$cwt"))"
+  mention_re="$paths"'(/|\\?")|(cd |-C )(\\?"|'"'"')?'"$paths"'([^A-Za-z0-9._-]|$)'
   for d in "$projects/$(slug "$wt")" "$projects/$(slug "$cwt")"; do
     [ -d "$d" ] || continue
     t=$(find "$d" -type f -name '*.jsonl' 2>/dev/null | newest_ts)
@@ -200,6 +204,7 @@ tail -n +2 "$tmp/worktrees.tsv" | while IFS=$'\t' read -r wt head branch; do
   if [ "$last_ts" -gt 0 ] && [ $(( (now - last_ts) / 86400 )) -le 4 ]; then recent=yes; else recent=no; fi
 
   case "$dirty" in wip:*) bucket=hold-wip ;; *)
+    if [ "$lock" = locked ]; then bucket=hold-locked; else
     case "$orca" in pinned|active*) bucket=hold-active ;; *)
       case "$pr" in */open|*/draft) bucket=hold-open-pr ;; *)
         if [ "$recent" = yes ]; then bucket=verify-recent-chat
@@ -210,7 +215,8 @@ tail -n +2 "$tmp/worktrees.tsv" | while IFS=$'\t' read -r wt head branch; do
         else bucket=review
         fi ;;
       esac ;;
-    esac ;;
+    esac
+    fi ;;
   esac
 
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \

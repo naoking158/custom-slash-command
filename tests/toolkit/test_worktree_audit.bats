@@ -2,12 +2,13 @@
 # Tests for scripts/lib/worktree-audit.sh with stub gh and orca on PATH.
 #
 # Contract under test:
-#   - Buckets, first match wins: hold-wip, hold-active (Orca pinned or
-#     active), hold-open-pr, verify-recent-chat, review when the Orca list is
+#   - Buckets, first match wins: hold-wip, hold-locked, hold-active (Orca
+#     pinned or active), hold-open-pr, verify-recent-chat, review when the Orca list is
 #     truncated and misses the worktree, safe (merged or PR merged/closed),
 #     review.
-#   - A recent session counts whether it ran in the worktree itself or in the
-#     main checkout and mentioned the worktree's path.
+#   - A recent session counts when it ran in the worktree itself, or ran in
+#     another worktree and worked in it (a file inside it, a quoted path,
+#     cd / -C); a bare listing of the path does not count.
 #   - Orca rows match through symlinked paths; without orca the column is -.
 #   - The audit changes no worktree, file or ref.
 #   - Bad options and non-repositories exit 2.
@@ -223,6 +224,24 @@ audit() {
   [[ "$output" == *"unavailable"* ]]
   [ "$(field "$TMP/quiet" ORCA)" = "?" ]
   [ "$(field "$TMP/quiet" BUCKET)" = "review" ]
+}
+
+@test "a session that only listed the worktree path does not count" {
+  add_wt listed
+  git -C "$REPO" merge -q --ff-only listed
+  local d="$HOME/.claude/projects/$(printf '%s' "$REPO" | sed 's/[^A-Za-z0-9]/-/g')"
+  mkdir -p "$d"
+  printf '{"content":"2M\\tYES\\tsafe\\t%s\\n%s  abc1234 [listed]\\n"}\n' "$TMP/listed" "$TMP/listed" >"$d/session.jsonl"
+  audit
+  [ "$(field "$TMP/listed" BUCKET)" = "safe" ]
+}
+
+@test "a locked worktree is held" {
+  add_wt locked
+  git -C "$REPO" merge -q --ff-only locked
+  git -C "$REPO" worktree lock "$TMP/locked"
+  audit
+  [ "$(field "$TMP/locked" BUCKET)" = "hold-locked" ]
 }
 
 @test "unmerged without PR or session is review" {
