@@ -316,6 +316,34 @@ main_and_worktree() {
   [ "$(decision)" = "deny" ]
 }
 
+@test "a segment that closes one substitution and opens the next keeps their directories apart" {
+  main_and_worktree
+  run_guard "$(bash_payload "echo \$(cd $WT && pwd) \$(true && git push -q)")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload "diff <(cd $WT && git log -1) <(git push -q | cat)")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$WT" "echo \$(cd $WT && pwd) \$(cd $REPO && git push -q)")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$WT" "echo \$(true && true) \$(cd $REPO && git push -q)")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$WT" "diff <(cd $WT && git log -1) <(cd $REPO && git push -q)")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$WT" "case x in x) (cd $REPO && git push -q) ;; esac")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload "echo \$(cd $REPO && pwd) \$(cd $WT && git push -q)")"
+  [ -z "$output" ]
+  run_guard "$(payload_in "$WT" "echo \$(cd $REPO && pwd) \$(true && git push -q)")"
+  [ -z "$output" ]
+}
+
+@test "a subshell closed on its own segment does not move what follows" {
+  main_and_worktree
+  run_guard "$(payload_in "$WT" "(cd $REPO) ; git push -q")"
+  [ -z "$output" ]
+  run_guard "$(bash_payload "(cd $WT) ; git push -q")"
+  [ "$(decision)" = "deny" ]
+}
+
 @test "a tag push asks only when nothing on the line is denied" {
   run_guard "$(bash_payload 'git push --tags')"
   [ "$(decision)" = "ask" ]
@@ -626,5 +654,20 @@ main_and_worktree() {
 
 @test "strict: --draft after a command substitution is seen" {
   run_guard "$(bash_payload 'gh pr create --title $(echo t) --body b --draft')"
+  [ -z "$output" ]
+}
+
+@test "ship cwd: a strict directory entered in one substitution does not carry into the next, nor is the next one's own lost" {
+  SHIP="$TMP/ship"
+  git init -q -b main "$SHIP"
+  git -C "$SHIP" remote add origin git@github.com:me/app.git
+  echo 'ship me/*' >"$MY_AUTONOMY_CONF"
+  run_guard "$(bash_payload "echo \$(cd $SHIP && pwd) \$(true && gh pr merge 3)")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload "echo \$(cd $SHIP && pwd) \$(true && gh pr create --title t --body b)")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$SHIP" "echo \$(true && true) \$(cd $REPO && gh pr merge 3)")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$SHIP" "echo \$(cd $REPO && pwd) \$(true && gh pr merge 3)")"
   [ -z "$output" ]
 }
