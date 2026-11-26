@@ -48,7 +48,7 @@ HOME=<variant home> claude -p "<the task>" --permission-mode acceptEdits \
 
 ## 4. Judge blind
 
-Start a read-only judge, from a different model family when the profile offers one (the `review` or `audit` line), with the rubric, the task, and for each anonymous variant its final diff and a transcript excerpt (files read, commands run, the closing message). Ask for a score and one line of evidence per rubric item per variant.
+Start a read-only judge as an `Agent` subagent, given only the rubric, the task, and for each anonymous variant its final diff and a transcript excerpt (files read, commands run, the closing message). Keep the variant mapping in this conversation, not in a file the judge can read. Ask for a score and one line of evidence per rubric item per variant. For a judge from another model family, run it the way step 3 runs a subject (`claude -p` with another `--model`, or another harness), with the same materials and read-only tools.
 
 ## 5. Check the transcripts
 

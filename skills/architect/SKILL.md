@@ -40,7 +40,7 @@ Score both on:
 - **Least knowledge for callers**: what must a caller know to use it correctly?
 - **Invalid states impossible**: do the types or the structure rule out the states that must never exist, or does a check at runtime have to catch them?
 
-Recommend one, and say why the other lost. When an uncertainty can be settled by an experiment (does the library allow this, is this fast enough), propose a throwaway prototype in `${TMPDIR:-/tmp}` and what it must show; do not build it into the repository.
+Recommend one, and say why the other lost. When an uncertainty can be settled by an experiment (does the library allow this, is this fast enough), build a throwaway prototype in `${TMPDIR:-/tmp}` when it takes minutes, and report what it showed; otherwise propose it and what it must show. Never build it into the repository.
 
 Stop here and wait for agreement before anyone implements.
 
