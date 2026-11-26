@@ -15,6 +15,7 @@ Report violations only; severity tags are defaults, adjust with justification.
 - [M] 不要なファイル変更なし
 - [M] 依存関係の追加は妥当
 - [H] マイグレーション手順の明記 (該当時)
+- [H] CI・テスト・lint・型チェック等の品質ゲートを正当な理由なく無効化・スキップ・緩和していない
 
 ## Code Review
 - [M] 既存パターン・規約に準拠
