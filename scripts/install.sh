@@ -13,9 +13,8 @@
 #                                        linked on its own)
 #
 # When an `orca` command is on PATH, install and --check also confirm that
-# orca/bin/doctor is executable and point at it; it is not run here, because it
-# needs a running Orca and an Orca terminal. Without `orca`, nothing about the
-# Orca layer is done or printed.
+# orca/bin/doctor is executable and point at it without running it. Without
+# `orca`, nothing about the Orca layer is done or printed.
 #
 # Also cleans up symlinks from the pre-plugin layout when they point into
 # this repo:
@@ -293,11 +292,16 @@ check_legacy() {
   return 0
 }
 
-# orca_layer — confirm orca/bin/doctor when an orca command is on PATH.
+# Usage: orca_layer <install|check> — confirm orca/bin/doctor when an orca
+# command is on PATH.
 orca_layer() {
   command -v orca >/dev/null 2>&1 || return 0
   if [ ! -x "$ORCA_DOCTOR" ]; then
-    printf '  MISSING   %s (orca found on PATH)\n' "$ORCA_DOCTOR"
+    if [ "$1" = install ]; then
+      printf '  ERROR  orca found on PATH but %s is not executable\n' "$ORCA_DOCTOR" >&2
+    else
+      printf '  MISSING   %s (orca found on PATH)\n' "$ORCA_DOCTOR"
+    fi
     return 1
   fi
   printf '  OK        orca found; run %s from an Orca terminal\n' "$ORCA_DOCTOR"
@@ -320,7 +324,7 @@ case "$MODE" in
     for legacy in "${LEGACY_LINKS[@]}"; do
       cleanup_legacy "$legacy"
     done
-    orca_layer || failed=1
+    orca_layer install || failed=1
     ;;
   uninstall)
     uninstall_plugin_link "$PLUGIN_LINK" "$REPO_ROOT" || failed=1
@@ -337,7 +341,7 @@ case "$MODE" in
     for legacy in "${LEGACY_LINKS[@]}"; do
       check_legacy "$legacy" || failed=1
     done
-    orca_layer || failed=1
+    orca_layer check || failed=1
     ;;
 esac
 

@@ -297,7 +297,7 @@ assert_links_to_repo() {
   cp "$INSTALL" "$TMP/tree/scripts/install.sh"
   run "$TMP/tree/scripts/install.sh"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"MISSING"*"orca/bin/doctor"* ]]
+  [[ "$output" == *"ERROR"*"orca/bin/doctor"* ]]
   run "$TMP/tree/scripts/install.sh" --check
   [ "$status" -ne 0 ]
   [[ "$output" == *"MISSING"*"orca/bin/doctor"* ]]
