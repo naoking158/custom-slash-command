@@ -144,9 +144,9 @@ it into `~/.gemini/config/plugins/`.
 | Skills | Load from `skills/`; `rules/antigravity.md` maps the Claude Code terms |
 | `rules/principles.md` | Always on, through `rules/AGENTS.md` |
 | Outbound guard | Root `hooks.json` → `antigravity-guard.sh` on `run_command`. The guard's `ask` becomes `force_ask`; the Notion write check is not wired |
-| Agents | Hidden (`mainAgent: false`, `subagent: false`): their tool lists use Claude Code tool names. Skills that launch one run the step in the same conversation |
+| Agents | Hidden (`mainAgent: false`, `subagent: false`): their tool lists use Claude Code tool names. With `orca` on PATH, a step that launches one runs it as an Orca worker through `orca/bin/run-role` (see [Orca](#orca)); without Orca, it runs in the same conversation and the result is marked `非隔離` |
 | `/my:autopilot`, `/my:retro` | Not supported: they depend on Claude Code agents, background commands, or transcripts |
-| Two-pass diff review | Runs both passes in one conversation, so the first pass is not blind to the plan; use `--no-screen` for a single pass |
+| Two-pass diff review | With Orca, the plan-blind first pass runs as a separate `diff-reviewer` worker. Without Orca, the first pass is skipped and the review runs in one pass |
 | `SessionEnd` / `UserPromptSubmit` capture | Not wired: Antigravity has no matching event |
 
 This setup follows the Antigravity docs and has not been run in Antigravity yet.
@@ -156,6 +156,25 @@ To check it:
 agy plugin validate ~/.gemini/config/plugins/my
 agy plugin list        # my should be enabled, with my:* skills
 ```
+
+## Orca
+
+`orca/` runs roles in their own context through [Orca](https://orca.dev)
+orchestration workers. Nothing here is needed without an `orca` command;
+`install.sh` only checks that `orca/bin/doctor` is executable when `orca` is on
+PATH.
+
+- `orca/bin/doctor`: run from an Orca terminal; checks that Orca is reachable
+  and that both guards deny a push to `main`.
+- `orca/bin/run-role <verifier|reviewer|diff-reviewer> --out <file> [--cwd <workspace>] -- <inputs>`:
+  starts the role as a worker with the body of `agents/<name>.md`, waits for it
+  from the shell, checks the result file, and releases the worker. Exit codes:
+  0 result OK, 1 worker failed or bad result, 2 configuration error, 3 Orca
+  unusable, 4 timed out (worker stopped). `rules/antigravity.md` is its only
+  caller; Claude Code keeps using subagents.
+- `orca/profiles/<name>.conf`: the harness and model per role
+  (`<role> <harness> <model>`). Pick one with `MY_ORCA_PROFILE` or a
+  `profile <name>` line in `~/.claude/my-toolkit/orca.conf`.
 
 ## Usage
 
