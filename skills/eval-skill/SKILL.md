@@ -29,18 +29,21 @@ Break one and the result is void; start over.
 For each variant and each task, one working directory that looks like ordinary work:
 
 - A fresh clone or worktree of the target repository with a plain name (for example the feature the task is about), under `${TMPDIR:-/tmp}`.
-- The toolkit as that variant has it: the baseline at `main`, the change on its branch. Point the subject at it (`CLAUDE_PLUGIN_ROOT`, or a checkout of this repository in that state) without naming it after the variant.
+- A toolkit checkout of this repository in the variant's state: the baseline at `main`, the change on its branch. Delete `skills/eval-skill/` from it, so the subject's skill list does not name this evaluation.
+- A home directory of its own with a plain name, where `HOME=<that dir> <toolkit checkout>/scripts/install.sh` links `~/.claude/skills/my` to that checkout. This is what switches the toolkit: a session loads `my` from `$HOME/.claude/skills/my`, and a subagent (`Agent`) or `--plugin-dir` would keep the session's own copy loaded beside it. Give it credentials without copying your own home (`ANTHROPIC_API_KEY`, or a token from `claude setup-token` in `CLAUDE_CODE_OAUTH_TOKEN`); none available → stop and say so.
 - Randomize which variant is `a` and which is `b`, and record the mapping where the judge cannot read it.
 
 ## 3. Run
 
-Run each variant on each task in isolation and in parallel: a separate `Agent`, a separate `claude -p` session in the variant's directory, or an Orca worker (`orca/bin/run-role` profiles choose the harness and model). Give every run the same prompt, word for word. Keep each transcript and the final diff.
+Run each variant on each task as its own session, in parallel: `HOME=<variant home> claude -p "<the task>" --output-format stream-json --verbose > <outside the working directory>` from the variant's working directory. Give every run the same prompt, word for word. Keep each transcript and the final diff (`git -C <working directory> diff`). Do not run subjects as `Agent` subagents or through `orca/bin/run-role`: a subagent shares this session's toolkit, and run-role runs only its fixed roles.
 
 ## 4. Judge blind
 
 Start a read-only judge, from a different model family when the profile offers one (the `review` or `audit` line), with the rubric, the task, and for each anonymous variant its final diff and a transcript excerpt (files read, commands run, the closing message). Ask for a score and one line of evidence per rubric item per variant.
 
 ## 5. Check the transcripts
+
+First confirm that each run loaded its own variant: the transcript reads the changed file from that variant's toolkit checkout (or invokes the changed skill and shows its variant text). A run that loaded the other variant, or neither, voids the comparison; fix step 2 and run again.
 
 Do not take the judge's word or the subject's account. For each rubric item, check the transcript yourself: which files were read, which checks actually ran and what they printed, the shape of the final diff. Where the transcript and the judge disagree, the transcript wins; note the disagreement.
 

@@ -246,7 +246,7 @@ it into `~/.gemini/config/plugins/`.
 | `rules/principles.md` | Always on, through `rules/AGENTS.md` |
 | Outbound guard | Root `hooks.json` → `antigravity-guard.sh` on `run_command` and on the input `manage_task` sends to a background command. The guard's `ask` becomes `force_ask`; the Notion write check is not wired |
 | Agents | Hidden (`mainAgent: false`, `subagent: false`): their tool lists use Claude Code tool names. With `orca` on PATH, a step that launches one runs it as an Orca worker through `orca/bin/run-role` (see [Orca](#orca)). Without `orca`, or when run-role exits 3 (Orca unreachable, or neither an Orca terminal nor an Orca agent session), verifier, reviewer, adversary and trail-auditor run in the same conversation with the result marked `非隔離`, and diff-reviewer is skipped (see the next row). `rules/antigravity.md` gives the handling of the other exit codes, including a timeout (4) |
-| `/my:autopilot`, `/my:retro` | Not supported: they depend on Claude Code agents, background commands, or transcripts |
+| `/my:autopilot`, `/my:retro`, `/my:eval-skill` | Not supported: they depend on Claude Code agents, background commands, `claude -p` sessions, or transcripts |
 | Two-pass diff review | With Orca, the plan-blind first pass runs as a separate `diff-reviewer` worker. Without Orca, the first pass is skipped and the review runs in one pass |
 | `SessionEnd` / `UserPromptSubmit` capture | Root `hooks.json` → `antigravity-stop.sh` on `Stop`: it indexes the conversation on its first turn and passes each new input to `prompt-capture.sh` |
 
