@@ -25,24 +25,34 @@ read its Claude Code terms as follows.
   $HOME/.gemini/config/plugins/my/orca/bin/run-role <name> --out <result file> -- <inputs>
   ```
 
-  `<name>` is the agent without `my:`. The inputs are what the skill gives the
-  agent:
+  `<name>` is the agent without `my:`. If your own task came from run-role
+  (it is an agent's instructions followed by a `## Reporting` section), you
+  are that agent already: do its steps yourself, and use run-role only for a
+  different agent it starts, such as `diff-reviewer` from `reviewer`.
+
+  The inputs are what the skill gives the agent:
   - `diff-reviewer`: `--patch <patch> --hunks <hunks.tsv> --checklist <file>`
     (once per checklist), with the `pass1.json` path as `--out`. Never pass the
     plan or spec, neither its path nor its content.
-  - `verifier`: the checkout path and the completion criteria.
+  - `verifier`: the checkout path and the completion criteria. Add
+    `--cwd <checkout>` when the checkout is an Orca workspace other than yours.
   - `reviewer`: the review target and its options.
 
   The last line of the output is `[run-role] <name> exit=<n> <result file>`.
   Act on the exit code:
   - 0: read the result file and continue.
-  - 1: run it once more; if it fails again, record the step as BLOCKED.
-  - 2: stop and tell the user; the profile or the inputs are wrong.
-  - 3, or run-role is missing: do the step yourself in this conversation,
-    following `agents/<name>.md` in the plugin root, keep its return contract,
-    and write `非隔離` (not isolated) in its result.
-  - 4: the worker timed out or waited for an approval and was stopped; record
-    the step as BLOCKED.
+  - 1: run it once more. If it fails again, treat it as exit 4.
+  - 2: stop and report it; the profile or the inputs are wrong.
+  - 3, or run-role is missing: Orca is not usable. For `diff-reviewer`, skip
+    the plan-blind first pass: review in one pass and say in the report that
+    the first pass was skipped because it could not be isolated. For the other
+    agents, do the step yourself in this conversation, following
+    `agents/<name>.md` in the plugin root, keep its return contract, and write
+    `非隔離` (not isolated) in its result.
+  - 4: the worker timed out or waited for an approval and was stopped. For
+    `verifier`, return BLOCKED with that cause. For `diff-reviewer`, fall back
+    as for exit 3. For `reviewer`, stop and report that the review did not
+    finish.
 
   For an agent with no file in `agents/`, such as `Explore`, do the step
   yourself and follow the brief the skill gives it.
