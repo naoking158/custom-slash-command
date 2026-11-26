@@ -41,7 +41,7 @@ Work the stages in this order on every pass. A conflict or a broken base makes t
 ```bash
 gh pr view <n> --json baseRefName,headRefName,mergeable,mergeStateStatus,headRefOid
 git fetch -q origin <base>
-git log --oneline HEAD..origin/<base>
+git log --oneline <headRefOid>..origin/<base>
 ```
 
 - Nothing new on the base: go to stage 2.

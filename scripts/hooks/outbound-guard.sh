@@ -382,13 +382,14 @@ api="$(printf '%s' "$cmd" | perl -0777 -ne '
         my $f = $put->($1, 1);
         if ($f eq "-") { $stdin = 1 } else { print "\x02$f\n" }
       }
+      while ($gh =~ /(?<!\S)(?:--field|-F)(?:\s+|=)?($word)/g) {
+        my $v = $put->($1, 1);
+        next unless $v =~ /^[^=]*=@(.+)$/s;
+        if ($1 eq "-") { $stdin = 1 } else { print "\x02$1\n" }
+      }
       if ($stdin) {
         while ($gh =~ /(?<![<\d])<(?![<(&])\s*($word)/g) { print "\x02", $put->($1, 1), "\n" }
         $gh =~ s/(?<![<\d])<(?![<(&])\s*$word//g;
-      }
-      while ($gh =~ /(?<!\S)(?:--field|-F)(?:\s+|=)?($word)/g) {
-        my $v = $put->($1, 1);
-        print "\x02$1\n" if $v =~ /^[^=]*=@(.+)$/s && $1 ne "-";
       }
       $gh =~ s/(?<!\S)--input(?:\s+|=)$word//g;
       $gh =~ s/(?<!\S)((?:--field|-F)(?:\s+|=)?)($word)/$put->($2, 1) =~ m{^[^=]*=@} ? "" : "$1$2"/ge;

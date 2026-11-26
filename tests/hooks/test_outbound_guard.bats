@@ -811,4 +811,7 @@ main_and_worktree() {
   [ "$(decision)" = "deny" ]
   run_guard "$(bash_payload "printf 'fixed in abc123' | gh api repos/o/r/issues/1/comments -F body=@-")"
   [ -z "$output" ]
+  printf 'fixed H001\n' >"$TMP/body.md"
+  run_guard "$(bash_payload "gh api repos/o/r/issues/1/comments -F body=@- <$TMP/body.md")"
+  [ "$(decision)" = "deny" ]
 }
