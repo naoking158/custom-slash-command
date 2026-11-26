@@ -15,7 +15,7 @@ setup() {
   FAKE_BIN="$TMP/bin"
   mkdir -p "$FAKE_BIN"
   export PATH="$FAKE_BIN:$(path_without_orca)"
-  ! command -v orca >/dev/null
+  if command -v orca >/dev/null; then return 1; fi
   export ORCA_TERMINAL_HANDLE="term_fake"
   export MY_AUTONOMY_CONF="$TMP/autonomy.conf"
 }

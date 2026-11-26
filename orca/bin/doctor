@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# doctor — Check that this machine is safe to drive the toolkit from Orca,
-# without starting any agent.
+# doctor — Check that Orca is reachable from this shell and that this
+# checkout's guards deny a push to main, without starting any agent.
 #
 # Checks, in this order (every check runs; the exit code is the first failure):
 #   3  the `orca` command is on PATH
@@ -13,7 +13,9 @@
 #
 # The guards are the ones in the same checkout as this script, fed a synthetic
 # PreToolUse payload for `git push origin HEAD:main` from a throwaway git
-# repository. Nothing is pushed: the guards only read the payload.
+# repository. Nothing is pushed: the guards only read the payload. Whether a
+# harness actually runs these guards (plugin enabled, hooks registered) is not
+# checked here.
 #
 # Usage: orca/bin/doctor [-h|--help]
 # Dependencies: bash, jq, git, and those of the guards.
@@ -72,20 +74,22 @@ check_terminal() {
   fi
 }
 
+PROBE_DIR=""
+trap '[ -z "$PROBE_DIR" ] || rm -rf "$PROBE_DIR"' EXIT
+
 probe_repo() {
-  local dir
-  dir="$(mktemp -d "${TMPDIR:-/tmp}/orca-doctor.XXXXXX")" || return 1
-  git init -q -b doctor-probe "$dir" || return 1
-  printf '%s' "$dir"
+  PROBE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/orca-doctor.XXXXXX")" || return 1
+  git init -q "$PROBE_DIR" || return 1
 }
 
 check_guards() {
   local repo decision
-  if ! repo="$(probe_repo)"; then
+  if ! probe_repo; then
     ng 6 "could not create a probe repository"
     ng 7 "antigravity-guard: skipped (no probe repository)"
     return
   fi
+  repo="$PROBE_DIR"
 
   decision="$(jq -cn --arg c "$PROBE_CMD" --arg d "$repo" \
       '{tool_name: "Bash", cwd: $d, tool_input: {command: $c}}' \
@@ -106,8 +110,6 @@ check_guards() {
   else
     ng 7 "antigravity-guard did not deny: $PROBE_CMD (decision: ${decision:-none})"
   fi
-
-  rm -rf "$repo"
 }
 
 printf 'Orca doctor (hooks: %s)\n' "$HOOKS_DIR"
