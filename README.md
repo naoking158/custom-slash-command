@@ -1,10 +1,13 @@
 # my — personal Claude Code toolkit
 
 A Claude Code **plugin** for working with autonomous agents: a review skill
-with a diff review screen, an independent verifier agent, code-reading skills
-(how / why / blast-radius), a generator for app verification skills, a guard
-hook for pushes and outbound text, PdM skills, a session-knowledge loop
-(learn / retro), working principles, and path-triggered language rules.
+with a diff review screen, an independent verifier agent, adversarial and
+trail-audit agents, code-reading skills (how / why / blast-radius), skills
+for before (sharpen / architect) and after (babysit / interrogate) a change,
+a generator and upkeep pass for app verification skills, a guard hook for
+pushes and outbound text, PdM skills, a session-knowledge loop
+(learn / retro / eval-skill), working principles, and path-triggered
+language rules.
 The same repository also loads in Google Antigravity as a plugin (see
 [Antigravity](#antigravity)).
 
@@ -26,10 +29,13 @@ flowchart TB
   retro["/my:retro<br/>proposals and autopilot metrics"]
   toolkit[("This repository<br/>skills, agents, rules")]
 
+  sharpen["/my:sharpen, /my:architect<br/>deepen the goal, agree on the design"]
+
   catchup -->|what needs doing| you
-  you -->|"orca/bin/start-goal, once per goal"| goals
+  you --> sharpen
+  sharpen -->|"orca/bin/start-goal, once per goal"| goals
   goals -->|"ship: merged on green<br/>strict: draft stack"| gh
-  gh -->|strict: review and land| you
+  gh -->|"strict: review and land<br/>(/my:babysit, /my:interrogate)"| you
   goals -.->|friction with my:* assets| signals
   signals --> retro
   you -->|approve| retro
@@ -38,9 +44,13 @@ flowchart TB
 ```
 
 Inside a goal, autopilot runs each task through the same loop and logs it in
-`~/.local/state/autopilot/`. It never asks; it stops on the conditions in
-`skills/autopilot/SKILL.md` §3 (done criteria observed, budget spent, the same
-failure twice, BLOCKED) and writes a final report.
+`~/.local/state/autopilot/<owner>-<name>/<goal>/`: `progress.md` for the human
+reader, `decisions.tsv` (one row per decision on your behalf) and `tasks.tsv`
+(one row per finished task, read by `/my:retro`). Improvements noticed outside
+a task go to the repository's shared `found.md`. It never asks; it stops on the
+conditions in `skills/autopilot/SKILL.md` §3 (done criteria observed, budget
+spent, the same failure twice, BLOCKED), has `my:trail-auditor` read the trail,
+and writes a final report.
 
 ```mermaid
 flowchart TD
@@ -57,9 +67,11 @@ flowchart TD
   ci -->|yes| merge[Squash-merge]
   ci -->|red| impl
   mode -->|strict| draft[Leave the draft in the stack]
-  merge --> log[Log in progress.md]
+  merge --> log["Log in progress.md,<br/>tasks.tsv and decisions.tsv"]
   draft --> log
   log --> branch
+  log -->|stop condition| audit["my:trail-auditor<br/>reads the trail"]
+  audit --> report[Final report]
 ```
 
 Where each role runs depends on the machine. `orca/profiles/<name>.conf`
@@ -69,6 +81,7 @@ picks the harness and model per role.
 |------|----------------------------|-------------------------------|
 | implement | `start-goal` session | Not supported yet: autopilot needs Claude Code |
 | verify, review | Subagents of the goal's session | Orca workers through `orca/bin/run-role` |
+| adversary, audit | Subagents (`my:adversary` for `/my:interrogate`, `my:trail-auditor` for autopilot's final report) | Orca workers through `orca/bin/run-role` |
 
 Guardrails:
 
@@ -90,6 +103,14 @@ Guardrails:
 | `/my:why` | Explain why code is the way it is, from the commit and PR record | answer with citations |
 | `/my:blast-radius` | Find what a change could break outside its diff, and prove it safe by running code | report |
 | `/my:create-verification-skill` | Generate a `verify-<app>` skill that launches an app and drives it like a user | `.claude/skills/verify-<app>/` |
+| `/my:maintain-verification-skill` | Check a `verify-<app>` skill and its feature map against the source and the live app, and fix the drift | one PR (repository skill) or a diff (personal skill) |
+| `/my:sharpen` | Deepen a task before it starts: what an expert would also check, the rawest sources, the methods, an objective bar; does not do the task | rewritten request + goal text for `/my:autopilot` |
+| `/my:architect` | Trace a boundary-crossing change, sketch two designs, compare them on state ownership and canonical paths; writes no code | design + recommendation |
+| `/my:babysit` | Take an open PR to merge-ready: base drift, then review threads, then CI; never rebases, force-pushes or merges | report, fix commits, thread replies |
+| `/my:interrogate` | Isolated `my:adversary` breakers attack a change in a throwaway worktree; only findings you rerun and reproduce survive | report |
+| `/my:correct` | Turn mistakes agents keep repeating in a repository into structural checks (architecture, types, lint, tests) | PR in the target repository |
+| `/my:worktree-cleanup` | Audit git and Orca worktrees and remove the merged or abandoned ones after your approval | audit table, removals |
+| `/my:eval-skill` | Blind A/B evaluation of a skill, rule or agent change, judged against a hidden rubric and checked against the transcripts | Promote / Revise / Drop |
 | `/my:learn` | Capture a toolkit improvement signal to the machine-local journal | `~/.claude/my-toolkit/journal/` |
 | `/my:retro` | Cluster signals, propose toolkit edits, apply approved ones | toolkit repo edits (approval-gated) |
 | `/my:pdm-setup` | One-time config for the PdM skills (workspace, backlog destination, channels) | `~/.claude/my-toolkit/pdm/config.md` |
@@ -97,6 +118,12 @@ Guardrails:
 | `/my:product-spec` | PRD → 機能仕様 (edge-case sweep, Given/When/Then AC) | `{workspace}/docs/product-specs/` |
 | `/my:backlog` | Spec/PRD → tickets; approval-gated filing to Notion DB / GitHub Issues | tickets + `{workspace}/docs/backlog/` |
 | `/my:catchup` | Slack + Notion digest since last run (mentions, decisions, meeting action items) | `{workspace}/docs/catchup/` |
+
+`/my:autopilot`, `/my:create-verification-skill`,
+`/my:maintain-verification-skill`, `/my:sharpen`, `/my:architect`,
+`/my:babysit`, `/my:interrogate`, `/my:correct`, `/my:worktree-cleanup`,
+`/my:retro` and `/my:eval-skill` set `disable-model-invocation`:
+the model never starts them on its own, so call them by name.
 
 Language rules (`skills/rules-{go,rails,react,typescript}/`) load
 automatically when matching files are read — no invocation needed.
@@ -108,12 +135,14 @@ automatically when matching files are read — no invocation needed.
 | `my:reviewer` | Runs `/my:review` in an isolated context |
 | `my:diff-reviewer` | Plan-blind first pass of a two-pass diff review |
 | `my:verifier` | Independent judge: runs the repo's `verify-<app>` skill against a checkout and returns PASS / FAIL / BLOCKED with evidence; never edits code |
+| `my:adversary` | Breaker for `/my:interrogate`: runs commands in a throwaway worktree and returns `FINDINGS <n>` with only the bugs a command proved; never edits code |
+| `my:trail-auditor` | Read-only audit of an autopilot run's `goal.md`, `decisions.tsv` and `tasks.tsv`: returns `reviewed by` and an `## Attention` section |
 
 ## Hooks
 
 | Event | Script | Purpose |
 |-------|--------|---------|
-| `PreToolUse` | `outbound-guard.sh` | Denies force-pushes and pushes to the default branch; in strict repos also non-draft PRs, marking a PR ready and merging; blocks local paths, review IDs and untracked `docs/` paths in commit messages, PR/issue text and Notion writes |
+| `PreToolUse` | `outbound-guard.sh` | Denies force-pushes and pushes to the default branch; in strict repos also non-draft PRs, marking a PR ready and merging; blocks local paths, review IDs and untracked `docs/` paths in commit messages, PR/issue text, `gh api` writes (fields, piped bodies and `--input` files) and Notion writes |
 | `SessionEnd` | `session-end.sh` | Appends a session index for `/my:retro` |
 | `UserPromptSubmit` | `prompt-capture.sh` | Queues corrections for `/my:retro` |
 
@@ -216,7 +245,7 @@ it into `~/.gemini/config/plugins/`.
 | Skills | Load from `skills/`; `rules/antigravity.md` maps the Claude Code terms |
 | `rules/principles.md` | Always on, through `rules/AGENTS.md` |
 | Outbound guard | Root `hooks.json` → `antigravity-guard.sh` on `run_command` and on the input `manage_task` sends to a background command. The guard's `ask` becomes `force_ask`; the Notion write check is not wired |
-| Agents | Hidden (`mainAgent: false`, `subagent: false`): their tool lists use Claude Code tool names. With `orca` on PATH, a step that launches one runs it as an Orca worker through `orca/bin/run-role` (see [Orca](#orca)). Without `orca`, or when run-role exits 3 (Orca unreachable, or neither an Orca terminal nor an Orca agent session), verifier and reviewer run in the same conversation with the result marked `非隔離`, and diff-reviewer is skipped (see the next row). `rules/antigravity.md` gives the handling of the other exit codes, including a timeout (4) |
+| Agents | Hidden (`mainAgent: false`, `subagent: false`): their tool lists use Claude Code tool names. With `orca` on PATH, a step that launches one runs it as an Orca worker through `orca/bin/run-role` (see [Orca](#orca)). Without `orca`, or when run-role exits 3 (Orca unreachable, or neither an Orca terminal nor an Orca agent session), verifier, reviewer, adversary and trail-auditor run in the same conversation with the result marked `非隔離`, and diff-reviewer is skipped (see the next row). `rules/antigravity.md` gives the handling of the other exit codes, including a timeout (4) |
 | `/my:autopilot`, `/my:retro` | Not supported: they depend on Claude Code agents, background commands, or transcripts |
 | Two-pass diff review | With Orca, the plan-blind first pass runs as a separate `diff-reviewer` worker. Without Orca, the first pass is skipped and the review runs in one pass |
 | `SessionEnd` / `UserPromptSubmit` capture | Root `hooks.json` → `antigravity-stop.sh` on `Stop`: it indexes the conversation on its first turn and passes each new input to `prompt-capture.sh` |
@@ -239,9 +268,10 @@ otherwise.
 
 - `orca/bin/doctor`: run from an Orca terminal; checks that Orca is reachable
   and that both guards deny a push to `main`.
-- `orca/bin/run-role <verifier|reviewer|diff-reviewer> --out <file> [--cwd <workspace>] -- <inputs>`:
+- `orca/bin/run-role <verifier|reviewer|diff-reviewer|adversary|trail-auditor> --out <file> [--cwd <workspace>] -- <inputs>`:
   starts the role as a worker with the body of `agents/<name>.md`, waits for it
-  from the shell, checks the result file, and releases the worker. Exit codes:
+  from the shell, checks the result file against the role's contract, and
+  releases the worker. Exit codes:
   0 result OK, 1 worker failed or bad result, 2 configuration error, 3 Orca
   unusable, 4 timed out (worker stopped). `rules/antigravity.md` is its only
   caller; Claude Code keeps using subagents.
@@ -259,8 +289,21 @@ otherwise.
   configuration error, 3 Orca unusable.
 - `orca/profiles/<name>.conf`: the harness and model per role, one
   `<role> <harness> <model>` line each. run-role reads the `verify` line for
-  `verifier` and the `review` line for `reviewer` and `diff-reviewer`;
-  start-goal reads the `implement` line.
+  `verifier`, the `review` line for `reviewer` and `diff-reviewer`, the
+  `adversary` line for `adversary` and the `audit` line for `trail-auditor`
+  (these two fall back to the `review` line); start-goal reads the
+  `implement` line.
+
+  | Role | `work` | `private` |
+  |------|--------|-----------|
+  | implement | claude opus | antigravity gemini-4-carbon-high |
+  | verify, review | claude opus | antigravity gemini-4-carbon-high |
+  | adversary, audit | claude opus | antigravity gemini-4-carbon-high |
+  | scout | claude haiku | antigravity gemini-3.8-flash-medium |
+  | retro | claude sonnet | antigravity gemini-4-carbon-high |
+
+  For a cross-model check, point `adversary` or `audit` at a different
+  vendor's harness and model than `implement` on that machine.
 - A profile must be selected on any machine with `orca` on PATH: set
   `MY_ORCA_PROFILE`, or write a `profile <name>` line in
   `~/.claude/my-toolkit/orca.conf` (`profile work` on the work machine,
@@ -367,14 +410,17 @@ custom-slash-command/
 │   ├── review/                    # + template.md, checklists/, review-json.md,
 │   │                              #   scripts/ (diff-hunks, build-screen, render-report),
 │   │                              #   assets/review-screen.html
-│   ├── autopilot/                 # + goal-template.md
+│   ├── autopilot/                 # + goal-template.md, scripts/ (log-decision, log-task)
 │   ├── how/  why/  blast-radius/
+│   ├── sharpen/  architect/       # before a change
+│   ├── babysit/  interrogate/     # after a change; babysit + references/bot-triage.md
 │   ├── create-verification-skill/ # + references/
+│   ├── maintain-verification-skill/  correct/  worktree-cleanup/  eval-skill/
 │   ├── prd|product-spec|backlog|catchup/           # PdM flow, each with template.md
 │   ├── learn/  pdm-setup/
 │   ├── retro/                     # + scripts/redact.sh, redact.denylist
 │   └── rules-{go,rails,react,typescript}/          # SKILL.md index + references/
-├── agents/                        # reviewer, diff-reviewer, verifier
+├── agents/                        # reviewer, diff-reviewer, verifier, adversary, trail-auditor
 ├── rules/                         # working principles, linked into ~/.claude/rules/;
 │                                  #   AGENTS.md, antigravity.md for Antigravity only
 ├── hooks/hooks.json               # PreToolUse guard, SessionEnd index, UserPromptSubmit capture
