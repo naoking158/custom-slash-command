@@ -6,8 +6,8 @@
 #     2 configuration error, 3 Orca unusable, 4 timeout (worker stopped).
 #   - The last stdout line is `[run-role] <agent> exit=<n> <absolute --out>`.
 #   - diff-reviewer's task holds only the agent body, the patch, hunk index,
-#     checklists, output path and the three reporting rules (FR-5).
-#   - The profile picks the harness and model given to worker-start (FR-3).
+#     checklists, output path and the three reporting rules.
+#   - The profile picks the harness and model given to worker-start.
 #   - Completion is read from worker-show; `orchestration check` is never used.
 
 bats_require_minimum_version 1.5.0
@@ -52,7 +52,8 @@ path_without_orca() {
 
 # fake_orca — an orca that logs every call to $FAKE/calls, saves the
 # worker-start arguments and spec, and answers worker-show with the lines of
-# $FAKE/states ("<state> <activity>", the last one repeats). On the first
+# $FAKE/states ("<state> <activity>", the last one repeats; "fail" makes
+# the call fail with no output). On the first
 # settled state it copies $FAKE/result.src (if any) to the --out path.
 fake_orca() {
   printf 'succeeded working\n' >"$TMP/states"
@@ -79,6 +80,7 @@ case "$1 $2" in
       tail -n +2 "$FAKE/states" >"$FAKE/states.next" && mv "$FAKE/states.next" "$FAKE/states"
     fi
     set -- $line
+    [ "$1" = fail ] && exit 1
     case "$1" in succeeded|failed|stopped)
       if [ -f "$FAKE/result.src" ] && [ ! -f "$FAKE/result.done" ]; then
         cp "$FAKE/result.src" "$(cat "$FAKE/result.dest")"; : >"$FAKE/result.done"
@@ -169,6 +171,34 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
   run_diff_reviewer --from term_other
   [ "$status" -eq 0 ]
   [ "$(start_arg --from)" = "term_other" ]
+}
+
+@test "relative --cwd is resolved to the directory's absolute path" {
+  worker_writes "$pass1"
+  cd "$TMP/in"
+  run_diff_reviewer --cwd .
+  [ "$status" -eq 0 ]
+  [ "$(start_arg --worktree)" = "path:$TMP/in" ]
+}
+
+@test "--cwd that does not exist: exit 2" {
+  run_diff_reviewer --cwd "$TMP/none"
+  [ "$status" -eq 2 ]
+}
+
+@test "orca.conf without a trailing newline still names the profile" {
+  unset MY_ORCA_PROFILE
+  mkdir -p "$HOME/.claude/my-toolkit"
+  printf 'profile work' >"$HOME/.claude/my-toolkit/orca.conf"
+  worker_writes "$pass1"
+  run_diff_reviewer
+  [ "$status" -eq 0 ]
+}
+
+@test "non-numeric MY_ORCA_POLL_SECONDS: exit 2" {
+  export MY_ORCA_POLL_SECONDS=abc
+  run_diff_reviewer
+  [ "$status" -eq 2 ]
 }
 
 @test "worker runs in the calling workspace unless --cwd names one" {
@@ -338,17 +368,23 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
 
 # --- exit 4 ---
 
-@test "worker blocked past --timeout: exit 4, worker stopped" {
+@test "worker blocked past --timeout: exit 4, worker stopped then released" {
   printf 'ready blocked\n' >"$TMP/states"
   run_diff_reviewer --timeout 1
   [ "$status" -eq 4 ]
   [ "$(last_line)" = "[run-role] diff-reviewer exit=4 $OUT" ]
-  called "orchestration worker-stop --dispatch ctx_fake"
-  ! called "orchestration worker-release"
+  [ "$(grep -E '^orchestration worker-(stop|release)' "$TMP/calls" | cut -d' ' -f2)" = $'worker-stop\nworker-release' ]
   ! called "orchestration check"
 }
 
-# --- FR-5: what diff-reviewer receives ---
+@test "worker-show failing three times in a row: exit 3, worker stopped" {
+  printf 'fail\n' >"$TMP/states"
+  run_diff_reviewer
+  [ "$status" -eq 3 ]
+  called "orchestration worker-stop --dispatch ctx_fake"
+}
+
+# --- what diff-reviewer receives ---
 
 @test "diff-reviewer task is the agent body, the four inputs and the three rules only" {
   worker_writes "$pass1"
@@ -381,7 +417,7 @@ EOF
   ! grep -q "plan" "$TMP/start.args"
 }
 
-# --- FR-3: the profile picks harness and model ---
+# --- the profile picks harness and model ---
 
 @test "switching MY_ORCA_PROFILE changes the harness and model given to worker-start" {
   worker_writes "$pass1"

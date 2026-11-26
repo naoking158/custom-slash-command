@@ -15,7 +15,8 @@
 #   --cwd         Orca workspace the worker runs in (a path Orca lists in
 #                 `orca worktree list`). Default: the calling terminal's workspace.
 #   --timeout     seconds to wait for the worker (default 3600).
-#   --from        Orca terminal handle to act as when $ORCA_TERMINAL_HANDLE is unset.
+#   --from        Orca terminal handle passed to worker-start; needed when
+#                 $ORCA_TERMINAL_HANDLE is unset.
 #   role inputs   diff-reviewer: --patch <file> --hunks <file> --checklist <file>
 #                 (repeatable); nothing else is accepted.
 #                 verifier, reviewer: free-form inputs, one per argument.
@@ -29,8 +30,9 @@
 #   1  the worker failed or stopped, or the result breaks the contract
 #   2  usage or configuration error (profile, role, inputs, --cwd)
 #   3  Orca unusable: no orca command, runtime unreachable, no terminal
-#      handle, or the worker could not start
-#   4  timed out, including a worker blocked on an approval; it is stopped
+#      handle, the worker could not start, or worker-show kept failing
+#   4  timed out (including a worker blocked on an approval) or interrupted;
+#      the worker is stopped
 # The last line on stdout is `[run-role] <agent-name> exit=<n> <absolute --out>`.
 #
 # Environment: MY_ORCA_PROFILE, MY_ORCA_POLL_SECONDS (polling interval, default 5).
@@ -41,7 +43,17 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 AGENT="-"
 OUT="-"
 WORK=""
-trap '[ -z "$WORK" ] || rm -rf "$WORK"' EXIT
+DISPATCH=""
+SETTLED=""
+
+cleanup() {
+  if [ -n "$DISPATCH" ]; then
+    [ -n "$SETTLED" ] || orca orchestration worker-stop --dispatch "$DISPATCH" --json >/dev/null 2>&1
+    orca orchestration worker-release --dispatch "$DISPATCH" --json >/dev/null 2>&1
+  fi
+  [ -z "$WORK" ] || rm -rf "$WORK"
+}
+trap cleanup EXIT
 
 usage() {
   sed -n '2,/^# Dependencies/s/^# \{0,1\}//p' "$0"
@@ -80,7 +92,7 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || die 2 "$1 needs a value"
       case "$1" in
         --out) OUT="$(abspath "$2")" ;;
-        --cwd) cwd="$(abspath "${2%/}")" ;;
+        --cwd) cwd="$(cd "$2" 2>/dev/null && pwd -P)" || die 2 "--cwd: no such directory: $2" ;;
         --timeout) timeout="$2" ;;
         --from) from="$2" ;;
       esac
@@ -96,6 +108,8 @@ esac
 
 [ "$OUT" != "-" ] || die 2 "--out is required"
 case "$timeout" in ''|*[!0-9]*) die 2 "--timeout takes whole seconds: $timeout" ;; esac
+poll="${MY_ORCA_POLL_SECONDS:-5}"
+case "$poll" in ''|.|*[!0-9.]*|*.*.*) die 2 "MY_ORCA_POLL_SECONDS takes seconds: $poll" ;; esac
 command -v jq >/dev/null 2>&1 || die 2 "jq is required"
 
 INPUTS=""
@@ -134,7 +148,7 @@ agent_file="$ROOT/agents/$AGENT.md"
 profile="${MY_ORCA_PROFILE:-}"
 conf="$HOME/.claude/my-toolkit/orca.conf"
 if [ -z "$profile" ] && [ -f "$conf" ]; then
-  while read -r key value _; do
+  while read -r key value _ || [ -n "$key" ]; do
     if [ "$key" = profile ] && [ -n "$value" ]; then profile="$value"; break; fi
   done < "$conf"
 fi
@@ -144,7 +158,7 @@ profile_file="$ROOT/orca/profiles/$profile.conf"
 [ -f "$profile_file" ] || die 2 "no profile file: $profile_file"
 
 harness="" model=""
-while read -r r h m _; do
+while read -r r h m _ || [ -n "$r" ]; do
   if [ "$r" = "$ROLE" ]; then harness="$h"; model="$m"; break; fi
 done < "$profile_file"
 [ -n "$harness" ] && [ -n "$model" ] || die 2 "profile $profile has no '$ROLE <harness> <model>' line"
@@ -184,23 +198,29 @@ if [ -z "$id" ]; then
   fi
   die 3 "worker-start failed ($harness, $model)"
 fi
+DISPATCH="$id"
+trap 'die 4 "interrupted; stopped $DISPATCH"' INT TERM
 printf 'run-role: %s started as %s (%s, %s, profile %s)\n' "$AGENT" "$id" "$harness" "$model" "$profile" >&2
 
-poll="${MY_ORCA_POLL_SECONDS:-5}"
 started=$SECONDS
-state="" activity=""
+state="" activity="" misses=0
 while :; do
   show="$(orca orchestration worker-show --dispatch "$id" --json 2>/dev/null)"
   state="$(printf '%s' "$show" | jq -r '.result.state // empty' 2>/dev/null)"
   activity="$(printf '%s' "$show" | jq -r '.result.activity // empty' 2>/dev/null)"
   case "$state" in succeeded|failed|stopped) break ;; esac
+  if [ -z "$state" ]; then
+    misses=$((misses + 1))
+    [ "$misses" -lt 3 ] || die 3 "worker-show failed 3 times in a row for $id"
+  else
+    misses=0
+  fi
   if [ $((SECONDS - started)) -ge "$timeout" ]; then
-    orca orchestration worker-stop --dispatch "$id" --json >/dev/null 2>&1
     die 4 "timed out after ${timeout}s (state ${state:-unknown}, activity ${activity:-unknown}); stopped $id"
   fi
   sleep "$poll"
 done
-orca orchestration worker-release --dispatch "$id" --json >/dev/null 2>&1
+SETTLED=1
 
 [ "$state" = succeeded ] || die 1 "worker $id ended as $state"
 [ -s "$OUT" ] || die 1 "worker left no result at $OUT"
