@@ -14,11 +14,12 @@
 # Progress logs live in <state-dir>/<owner>-<name>/<goal>/ (default state dir
 # ~/.local/state/autopilot). A goal is in the period when the date on the
 # `Started:` line of its goal.md is; its repository is the `Repository:` line.
-# A goal whose tasks.tsv (written by autopilot's log-task.sh) has at least one
-# data row is read from it: one task per task_id, the last row winning, with
-# review_rounds as the count and verify as the outcome (fail and unknown values
-# are 不明). Otherwise progress.md is read, where
-# only task heading sections (`## Task 2: ...`, `### T3 ...`, `### 1. ...`) count.
+# A task logged in the goal's tasks.tsv (written by autopilot's log-task.sh) is
+# read from there: the last row of its task_id wins, review_rounds is the count
+# and verify the outcome (fail and unknown values are 不明). Other tasks are
+# read from progress.md, where only task heading sections (`## Task 2: ...`,
+# `### T3 ...`, `### 1. ...`) count; a numeric task_id and a heading's task
+# number name the same task.
 # Within a task, the review count is the largest of `review rN`, `rN:`,
 # `round N`, `N rounds`, `review N 回` on lines mentioning review; the verify
 # outcome comes from lines starting with `verify`, in the order unverified
@@ -88,6 +89,7 @@ parse_goal() {
   [ -f "$goal_md" ] && head="$(cat "$goal_md")"
   [ -f "$tsv" ] && rows="$(cat "$tsv")"
   { [ -f "$progress" ] && cat "$progress"; } | jq -Rs --arg goal "$head" --arg tsv "$rows" '
+    def norm: if test("^[0-9]+$") then tonumber | tostring else . end;
     def heading_level: capture("^(?<h>#+) ").h | length;
     def task_number:
       (capture("^#+ +(?:[Tt]ask|T) *(?<n>[0-9]+)") // capture("^#+ +(?<n>[0-9]+)\\.") // null)
@@ -116,28 +118,26 @@ parse_goal() {
               else .cur = null end
           elif .cur then .tasks[.cur] += [$l]
           else . end)
-      | .tasks ) as $tasks
+      | .tasks | with_entries(.key |= norm | .value |= {rounds: rounds, verify: verify}) ) as $tasks
     | ( $tsv | split("\n") | map(rtrimstr("\r") | select(test("\\S")) | split("\t") | map(ltrimstr("\u0027")))
         | (.[0] // []) as $h
         | ($h | index("task_id")) as $id
         | ($h | index("review_rounds")) as $rc
         | ($h | index("verify")) as $vc
-        | if $id == null then []
+        | if $id == null then {}
           else reduce .[1:][] as $row ({};
               def cell($c): if $c == null then "" else $row[$c] // "" end;
-              cell($id) as $k
+              (cell($id) | norm) as $k
               | if $k == "" then .
                 else .[$k] = {
                   rounds: (cell($rc) | if test("^[0-9]+$") then tonumber else null end),
                   verify: (cell($vc) | if IN("pass", "pass_after_fix", "blocked", "unverified") then . else "unknown" end) }
                 end)
-            | [ .[] ]
           end ) as $logged
     | {
         repo: ($goal | capture("Repository: *(?<r>[^ \\n]+)").r // null),
         started: ($goal | capture("Started: *(?<d>[0-9]{4}-[0-9]{2}-[0-9]{2})").d // null),
-        tasks: (if ($logged | length) > 0 then $logged
-                else [ $tasks[] | {rounds: rounds, verify: verify} ] end)
+        tasks: [ ($tasks + $logged)[] ]
       }'
 }
 

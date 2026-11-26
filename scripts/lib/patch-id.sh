@@ -6,7 +6,10 @@
 # The id depends only on the change itself (`git patch-id --stable`), so the
 # same change on top of a different base prints the same id. A branch whose id
 # is unchanged after merging its parent can keep its earlier review and verify
-# verdicts. An empty diff prints `empty`.
+# verdicts. <base-ref> is expected to be an ancestor of <head-ref> (the parent
+# branch after it was merged in): when the base moves on alone, the diff and
+# so the id change too, which only makes earlier verdicts stale. An empty diff
+# prints `empty`.
 #
 # Exit status: 0 printed the id, 2 usage error, invalid ref or not a repository.
 # Dependencies: bash, git.

@@ -4,7 +4,7 @@
 #
 # Contract under test:
 #   - Review rounds and verify outcomes come from a goal's tasks.tsv when it has
-#     data rows (the last row per task_id wins), else from the task heading
+#     a row for the task (the last row per task_id wins), else from the task heading
 #     sections of progress.md; what cannot be read is reported as 不明.
 #   - Human pushback counts auto/ PRs created in the period with a comment or a
 #     COMMENTED / CHANGES_REQUESTED review by someone who is neither the PR
@@ -262,7 +262,7 @@ SH
 
 @test "tasks.tsv gives review rounds and verify outcomes, and fail is unknown" {
   tsv_goal t/t tsv 2026-11-22 <<'MD'
-## Task 1: not read when tasks.tsv has rows
+## Task 1: superseded by task 1 of tasks.tsv
 - review r9: PASS
 - verify: PASS
 MD
@@ -312,4 +312,21 @@ MD
   [ "${lines[1]}" = "進行の記録: ゴール 1、タスク 1（Started が読めないゴール 0、タスクの見出しがないゴール 0）" ]
   [ "${lines[2]}" = "レビューの往復数: 読めた 1（2回 1、平均 2）、不明 0" ]
   [ "${lines[3]}" = "verify: PASS 1、修正後に PASS 0、BLOCKED 0、未検証 0、不明 0" ]
+}
+
+@test "tasks missing from tasks.tsv are still read from progress.md" {
+  tsv_goal t/t tsv 2026-11-22 <<'MD'
+## Task 1: only in progress.md
+- review r2: PASS
+- verify: PASS
+
+## Task 2: superseded by tasks.tsv
+- review r9: PASS
+- verify: BLOCKED
+MD
+  task 2 1 unverified
+  run -0 "$METRICS" --repo t/t
+  [ "${lines[1]}" = "進行の記録: ゴール 1、タスク 2（Started が読めないゴール 0、タスクの見出しがないゴール 0）" ]
+  [ "${lines[2]}" = "レビューの往復数: 読めた 2（1回 1、2回 1、平均 1.5）、不明 0" ]
+  [ "${lines[3]}" = "verify: PASS 1、修正後に PASS 0、BLOCKED 0、未検証 1、不明 0" ]
 }
