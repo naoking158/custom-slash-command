@@ -484,3 +484,74 @@ EOF
   [ "$status" -eq 0 ]
   [ "$(start_arg --model)" = "$(profile_value work verify 3)" ]
 }
+
+# --- adversary and trail-auditor ---
+
+# bare_profile — a copy of run-role whose only profile, "bare", has just a
+# review line, so the adversary and audit roles must fall back to it.
+bare_profile() {
+  mkdir -p "$TMP/root"
+  cp -R "$REPO_ROOT/orca" "$REPO_ROOT/agents" "$TMP/root/"
+  rm -f "$TMP/root/orca/profiles/"*.conf
+  printf 'review    bareharness    baremodel\n' >"$TMP/root/orca/profiles/bare.conf"
+  export MY_ORCA_PROFILE=bare
+}
+
+@test "adversary with FINDINGS 0 or FINDINGS 2: exit 0 on the profile's adversary line" {
+  worker_writes $'FINDINGS 0\nDropped: 1 (did not reproduce)\n'
+  run --separate-stderr "$RUN_ROLE" adversary --out "$OUT" -- "worktree: /tmp/x"
+  [ "$status" -eq 0 ]
+  [ "$(last_line)" = "[run-role] adversary exit=0 $OUT" ]
+  [ "$(start_arg --model)" = "$(profile_value work adversary 3)" ]
+  [ "$(start_arg --agent)" = "$(profile_value work adversary 2)" ]
+
+  rm -f "$TMP/result.done"
+  worker_writes $'FINDINGS 2\n### a\n### b\nDropped: 0 ()\n'
+  run --separate-stderr "$RUN_ROLE" adversary --out "$OUT"
+  [ "$status" -eq 0 ]
+}
+
+@test "adversary whose first line is not FINDINGS <n>: exit 1" {
+  worker_writes $'Found 2 bugs\nFINDINGS 2\n'
+  run --separate-stderr "$RUN_ROLE" adversary --out "$OUT"
+  [ "$status" -eq 1 ]
+  rm -f "$TMP/result.done"
+  worker_writes $'FINDINGS two\n'
+  run --separate-stderr "$RUN_ROLE" adversary --out "$OUT"
+  [ "$status" -eq 1 ]
+}
+
+@test "trail-auditor with an Attention section: exit 0 on the profile's audit line" {
+  worker_writes $'reviewed by opus\n\n## Attention\n\nNo flags\n'
+  run --separate-stderr "$RUN_ROLE" trail-auditor --out "$OUT" -- "state: /tmp/s"
+  [ "$status" -eq 0 ]
+  [ "$(start_arg --model)" = "$(profile_value work audit 3)" ]
+  [ "$(start_arg --agent)" = "$(profile_value work audit 2)" ]
+}
+
+@test "trail-auditor without an Attention section: exit 1" {
+  worker_writes $'reviewed by opus\n\nNo flags\n'
+  run --separate-stderr "$RUN_ROLE" trail-auditor --out "$OUT"
+  [ "$status" -eq 1 ]
+}
+
+@test "adversary and trail-auditor fall back to the review line" {
+  bare_profile
+  worker_writes $'FINDINGS 0\n'
+  run --separate-stderr "$TMP/root/orca/bin/run-role" adversary --out "$OUT"
+  [ "$status" -eq 0 ]
+  [ "$(start_arg --agent)" = bareharness ]
+  [ "$(start_arg --model)" = baremodel ]
+
+  rm -f "$TMP/result.done"
+  worker_writes $'reviewed by x\n## Attention\nNo flags\n'
+  run --separate-stderr "$TMP/root/orca/bin/run-role" trail-auditor --out "$OUT"
+  [ "$status" -eq 0 ]
+  [ "$(start_arg --model)" = baremodel ]
+}
+
+@test "verifier does not fall back to the review line" {
+  bare_profile
+  run --separate-stderr "$TMP/root/orca/bin/run-role" verifier --out "$OUT"
+  [ "$status" -eq 2 ]
+}

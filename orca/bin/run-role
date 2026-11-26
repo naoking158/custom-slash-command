@@ -6,7 +6,8 @@
 #   orca/bin/run-role <agent-name> --out <file> [--cwd <dir>] [--timeout <sec>]
 #                     [--from <handle>] [-- <role inputs>...]
 #
-#   <agent-name>  verifier | reviewer | diff-reviewer. The worker's task is the
+#   <agent-name>  verifier | reviewer | diff-reviewer | adversary |
+#                 trail-auditor. The worker's task is the
 #                 body of agents/<agent-name>.md in this checkout, the role
 #                 inputs, and three rules: write the result to --out, report
 #                 completion in one line, ask no questions.
@@ -20,11 +21,19 @@
 #                 set. Orca refuses it inside an agent session.
 #   role inputs   diff-reviewer: --patch <file> --hunks <file> --checklist <file>
 #                 (repeatable); nothing else is accepted.
-#                 verifier, reviewer: free-form inputs, one per argument.
+#                 the others: free-form inputs, one per argument.
 #
 # The profile is $MY_ORCA_PROFILE, else `profile <name>` in
 # ~/.claude/my-toolkit/orca.conf; it names orca/profiles/<name>.conf, whose
-# `<role> <harness> <model>` lines give the worker's agent and model.
+# `<role> <harness> <model>` lines give the worker's agent and model. The role
+# is `verify` for verifier, `review` for reviewer and diff-reviewer,
+# `adversary` for adversary and `audit` for trail-auditor; the last two use the
+# `review` line when the profile has no line of their own.
+#
+# Result contracts: verifier starts with PASS, FAIL or BLOCKED; diff-reviewer
+# writes JSON with a findings array; reviewer names an assessment and an
+# existing report (output_path); adversary's first line is `FINDINGS <n>`;
+# trail-auditor has an `## Attention` heading.
 #
 # Exit codes:
 #   0  the result file meets the role's contract
@@ -101,10 +110,13 @@ while [ $# -gt 0 ]; do
     *) die 2 "unknown argument: $1" ;;
   esac
 done
+FALLBACK=""
 case "$AGENT" in
   verifier) ROLE=verify ;;
   reviewer|diff-reviewer) ROLE=review ;;
-  *) die 2 "unknown agent: $AGENT (verifier, reviewer, diff-reviewer)" ;;
+  adversary) ROLE=adversary FALLBACK=review ;;
+  trail-auditor) ROLE=audit FALLBACK=review ;;
+  *) die 2 "unknown agent: $AGENT (verifier, reviewer, diff-reviewer, adversary, trail-auditor)" ;;
 esac
 
 [ "$OUT" != "-" ] || die 2 "--out is required"
@@ -153,10 +165,18 @@ profile="$(orca_profile_name)"
 [ -n "$profile" ] || die 2 "no profile: set MY_ORCA_PROFILE or write 'profile <name>' in $ORCA_CONF ($(orca_profile_choices))"
 profile_file="$(orca_profile_file "$profile")" || die 2 "no profile named '$profile' ($(orca_profile_choices))"
 
-harness="" model=""
-while read -r r h m _ || [ -n "$r" ]; do
-  if [ "$r" = "$ROLE" ]; then harness="$h"; model="$m"; break; fi
-done < "$profile_file"
+# profile_line ROLE — set harness and model from the profile's line for ROLE.
+profile_line() {
+  harness="" model=""
+  while read -r r h m _ || [ -n "$r" ]; do
+    if [ "$r" = "$1" ]; then harness="$h"; model="$m"; return; fi
+  done < "$profile_file"
+}
+profile_line "$ROLE"
+if [ -z "$harness" ] && [ -n "$FALLBACK" ]; then
+  profile_line "$FALLBACK"
+  [ -z "$harness" ] || printf 'run-role: profile %s has no %s line; using its %s line\n' "$profile" "$ROLE" "$FALLBACK" >&2
+fi
 [ -n "$harness" ] && [ -n "$model" ] || die 2 "profile $profile has no '$ROLE <harness> <model>' line"
 
 command -v orca >/dev/null 2>&1 || die 3 "orca command not found on PATH"
@@ -241,5 +261,11 @@ case "$AGENT" in
         report="${workspace:-${cwd:-$PWD}}/$report" ;;
     esac
     [ -f "$report" ] || die 1 "reviewer report not found: $report" ;;
+  adversary)
+    head -n 1 "$OUT" | grep -Eq '^FINDINGS [0-9]+$' \
+      || die 1 "adversary result does not start with 'FINDINGS <n>'" ;;
+  trail-auditor)
+    grep -Eq '^## Attention' "$OUT" \
+      || die 1 "trail-auditor result has no '## Attention' section" ;;
 esac
 finish 0
