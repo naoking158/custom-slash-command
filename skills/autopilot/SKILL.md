@@ -99,4 +99,4 @@ Append to `progress.md` and show the user:
 - Decisions made on the user's behalf.
 - `found.md` rows still open across the repository (count, and the rows this run added), `/my:learn` signals captured, and `## Tool friction` entries.
 
-Clean up: remove the worktree only when everything in it is pushed (`git worktree remove`), and stop any app stack a verify run left behind.
+Clean up: remove the worktree only when everything in it is pushed (`git worktree remove`), and stop any app stack a verify run left behind. Never remove a worktree made for this goal (one with the `my-autopilot-worktree` marker of §0 step 3): whoever made it removes it.
