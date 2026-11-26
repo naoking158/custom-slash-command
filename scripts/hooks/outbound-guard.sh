@@ -19,7 +19,9 @@
 # `git -C`. A push or PR command whose directory or arguments the line does not
 # show (`cd "$(mktemp -d)"`, a refspec from a command substitution) is denied
 # with the way to rewrite it: judging it in the session cwd would apply another
-# repository's rules.
+# repository's rules. Not read: a command inside a quoted string
+# (`bash -c "git push"`, `out="$(git push)"`), and git options other than -C / -c
+# before the subcommand.
 #
 # Autonomy modes. A repository is in `strict` mode unless the machine-local
 # config ($MY_AUTONOMY_CONF, default ~/.claude/my-toolkit/autonomy.conf) has a
@@ -92,19 +94,20 @@ cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null
 # The commands on the line that send something out, one per line:
 #   push <TAB> dir <TAB> its arguments, quotes removed and assignments expanded
 #   pr   <TAB> dir <TAB> the gh command, quoted strings emptied
-#   text <TAB> dir       the first command that carries a message
+#   text <TAB> dir <TAB> git | gh, for each command that carries a message
 # dir is where the command runs, "?" when the line does not show it; a push
-# argument the line does not show is "?" as well. Heredoc bodies and quoted
-# strings are set aside first, so that a message that mentions `gh pr create`
-# or `git push` is not mistaken for running it.
+# argument the line does not show is "?" as well. Heredoc bodies, quoted
+# strings and comments are set aside first, so that a message that mentions
+# `gh pr create` or `git push` is not mistaken for running it.
 commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
-  my (@lit, @saved, $text_seen);
+  my (@lit, @saved);
   my $depth = 0;
   my %var = (HOME => $ENV{HOME});
   my $dir = length $ENV{CWD} ? $ENV{CWD} : undef;
   my $hold = sub { push @lit, [@_]; "\x00" . $#lit . "\x00" };
   s/(<<-?\s*(["\x27]?)(\w+)\2)([^\n]*)\n.*?\n[ \t]*\3[ \t]*(?=\n|\z)/$1$4/gs;
-  s/"((?:[^"\\]|\\.)*)"|\x27([^\x27]*)\x27/defined $1 ? $hold->($1, 1) : $hold->($2, 0)/gse;
+  s/\\.|\$\x27((?:[^\x27\\]|\\.)*)\x27|"((?:[^"\\]|\\.)*)"|\x27([^\x27]*)\x27|(?<![^\s;&|()])#[^\n]*/
+    defined $1 ? $hold->($1, 0) : defined $2 ? $hold->($2, 1) : defined $3 ? $hold->($3, 0) : substr($&, 0, 1) eq "#" ? "" : $&/gse;
   s/\\\n/ /g;
   my $value = sub {
     my ($word, $out) = ($_[0], "");
@@ -127,34 +130,44 @@ commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
     $path =~ /^\// ? $path : defined $base ? "$base/$path" : undef;
   };
   for my $seg (split /&&|\|\||;|\n|(?<!>)\|&?|(?<![<>|&])&(?![>&])/) {
+    $seg =~ s/(?:(?:(?<!\S)\d+)?(?:>>|>\||>&|>|<<<|<<-?|<&|<>|<)|&>>?)\s*[^\s()<>&|;]+//g;
     my $nesting = ($seg =~ tr/(//) - ($seg =~ tr/)//);
-    push @saved, [$depth, $dir, {%var}] if $seg =~ s/^\s*\(\s*//;
+    if ($nesting > 0) {
+      push @saved, [$depth, $dir, {%var}];
+      $seg =~ s/^.*\(\s*//s;
+    }
     $seg =~ s/^\s+|\s+$//g;
-    $seg =~ s/^(?:(?:then|do|else|time|!|\{)\s+)+//;
-    if ($seg =~ /^(?:export\s+)?(\w+)=(\S*)$/) {
-      $var{$1} = $value->($2);
-    } elsif ($seg =~ /^(?:cd|pushd)(?:\s+(?:-[LP]\s+|--\s+)*([^\s)]+))?(?:\s+\d*[<>]&?\S*)*\s*\)?$/) {
+    $seg =~ s/^(?:(?:if|then|elif|else|while|until|do|time|!|\{|builtin|command)\s+)+//;
+    if ($seg =~ /^(?:(?:export|declare|local|readonly|typeset)\s+(?:-\w+\s+)*)?((?:\w+=\S*(?:\s+|$))+)$/) {
+      my $assignments = $1;
+      $var{$1} = $value->($2) while $assignments =~ /(\w+)=(\S*)/g;
+    } elsif ($seg =~ /^cd(?:\s+(?:-[LP]\s+|--\s+)*([^\s)]+))?\s*\)?$/) {
       $dir = defined $1 ? $enter->($dir, $1) : $ENV{HOME};
-    } elsif ($seg =~ /^(?:cd|pushd|popd)\b/) {
-      $dir = undef;
+    } elsif ($seg =~ /^pushd\s+([^\s)]+)\s*\)?$/) {
+      $dir = $enter->($dir, $1);
     } else {
-      $var{$1} = undef if $seg =~ /^(?:export\s+)?(\w+)=/ || $seg =~ /^for\s+(\w+)\s/;
+      $dir = undef if $seg =~ /(?<![\w.\/-])(?:cd|pushd|popd)(?![\w.\/-])/;
+      $var{$1} = undef while $seg =~ /(?:^|\s)(\w+)=/g;
+      $var{$1} = undef if $seg =~ /^for\s+(\w+)\s/;
+      if ($seg =~ /^read\s+(.*)/) { $var{$_} = undef for grep { /^\w+$/ } split " ", $1 }
       if ($seg =~ /(?<![\w-])git((?:\s+-[Cc]\s+\S+)*)\s+push(?![\w-])([^)]*)/) {
         my ($opts, $args) = ($1, $2);
         my $at = $opts =~ /\s-C\s+(\S+)/ ? $enter->($dir, $1) : $dir;
-        my @args = map { my $v = $value->($_); defined $v && $v !~ /\s/ ? $v : "?" } grep { !/^\d*[<>]/ } split " ", $args;
+        my @args = map { my $v = $value->($_); defined $v && $v !~ /\s/ ? $v : "?" } split " ", $args;
         print join("\t", "push", defined $at ? $at : "?", "@args"), "\n";
       }
-      if ($seg =~ /(?<![\w-])(gh\s+(?:pr\s+(?:create|merge|ready)|api)(?![\w-]).*)/) {
+      if ($seg =~ /(?<![\w-])(gh\s+(?:pr\s+(?:create|new|merge|ready)|api)(?![\w-])[^)]*)/) {
         my $gh = $1;
         $gh =~ s/\x00(\d+)\x00/$lit[$1][1] ? q("") : "\x27\x27"/ge;
         $gh =~ s/\s+/ /g;
+        $gh =~ s/ $//;
         print join("\t", "pr", defined $dir ? $dir : "?", $gh), "\n";
       }
-      if (!$text_seen && $seg =~ /(?<![\w-])git((?:\s+-[Cc]\s+\S+)*)\s+commit(?![\w-])|(?<![\w-])gh\s+(?:pr|issue)\s+(?:create|comment|edit|review)(?![\w-])/) {
-        my $at = defined $1 && $1 =~ /\s-C\s+(\S+)/ ? $enter->($dir, $1) : $dir;
-        print "text\t", defined $at ? $at : "?", "\n";
-        $text_seen = 1;
+      if ($seg =~ /(?<![\w-])git((?:\s+-[Cc]\s+\S+)*)\s+commit(?![\w-])/) {
+        my $at = $1 =~ /\s-C\s+(\S+)/ ? $enter->($dir, $1) : $dir;
+        print join("\t", "text", defined $at ? $at : "?", "git"), "\n";
+      } elsif ($seg =~ /(?<![\w-])gh\s+(?:pr|issue)\s+(?:create|new|comment|edit|review)(?![\w-])/) {
+        print join("\t", "text", defined $dir ? $dir : "?", "gh"), "\n";
       }
     }
     $depth += $nesting;
@@ -166,17 +179,18 @@ commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
 # --- PR state ------------------------------------------------------------------
 # judge_pr DIR COMMAND — deny what a strict repository does not allow.
 judge_pr() {
-  local dir="$1" gh="$2" reason="" repo
+  local dir="$1" gh="$2" reason="" repo hint="-R <owner/name> を付けるか cd <絶対パス> で始める"
   case "$gh" in
     "gh pr merge"|"gh pr merge "*) reason="このリポジトリでは PR をマージしない。draft のまま本人に渡す" ;;
     "gh pr ready"|"gh pr ready "*) reason="PR を ready にしない。ready への変更は本人がセルフレビュー後に行う" ;;
-    "gh pr create"|"gh pr create "*)
+    "gh pr create"|"gh pr create "*|"gh pr new"|"gh pr new "*)
       if printf '%s' "$gh" | grep -qE -- '--draft=(false|0)'; then
         reason="PR は draft で作る（--draft=false は使わない）"
       elif ! printf '%s' "$gh" | grep -qE -- '(^|[[:space:]])(--draft|-d)([[:space:]=]|$)'; then
         reason="PR は draft で作る。gh pr create に --draft を付ける"
       fi ;;
     "gh api"|"gh api "*)
+      hint="cd <絶対パス> で始める"
       if printf '%s' "$cmd" | grep -qiE 'mergePullRequest|enablePullRequestAutoMerge|pulls/[0-9]+/merge'; then
         reason="API 経由でも PR をマージしない"
       elif printf '%s' "$cmd" | grep -qiE 'markPullRequestReadyForReview|"?draft"?[[:space:]]*[:=][[:space:]]*false'; then
@@ -187,7 +201,7 @@ judge_pr() {
   repo="$(printf '%s' "$gh" | sed -nE 's#.*(^|[[:space:]])(-R|--repo)[[:space:]=]+([^[:space:]]+).*#\3#p')"
   case "$repo" in
     "")
-      [ "$dir" != "?" ] || decide deny "gh を実行するリポジトリを判定できない。-R <owner/name> を付ける"
+      [ "$dir" != "?" ] || decide deny "gh を実行するリポジトリを判定できない。$hint"
       repo="$(repo_slug "$dir")" ;;
     *\"*|*\'*) repo="" ;;
   esac
@@ -198,14 +212,14 @@ judge_pr() {
 # --- git push ------------------------------------------------------------------
 # judge_push DIR ARGS — deny force pushes and pushes to the default branch.
 judge_push() {
-  local dir="$1" tok cur dst p default_ref protected="main master"
+  local dir="$1" tok cur dst p default_ref tags="" protected="main master"
   local unknown_dir="git push を実行する directory を判定できない。cd <絶対パス> で始めるか git -C <絶対パス> push と書く"
   local -a positional=() dests=()
   for tok in $2; do
     case "$tok" in
       -f|--force|--force-with-lease|--force-with-lease=*|--force-if-includes|--mirror|--all|--delete|-d|--prune)
         decide deny "git push $tok は使わない（取り消せない、または既定の branch に及ぶ）" ;;
-      --tags) decide ask "tag の push は deploy を起こしうる" ;;
+      --tags) tags=1; pending_ask="tag の push は deploy を起こしうる" ;;
       "?") decide deny "git push の引数を判定できない。remote と branch を直接書く" ;;
       -*) ;;
       +*) decide deny "+ 付きの refspec は force-push になる" ;;
@@ -222,13 +236,13 @@ judge_push() {
       [ "$dst" = "HEAD" ] && dst="$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null)"
       dests+=("$dst")
     done
-  else
+  elif [ -z "$tags" ]; then
     cur="$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null)"
     [ -n "$cur" ] || decide deny "$unknown_dir"
     [ "$cur" = "HEAD" ] && decide deny "detached HEAD からは push しない"
     dests+=("$cur")
   fi
-  for dst in "${dests[@]}"; do
+  for dst in ${dests[@]+"${dests[@]}"}; do
     for p in $protected; do
       [ "$dst" = "$p" ] && decide deny "既定の branch（${dst}）へは push しない。作業 branch から PR を出す"
     done
@@ -237,11 +251,17 @@ judge_push() {
 }
 
 text_dir=""
+pending_ask=""
 while IFS=$'\t' read -r kind dir rest; do
   case "$kind" in
     pr) judge_pr "$dir" "$rest" ;;
     push) judge_push "$dir" "$rest" ;;
-    text) [ "$dir" = "?" ] || text_dir="$dir" ;;
+    text)
+      if [ "$dir" != "?" ]; then
+        [ -n "$text_dir" ] || text_dir="$dir"
+      elif [ "$rest" = "gh" ]; then
+        decide deny "gh を実行する directory を判定できない。cd <絶対パス> で始める"
+      fi ;;
   esac
 done <<<"$commands"
 
@@ -254,9 +274,10 @@ text="$(printf '%s' "$cmd" | perl -0777 -ne '
   my @lit;
   my $hold = sub { push @lit, $_[0]; "\x00" . $#lit . "\x00" };
   s/(<<-?\s*(["\x27]?)(\w+)\2)([^\n]*)\n(.*?)\n[ \t]*\3[ \t]*(?=\n|\z)/$1 . $hold->($5) . $4/gse;
-  s/"(?:[^"\\]|\\.)*"|\x27[^\x27]*\x27/$hold->($&)/gse;
+  s/\\.|\$\x27(?:[^\x27\\]|\\.)*\x27|"(?:[^"\\]|\\.)*"|\x27[^\x27]*\x27|(?<![^\s;&|()])#[^\n]*/
+    my $m = $&; $m =~ m{^\\}s ? $m : $m =~ m{^#} ? "" : $hold->($m)/gse;
   s/\\\n/ /g;
-  my $out = qr/(?<![\w-])git(?:\s+-[Cc]\s+\S+)*\s+commit(?![\w-])|(?<![\w-])gh\s+(?:pr|issue)\s+(?:create|comment|edit|review)(?![\w-])/;
+  my $out = qr/(?<![\w-])git(?:\s+-[Cc]\s+\S+)*\s+commit(?![\w-])|(?<![\w-])gh\s+(?:pr|issue)\s+(?:create|new|comment|edit|review)(?![\w-])/;
   for my $seg (split /&&|\|\||;|\n|(?<![<>|])&(?![>&])/) {
     my @stages = split /\|&?/, $seg;
     my ($k) = grep { $stages[$_] =~ $out } 0 .. $#stages;
@@ -281,5 +302,7 @@ if [ -n "$text" ]; then
   reason="$(leak_reason "$text" "$text_dir")"
   [ -n "$reason" ] && decide deny "$reason"
 fi
+
+[ -n "$pending_ask" ] && decide ask "$pending_ask"
 
 exit 0
