@@ -10,3 +10,6 @@ Adapted from pstack (github.com/cursor/plugins, MIT).
 - **Validate at boundaries.** Parse and check data where it enters (requests, config, external APIs); trust the types inside.
 - **Test behavior, not implementation.** Keep a test only if it fails when the observable behavior breaks and survives an internal refactor that keeps every result.
 - **Don't block on reversible work.** Proceed and present the result instead of asking "should I?". Confirm only what is irreversible or outward-facing beyond a draft PR (force-push, data deletion, messages to people).
+- **Migrate callers, then delete legacy paths.** Migrate callers and delete old paths/APIs in the same wave instead of leaving temporary compatibility wrappers.
+- **Build the lever.** For repeated edits, audits, or checks, write a runnable script instead of doing it by hand; the script is an artifact a reviewer can rerun.
+- **Separate before serializing shared state.** Split ownership before concurrent goals or workers write the same file, branch, or app stack; serialize only when one shared writer is a real invariant.
