@@ -9,10 +9,17 @@
 # script waits until a run for <sha> exists and until every run for <sha> has
 # completed, then prints one line per run and a `CI:` summary line.
 #
+# <sha> is the full 40-character commit sha (`git rev-parse HEAD`): GitHub
+# matches nothing on an abbreviated one. Only the runs the commit itself
+# triggered count (push, pull_request, pull_request_target, merge_group): a
+# scheduled workflow also runs on the default branch's head commit, and its
+# result says nothing about the change. Checks that are not GitHub Actions
+# runs are not seen.
+#
 # Exit status (the verdict; do not append `echo` or a pipe when calling):
 #   0  every run concluded success, skipped or neutral
 #   1  a run concluded otherwise (failure, cancelled, timed out ...)
-#   2  usage error, or gh failed
+#   2  usage error (an abbreviated sha included), or gh failed
 #   3  no run for <sha>: the repository has no workflow, or none appeared
 #      within WAIT_CI_REGISTER seconds
 #   4  runs were still in progress after WAIT_CI_TIMEOUT seconds
@@ -30,13 +37,17 @@ fail() {
 repo="${1:-}"
 sha="${2:-}"
 [ -n "$repo" ] && [ -n "$sha" ] || fail "usage: wait-ci.sh <owner/name> <sha>"
+case "$sha" in
+  *[!0-9a-f]*) fail "<sha> must be the full 40-character commit sha, got: $sha" ;;
+esac
+[ "${#sha}" -eq 40 ] || fail "<sha> must be the full 40-character commit sha, got: $sha"
 register="${WAIT_CI_REGISTER:-120}"
 timeout="${WAIT_CI_TIMEOUT:-3600}"
 interval="${WAIT_CI_INTERVAL:-15}"
 
 report() {
   printf '%s' "$json" | jq -r --arg repo "$repo" '.[]
-    | "\(if .status == "completed" then .conclusion else .status end)\t\(.workflowName)\thttps://github.com/\($repo)/actions/runs/\(.databaseId)"'
+    | "\(if .status == "completed" then .conclusion else .status end)\t\(.workflowName) (\(.event))\thttps://github.com/\($repo)/actions/runs/\(.databaseId)"'
 }
 
 workflows="$(gh workflow list -R "$repo" --json id --jq length)" || fail "gh workflow list failed for $repo"
@@ -47,9 +58,11 @@ esac
 SECONDS=0
 settled=""
 while :; do
-  json="$(gh run list -R "$repo" --commit "$sha" --json databaseId,workflowName,status,conclusion)" \
+  json="$(gh run list -R "$repo" --commit "$sha" -L 200 --json databaseId,workflowName,status,conclusion,event)" \
     || fail "gh run list failed for $repo"
-  total="$(printf '%s' "$json" | jq 'length')" || fail "unreadable run list"
+  json="$(printf '%s' "$json" | jq -c '[.[] | select(.event == "push" or .event == "pull_request"
+    or .event == "pull_request_target" or .event == "merge_group")]')" || fail "unreadable run list"
+  total="$(printf '%s' "$json" | jq 'length')"
   pending="$(printf '%s' "$json" | jq '[.[] | select(.status != "completed")] | length')"
   if [ "$total" -eq 0 ]; then
     [ "$SECONDS" -lt "$register" ] || { echo "CI: none (no run for $sha after ${register}s)"; exit 3; }
