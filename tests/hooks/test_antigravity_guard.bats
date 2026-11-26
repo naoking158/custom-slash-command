@@ -3,7 +3,8 @@
 # registers it as an Antigravity PreToolUse hook.
 #
 # Contract under test:
-#   - A run_command call that outbound-guard.sh objects to gets its decision
+#   - A run_command call, or a manage_task send_input whose Input is a
+#     command, that outbound-guard.sh objects to gets its decision
 #     and reason back in Antigravity's {decision, reason} shape; "ask" becomes
 #     "force_ask" so an "Always Allow" setting cannot skip it.
 #   - Every other call, and unreadable input, gets {"decision":"allow"}.
@@ -68,6 +69,18 @@ run_hook() {
   [ "$output" = '{"decision":"allow"}' ]
 }
 
+@test "input sent to a background command is checked like a command" {
+  run_hook "$(jq -cn --arg d "$REPO" '{
+    toolCall: {name: "manage_task", args: {Action: "send_input", Input: "git push origin main\n", TaskId: "c/task-5"}},
+    cwd: $d, workspacePaths: [$d]}')"
+  [ "$(printf '%s' "$output" | jq -r .decision)" = "deny" ]
+}
+
+@test "manage_task actions other than send_input are allowed" {
+  run_hook '{"toolCall":{"name":"manage_task","args":{"Action":"kill","TaskId":"c/task-5"}}}'
+  [ "$output" = '{"decision":"allow"}' ]
+}
+
 @test "other tools are allowed" {
   run_hook '{"toolCall":{"name":"view_file","args":{"AbsolutePath":"/etc/hosts"}}}'
   [ "$output" = '{"decision":"allow"}' ]
@@ -80,12 +93,13 @@ run_hook() {
   [ "$output" = '{"decision":"allow"}' ]
 }
 
-@test "hooks.json registers the hook on run_command with a plugin-relative command" {
+@test "hooks.json registers the hook on run_command and manage_task with a plugin-relative command" {
   local cmd
-  [ "$(jq -r '."outbound-guard".PreToolUse[0].matcher' "$REPO_ROOT/hooks.json")" = "run_command" ]
-  cmd="$(jq -r '."outbound-guard".PreToolUse[0].hooks[0].command' "$REPO_ROOT/hooks.json")"
-  [[ "$cmd" == ./* ]]
-  [ -x "$REPO_ROOT/$cmd" ]
+  [ "$(jq -c '[."outbound-guard".PreToolUse[].matcher]' "$REPO_ROOT/hooks.json")" = '["run_command","manage_task"]' ]
+  for cmd in $(jq -r '."outbound-guard".PreToolUse[].hooks[].command' "$REPO_ROOT/hooks.json"); do
+    [[ "$cmd" == ./* ]]
+    [ -x "$REPO_ROOT/$cmd" ]
+  done
 }
 
 @test "the Antigravity manifest names the plugin my and keeps to the schema's keys" {

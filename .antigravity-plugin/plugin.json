@@ -3,6 +3,7 @@
   "name": "my",
   "version": "1.0.0",
   "description": "Personal toolkit: review, code-reading and PdM skills, verifier, reviewer and diff-reviewer agents run as isolated Orca workers through orca/bin/run-role, outbound guard hook, working principles, and path-triggered language rules.",
+  "logo": "assets/logo.svg",
   "author": { "name": "naoking158" },
   "repository": "https://github.com/naoking158/custom-slash-command",
   "license": "MIT"

@@ -95,7 +95,7 @@
 ---
 name: string          # (required) kebab-case, agent の識別名
 description: string   # (required) 自動委譲用の説明文
-tools: string         # (required) comma-separated tool list
+tools: list           # (required) YAML list of tool names
 model: string         # (optional) "inherit" | "sonnet" | "opus" | "haiku"
 mcpServers: string    # (optional) comma-separated MCP server names
 ---

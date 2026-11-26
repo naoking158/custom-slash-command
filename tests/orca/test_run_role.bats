@@ -23,6 +23,7 @@ setup() {
   if command -v orca >/dev/null; then return 1; fi
   export HOME="$TMP/home"
   export ORCA_TERMINAL_HANDLE="term_fake"
+  unset ORCA_AGENT_SESSION_ID
   export MY_ORCA_PROFILE="work"
   export MY_ORCA_POLL_SECONDS="0.1"
   export FAKE="$TMP"
@@ -86,7 +87,7 @@ case "$1 $2" in
         cp "$FAKE/result.src" "$(cat "$FAKE/result.dest")"; : >"$FAKE/result.done"
       fi ;;
     esac
-    printf '{"ok":true,"result":{"dispatchId":"ctx_fake","state":"%s","activity":"%s"}}\n' "$1" "$2" ;;
+    printf '{"ok":true,"result":{"dispatchId":"ctx_fake","state":"%s","activity":"%s","workspace":"ws_fake::%s"}}\n' "$1" "$2" "$FAKE/ws" ;;
   "orchestration worker-release"|"orchestration worker-stop")
     echo '{"ok":true,"result":{"dispatchId":"ctx_fake"}}' ;;
   *) exit 64 ;;
@@ -150,6 +151,7 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
 }
 
 @test "reviewer with a report path and an assessment: exit 0" {
+  mkdir -p "$TMP/ws/docs/reviews" && : >"$TMP/ws/docs/reviews/r.md"
   worker_writes $'output_path: docs/reviews/r.md\nassessment: NEEDS_REVISION\n'
   run --separate-stderr "$RUN_ROLE" reviewer --out "$OUT" -- "pr:12 --no-screen"
   [ "$status" -eq 0 ]
@@ -171,6 +173,15 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
   run_diff_reviewer --from term_other
   [ "$status" -eq 0 ]
   [ "$(start_arg --from)" = "term_other" ]
+}
+
+@test "in an Orca agent session without a terminal, the worker starts without --from" {
+  unset ORCA_TERMINAL_HANDLE
+  export ORCA_AGENT_SESSION_ID="sess_fake"
+  worker_writes "$pass1"
+  run_diff_reviewer
+  [ "$status" -eq 0 ]
+  ! grep -qx -- --from "$TMP/start.args"
 }
 
 @test "relative --cwd is resolved to the directory's absolute path" {
@@ -263,6 +274,20 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
   worker_writes $'Looks good to me.\nPASS\n'
   run --separate-stderr "$RUN_ROLE" verifier --out "$OUT"
   [ "$status" -eq 1 ]
+}
+
+@test "reviewer report path starting with ~/ is read from \$HOME" {
+  mkdir -p "$HOME/rev" && : >"$HOME/rev/r.md"
+  worker_writes $'output_path: ~/rev/r.md\nassessment: PASS\n'
+  run --separate-stderr "$RUN_ROLE" reviewer --out "$OUT"
+  [ "$status" -eq 0 ]
+}
+
+@test "reviewer result naming a report the worker did not write: exit 1" {
+  worker_writes $'output_path: docs/reviews/r.md\nassessment: PASS\n'
+  run --separate-stderr "$RUN_ROLE" reviewer --out "$OUT"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"$TMP/ws/docs/reviews/r.md"* ]]
 }
 
 @test "reviewer result without an assessment: exit 1" {
@@ -359,7 +384,7 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
   [ "$(last_line)" = "[run-role] diff-reviewer exit=3 $OUT" ]
 }
 
-@test "outside an Orca terminal without --from: exit 3, no worker started" {
+@test "outside Orca without --from: exit 3, no worker started" {
   unset ORCA_TERMINAL_HANDLE
   run_diff_reviewer
   [ "$status" -eq 3 ]

@@ -10,6 +10,25 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "manage_task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/hooks/antigravity-guard.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "retro-capture": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "./scripts/hooks/antigravity-stop.sh",
+        "timeout": 10
       }
     ]
   }

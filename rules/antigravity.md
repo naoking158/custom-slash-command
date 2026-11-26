@@ -16,6 +16,11 @@ read its Claude Code terms as follows.
 - Tool names: Bash → `run_command`, Read → `view_file`, Write → `write_to_file`,
   Edit → `replace_file_content`, Glob → `find_by_name`, Grep → `grep_search`,
   AskUserQuestion → `ask_question`.
+- `run_in_background`: run the command with `run_command` and a small
+  `WaitMsBeforeAsync` (such as 500), so that it moves to the background at
+  once. Do not poll it. A system message `Task id "<id>" finished with result:
+  Command exited with code <n>.` arrives when it ends; `<n>` is its exit
+  status. `manage_task` with `status` or `kill` acts on the running task.
 - A step that starts a Claude Code agent (`Agent`, `Task`, `my:reviewer`,
   `my:diff-reviewer`, `my:verifier`) or a skill marked `context: fork` (the
   `review` skill runs as `reviewer`): when an `orca` command is on PATH, run
