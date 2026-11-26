@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# doctor — Check that this machine is safe to drive the toolkit from Orca,
+# without starting any agent.
+#
+# Checks, in this order (every check runs; the exit code is the first failure):
+#   3  the `orca` command is on PATH
+#   4  `orca status --json` reports a reachable runtime
+#   5  this shell runs inside an Orca terminal ($ORCA_TERMINAL_HANDLE is set)
+#   6  scripts/hooks/outbound-guard.sh denies a push to main (Claude Code shape)
+#   7  scripts/hooks/antigravity-guard.sh denies the same push (Antigravity shape)
+#   2  usage error, or jq / git missing
+#   0  every check passed
+#
+# The guards are the ones in the same checkout as this script, fed a synthetic
+# PreToolUse payload for `git push origin HEAD:main` from a throwaway git
+# repository. Nothing is pushed: the guards only read the payload.
+#
+# Usage: orca/bin/doctor [-h|--help]
+# Dependencies: bash, jq, git, and those of the guards.
+set -u
+
+usage() {
+  sed -n '2,/^# Dependencies/s/^# \{0,1\}//p' "$0"
+}
+
+case "${1:-}" in
+  "") ;;
+  -h|--help) usage; exit 0 ;;
+  *) printf 'doctor: unknown argument: %s\n' "$1" >&2; usage >&2; exit 2 ;;
+esac
+
+for dep in jq git; do
+  command -v "$dep" >/dev/null 2>&1 || { printf 'doctor: %s is required\n' "$dep" >&2; exit 2; }
+done
+
+HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/hooks" && pwd -P)"
+PROBE_CMD='git push origin HEAD:main'
+
+first_failure=0
+ok() { printf '  OK    %s\n' "$1"; }
+ng() {
+  printf '  NG    %s\n' "$2"
+  [ "$first_failure" -ne 0 ] || first_failure="$1"
+}
+
+check_orca() {
+  if ! command -v orca >/dev/null 2>&1; then
+    ng 3 "orca command not found on PATH"
+    ng 4 "orca status: skipped (no orca command)"
+    return
+  fi
+  ok "orca command: $(command -v orca)"
+
+  local out version
+  if ! out="$(orca status --json 2>/dev/null)"; then
+    ng 4 "orca status --json failed; start Orca (orca open) and retry"
+    return
+  fi
+  if [ "$(printf '%s' "$out" | jq -r '(.ok == true) and (.result.runtime.reachable == true)' 2>/dev/null)" != "true" ]; then
+    ng 4 "orca status: runtime not reachable"
+    return
+  fi
+  version="$(printf '%s' "$out" | jq -r '.result.runtime.appVersion // "unknown"')"
+  ok "orca status: runtime reachable (Orca $version)"
+}
+
+check_terminal() {
+  if [ -n "${ORCA_TERMINAL_HANDLE:-}" ]; then
+    ok "inside an Orca terminal (ORCA_TERMINAL_HANDLE is set)"
+  else
+    ng 5 "ORCA_TERMINAL_HANDLE is not set; run doctor from an Orca terminal"
+  fi
+}
+
+probe_repo() {
+  local dir
+  dir="$(mktemp -d "${TMPDIR:-/tmp}/orca-doctor.XXXXXX")" || return 1
+  git init -q -b doctor-probe "$dir" || return 1
+  printf '%s' "$dir"
+}
+
+check_guards() {
+  local repo decision
+  if ! repo="$(probe_repo)"; then
+    ng 6 "could not create a probe repository"
+    ng 7 "antigravity-guard: skipped (no probe repository)"
+    return
+  fi
+
+  decision="$(jq -cn --arg c "$PROBE_CMD" --arg d "$repo" \
+      '{tool_name: "Bash", cwd: $d, tool_input: {command: $c}}' \
+    | "$HOOKS_DIR/outbound-guard.sh" 2>/dev/null \
+    | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null)"
+  if [ "$decision" = "deny" ]; then
+    ok "outbound-guard denies: $PROBE_CMD"
+  else
+    ng 6 "outbound-guard did not deny: $PROBE_CMD (decision: ${decision:-none})"
+  fi
+
+  decision="$(jq -cn --arg c "$PROBE_CMD" --arg d "$repo" \
+      '{toolCall: {name: "run_command", args: {CommandLine: $c, Cwd: $d}}, workspacePaths: [$d]}' \
+    | "$HOOKS_DIR/antigravity-guard.sh" 2>/dev/null \
+    | jq -r '.decision // empty' 2>/dev/null)"
+  if [ "$decision" = "deny" ]; then
+    ok "antigravity-guard denies: $PROBE_CMD"
+  else
+    ng 7 "antigravity-guard did not deny: $PROBE_CMD (decision: ${decision:-none})"
+  fi
+
+  rm -rf "$repo"
+}
+
+printf 'Orca doctor (hooks: %s)\n' "$HOOKS_DIR"
+check_orca
+check_terminal
+check_guards
+
+if [ "$first_failure" -ne 0 ]; then
+  printf '\nFailed (exit %s).\n' "$first_failure" >&2
+  exit "$first_failure"
+fi
+printf '\nAll good.\n'
