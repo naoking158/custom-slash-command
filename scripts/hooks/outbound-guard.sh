@@ -347,7 +347,8 @@ text="$(printf '%s' "$cmd" | perl -0777 -ne '
     if ($st =~ /(?<![\w.\/-])tee((?:\s+$word)+)/) {
       print "\x03", $put->($_, 1), "\n" for grep { !/^-/ } split " ", $1;
     }
-    if ($st =~ /(?<![\w.\/-])(?:cp|mv)((?:\s+$word){2,})/) { print "\x03", $put->((split " ", $1)[-1], 1), "\n" }
+    (my $args = $st) =~ s/(?:\d|&)?[<>][>|&]?\s*$word//g;
+    if ($args =~ /(?<![\w.\/-])(?:cp|mv)((?:\s+$word){2,})/) { print "\x03", $put->((split " ", $1)[-1], 1), "\n" }
   }
   for my $seg (@segs) {
     my @stages = split /(?<!>)\|&?/, $seg;
@@ -362,8 +363,8 @@ text="$(printf '%s' "$cmd" | perl -0777 -ne '
     }
     $own =~ s/$file//g;
     if ($stdin) {
-      while ($own =~ /(?<![<\d])<(?![<(&])\s*($word)/g) { print "\x02", $put->($1, 1), "\n" }
-      $own =~ s/(?<![<\d])<(?![<(&])\s*$word//g;
+      while ($own =~ /(?<![<1-9])<(?![<(&])\s*($word)/g) { print "\x02", $put->($1, 1), "\n" }
+      $own =~ s/(?<![<1-9])<(?![<(&])\s*$word//g;
     }
     print $put->(join(" | ", @stages[0 .. $k - 1], $own), 0), "\n";
   }

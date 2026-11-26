@@ -446,6 +446,8 @@ main_and_worktree() {
   [ "$(decision)" = "deny" ]
   run_guard "$(bash_payload "cp $TMP/src.txt m.txt && git commit -q -F m.txt")"
   [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload "cp $TMP/src.txt m.txt 2>/dev/null && git commit -q -F m.txt")"
+  [ "$(decision)" = "deny" ]
   for w in '1>' '2>' '&>' '>|'; do
     run_guard "$(bash_payload "printf 'fix H001' $w m.txt && git commit -q -F m.txt")"
     [ "$(decision)" = "deny" ]
@@ -463,6 +465,8 @@ main_and_worktree() {
 @test "a body redirected into stdin is checked" {
   printf 'fixed H001\n' >"$TMP/leak.md"
   run_guard "$(bash_payload "git commit -q -F - < $TMP/leak.md")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload "git commit -q -F - 0<$TMP/leak.md")"
   [ "$(decision)" = "deny" ]
 }
 
