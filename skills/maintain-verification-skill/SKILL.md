@@ -22,11 +22,11 @@ End with exactly one, and say which:
 Edit only the target `verify-<app>/` directory: its `SKILL.md`, `features/`, and the helper scripts it ships. Never edit product code. When the app no longer does what the map says, decide which it is:
 
 - the map is wrong: **doc drift**, fix the map;
-- the app is wrong: **product regression**, report it and leave the map saying what the app should do. Rewriting the map to match a bug hides the bug. When the repository keeps an autopilot `found.md`, offer the regression as a row for it.
+- the app is wrong: **product regression**, report it and leave the map saying what the app should do. Rewriting the map to match a bug hides the bug. When `~/.local/state/autopilot/<owner>-<name>/found.md` exists for the repository, offer the regression as a row for it.
 
 ## Pass
 
-0. **Locate the target and the mode.** Look for `<repo>/.claude/skills/verify-*/`, then `~/.claude/skills/verify-*/`. Several candidates: ask which one. None: stop and point at `/my:create-verification-skill`; do not invent a target. Read the mode with `"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/my}/scripts/lib/autonomy.sh" <repo>` (`strict` or `ship`); step 6 needs it.
+0. **Locate the target and the mode.** Look for `<repo>/.claude/skills/verify-*/` (a **repository skill**), then `~/.claude/skills/verify-*/` (a **personal skill**, outside git); count a personal skill only when its Launch section starts this repository's app (it names the repository or takes its checkout as a parameter, such as `NEO_DIR=<checkout>`). Several candidates: ask which one. None: stop and point at `/my:create-verification-skill`; do not invent a target. For a repository skill, read the mode with `"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/my}/scripts/lib/autonomy.sh" <repo>`: the first word of its output is `strict` or `ship`, and step 6 needs it. For a personal skill, copy its directory to `${TMPDIR:-/tmp}` before any edit; step 6 diffs against the copy.
 
 1. **Index hygiene.** Compare `features/README.md` with the `features/*.md` files that exist. Fix dead links, unlisted files, and duplicates. Lightweight; do not generate an inventory.
 
@@ -36,7 +36,7 @@ Edit only the target `verify-<app>/` directory: its `SKILL.md`, `features/`, and
    - likely drift from the feature file, with citations, or `none`;
    - one live-verification recipe.
 
-3. **Reconcile and sweep churn.** Check that every feature file has a returned summary. Merge overlapping recipes into as few app states as practical. Spot-check the cited drift; do not re-prove clean claims. Then list user-facing screens or commands added since the skill was last touched (`git log --stat <last commit touching verify-<app>/>..HEAD`) that the map lacks. Call one missing only with a concrete source path.
+3. **Reconcile and sweep churn.** Check that every feature file has a returned summary. Merge overlapping recipes into as few app states as practical. Spot-check the cited drift; do not re-prove clean claims. Then list user-facing screens or commands added since the skill was last touched that the map lacks: `git log --stat <last commit touching verify-<app>/>..HEAD` for a repository skill, `git log --stat --since=<newest mtime under verify-<app>/>` in `<repo>` for a personal skill. Call one missing only with a concrete source path.
 
 4. **Live pass.** Required even when the source looks clean. You drive, serially, following the skill's own Launch section (one long-lived instance for servers and UIs, a fresh session per drive for short-lived CLIs). Drive every feature at least once and hold three invariants the whole time:
    1. Run the doctor before the first drive, on every fresh session, and after any surprise. Where the doctor cannot see the failure (a stuck UI on a healthy process), reset to a known state or relaunch. A doctor failure caused by the skill's own text is drift: fix it within the edit scope and retry once, restarting only what the fix invalidated; a second failure makes the pass `blocked`.
@@ -51,10 +51,10 @@ Edit only the target `verify-<app>/` directory: its `SKILL.md`, `features/`, and
 
    A **product regression** goes in the report, not in this PR.
 
-6. **Ship or stop.** `changed`: re-read every changed file, then open one PR that touches only `verify-<app>/` (`gh pr create --draft` when the mode is `strict`). `clean` or `blocked`: no PR.
+6. **Ship or stop.** `changed`: re-read every changed file. For a repository skill, open one PR that touches only `verify-<app>/` (`gh pr create --draft` when the mode is `strict`). For a personal skill there is nothing to open a PR against: keep the edits in place and show `diff -ru <copy> <skill dir>` in the reply. `clean` or `blocked`: no PR.
 
 Keep run notes (features covered, unreachable prerequisites, confirmed drift, outcome) under `${TMPDIR:-/tmp}`; never commit them.
 
-**Reply:** the outcome, per feature the source and live coverage (`ok`, `drift fixed`, `verified-unreachable: <prerequisite>`, `regression`), the product regressions found, and the PR link when `changed`.
+**Reply:** the outcome, per feature the source and live coverage (`ok`, `drift fixed`, `verified-unreachable: <prerequisite>`, `regression`), the product regressions found, and the PR link (or, for a personal skill, the diff) when `changed`.
 
 Adapted from pstack `maintain-verification-skill` (github.com/cursor/plugins, MIT).
