@@ -27,7 +27,7 @@ Run without asking the user anything until a stop condition below is reached. De
    - `reviews/`: the `my:review` reports for this goal's PRs (step 1.6 writes them here).
    - `$R/found.md`: the repository's Found list, shared by every goal, so that no goal has to know where another one wrote. Read it at every start, resume included, and log how many rows are open. Missing → create it with the header `| Goal | Where | Why it matters | Size | State |`, then move the rows of any `## Found` section still left in an earlier goal's `goal.md` into it, tagged with that goal's slug, and delete those sections.
 
-3. Work in a dedicated worktree so the user's checkout is never touched: `git -C <repo> worktree add <repo>-autopilot-<goal-slug> origin/<default>` (reuse it on resume).
+3. Work in a dedicated worktree so the user's checkout is never touched. If the current directory is a worktree made for this goal (`$(git rev-parse --absolute-git-dir)/my-autopilot-worktree` exists), work in it; otherwise `git -C <repo> worktree add <repo>-autopilot-<goal-slug> origin/<default>` (reuse it on resume).
 
 4. Stage files by name, never `git add -A`, so that a stray file in the worktree does not ride along.
 

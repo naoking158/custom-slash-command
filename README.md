@@ -173,9 +173,22 @@ otherwise.
   0 result OK, 1 worker failed or bad result, 2 configuration error, 3 Orca
   unusable, 4 timed out (worker stopped). `rules/antigravity.md` is its only
   caller; Claude Code keeps using subagents.
+- `orca/bin/start-goal [--name <name>] <repo> "<goal>"`: creates an Orca
+  worktree of `<repo>` from origin's default branch, adds the deny rules of
+  `orca/settings/goal.deny.json` to its `.claude/settings.local.json` (the
+  Slack and Notion MCP servers it names, and `orca slack`), marks it as the
+  goal's worktree for autopilot, and then launches `/my:autopilot <goal>` there
+  with the profile's `implement` agent and model. The `implement` harness must
+  be `claude`, so it runs on the work machine's profile. Run one per goal to
+  work on several goals at once. Start at most one goal at a time in a
+  repository with a `verify-<app>` skill: verify runs one app stack, and
+  nothing stops two goals from verifying at once. `<repo>` must be registered
+  in Orca (`orca repo add --path <repo>`). Exit codes: 0 launched, 2
+  configuration error, 3 Orca unusable.
 - `orca/profiles/<name>.conf`: the harness and model per role, one
   `<role> <harness> <model>` line each. run-role reads the `verify` line for
-  `verifier` and the `review` line for `reviewer` and `diff-reviewer`.
+  `verifier` and the `review` line for `reviewer` and `diff-reviewer`;
+  start-goal reads the `implement` line.
 - A profile must be selected on any machine with `orca` on PATH: set
   `MY_ORCA_PROFILE`, or write a `profile <name>` line in
   `~/.claude/my-toolkit/orca.conf` (`profile work` on the work machine,
@@ -292,7 +305,7 @@ custom-slash-command/
 │                                  #   AGENTS.md, antigravity.md for Antigravity only
 ├── hooks/hooks.json               # PreToolUse guard, SessionEnd index, UserPromptSubmit capture
 ├── hooks.json                     # Antigravity: PreToolUse guard on run_command
-├── orca/                          # bin/doctor, bin/run-role, lib/profile.sh, profiles/ (work, private)
+├── orca/                          # bin/doctor, bin/run-role, bin/start-goal, lib/profile.sh, profiles/ (work, private), settings/goal.deny.json
 ├── scripts/                       # install.sh, lib/, hooks/, pdm/ (scheduling)
 ├── tests/                         # bats: hooks / install / orca / redact / review-screen / toolkit
 └── docs/                          # design notes and reviews of this repo itself

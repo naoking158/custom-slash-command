@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "deny": [
+      "mcp__claude_ai_Slack",
+      "mcp__claude_ai_Notion",
+      "mcp__slack",
+      "mcp__notion",
+      "Bash(orca slack:*)"
+    ]
+  }
+}
