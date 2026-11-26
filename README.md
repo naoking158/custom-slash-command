@@ -160,7 +160,7 @@ agy plugin list        # my should be enabled, with my:* skills
 ## Orca
 
 `orca/` runs roles in their own context through [Orca](https://orca.dev)
-orchestration workers. Nothing here is needed without an `orca` command;
+orchestration workers. Nothing here is needed without an `orca` command.
 When `orca` is on PATH, `install.sh` and `--check` confirm that
 `orca/bin/doctor` is executable and that a profile is selected, and fail
 otherwise.
@@ -292,7 +292,7 @@ custom-slash-command/
 │                                  #   AGENTS.md, antigravity.md for Antigravity only
 ├── hooks/hooks.json               # PreToolUse guard, SessionEnd index, UserPromptSubmit capture
 ├── hooks.json                     # Antigravity: PreToolUse guard on run_command
-├── orca/                          # bin/doctor, bin/run-role, profiles/ (work, private)
+├── orca/                          # bin/doctor, bin/run-role, lib/profile.sh, profiles/ (work, private)
 ├── scripts/                       # install.sh, lib/, hooks/, pdm/ (scheduling)
 ├── tests/                         # bats: hooks / install / orca / redact / review-screen / toolkit
 └── docs/                          # design notes and reviews of this repo itself

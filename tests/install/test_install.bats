@@ -11,6 +11,7 @@ setup() {
 
   TMP="$(mktemp -d -t install-test.XXXXXX)"
   export HOME="$TMP"
+  unset MY_ORCA_PROFILE
   FAKE_BIN="$TMP/bin"
   mkdir -p "$FAKE_BIN"
   export PATH="$FAKE_BIN:$(path_without_orca)"
