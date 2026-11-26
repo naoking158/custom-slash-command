@@ -234,6 +234,7 @@ case "$AGENT" in
     [ -n "$report" ] || die 1 "reviewer result has no report path (output_path)"
     case "$report" in
       /*) ;;
+      \~/*) report="$HOME/${report#\~/}" ;;
       *)
         workspace="$(printf '%s' "$show" | jq -r '.result.workspace // empty' 2>/dev/null)"
         workspace="${workspace#*::}"

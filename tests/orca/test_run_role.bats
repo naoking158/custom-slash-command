@@ -276,6 +276,13 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
   [ "$status" -eq 1 ]
 }
 
+@test "reviewer report path starting with ~/ is read from \$HOME" {
+  mkdir -p "$HOME/rev" && : >"$HOME/rev/r.md"
+  worker_writes $'output_path: ~/rev/r.md\nassessment: PASS\n'
+  run --separate-stderr "$RUN_ROLE" reviewer --out "$OUT"
+  [ "$status" -eq 0 ]
+}
+
 @test "reviewer result naming a report the worker did not write: exit 1" {
   worker_writes $'output_path: docs/reviews/r.md\nassessment: PASS\n'
   run --separate-stderr "$RUN_ROLE" reviewer --out "$OUT"
