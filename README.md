@@ -277,6 +277,8 @@ change**, promoted into real edits of this repo.
 /my:retro --deep          # also mine transcripts before their ~30-day expiry
 ```
 
+`/my:retro` also reports autopilot metrics for the last 28 days (review rounds per change, verify outcomes, human pushback on `auto/` PRs, reverts of `auto/` PRs), counted by `skills/retro/scripts/autopilot-metrics.sh`.
+
 All captured data is machine-local under `~/.claude/my-toolkit/` (journal
 entries, `sessions.jsonl`, `corrections.jsonl`) and never enters a project
 tree. `/my:retro` resolves the toolkit repo via `$CLAUDE_TOOLKIT_REPO`,
