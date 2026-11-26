@@ -424,6 +424,14 @@ main_and_worktree() {
   [ "$(decision)" = "deny" ]
 }
 
+@test "a body file that cannot be read yet is denied with how to split the call" {
+  run_guard "$(bash_payload "printf 'x' >$TMP/msg.txt && git commit -q -F $TMP/later.txt")"
+  [ "$(decision)" = "deny" ]
+  [[ "$(printf '%s' "$output" | jq -r .hookSpecificOutput.permissionDecisionReason)" == *"later.txt を読めない"* ]]
+  run_guard "$(bash_payload 'MSG=$(mktemp); git commit -q -F "$MSG"')"
+  [ "$(decision)" = "deny" ]
+}
+
 @test "commands mentioned inside a quoted message are not run" {
   run_guard "$(bash_payload 'git commit -m "explain why gh pr ready is denied"')"
   [ -z "$output" ]

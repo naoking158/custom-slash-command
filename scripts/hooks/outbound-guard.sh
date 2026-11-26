@@ -345,9 +345,13 @@ if [ -n "$text" ]; then
   while IFS= read -r arg; do
     f="$(printf '%s' "$arg" | sed -E 's#^(--body-file|--file|-F)[[:space:]=]+##')"
     f="${f%\"}"; f="${f#\"}"; f="${f%\'}"; f="${f#\'}"
-    case "$f" in /*|~*) ;; *) f="$text_dir/$f" ;; esac
-    f="${f/#\~/$HOME}"
-    [ -f "$f" ] || continue
+    case "$f" in
+      /*|~*|\$*)
+        f="${f/#\~/$HOME}"
+        { [ -f "$f" ] && [ -r "$f" ]; } \
+          || decide deny "本文のファイル ${f##*/} を読めない。ファイルを書くコマンドと送るコマンドを別の Bash 呼び出しに分け、パスを直接書く" ;;
+      *) f="$text_dir/$f"; [ -f "$f" ] || continue ;;
+    esac
     text="$text"$'\n'"$(cat "$f")"
     read_args+=("$arg")
   done < <(printf '%s' "$text" | grep -oE -- '(--body-file|--file|-F)[[:space:]=]+[^[:space:]]+')
