@@ -13,8 +13,10 @@
 #                                        linked on its own)
 #
 # When an `orca` command is on PATH, install and --check also confirm that
-# orca/bin/doctor is executable and point at it without running it. Without
-# `orca`, nothing about the Orca layer is done or printed.
+# orca/bin/doctor is executable and point at it without running it, and that
+# an Orca profile is selected ($MY_ORCA_PROFILE or `profile <name>` in
+# ~/.claude/my-toolkit/orca.conf) and exists. Without `orca`, nothing about
+# the Orca layer is done or printed.
 #
 # Also cleans up symlinks from the pre-plugin layout when they point into
 # this repo:
@@ -40,6 +42,7 @@ PLUGIN_LINK="$CLAUDE_DIR/skills/my"
 ANTIGRAVITY_PLUGIN_LINK="$HOME/.gemini/config/plugins/my"
 RULES_DIR="$CLAUDE_DIR/rules"
 ORCA_DOCTOR="$REPO_ROOT/orca/bin/doctor"
+ORCA_PROFILE_LIB="$REPO_ROOT/orca/lib/profile.sh"
 
 # Symlinks from the pre-plugin layout. Removed when they point into this repo
 # (including dangling links left behind after the repo restructure).
@@ -66,7 +69,10 @@ and removes legacy symlinks ($HOME/.prompts, $HOME/.claude/commands,
 $HOME/.claude/agents) when they point into this repo.
 
 When an `orca` command is on PATH, install and --check also confirm that
-orca/bin/doctor is executable (run it from an Orca terminal yourself).
+orca/bin/doctor is executable (run it from an Orca terminal yourself) and that
+an Orca profile is selected: MY_ORCA_PROFILE, or a `profile <name>` line in
+$HOME/.claude/my-toolkit/orca.conf (work on the work machine, private on the
+private one).
 
 Modes:
   (default)     Install the links if missing. Clean legacy links.
@@ -292,19 +298,38 @@ check_legacy() {
   return 0
 }
 
-# Usage: orca_layer <install|check> — confirm orca/bin/doctor when an orca
-# command is on PATH.
+# orca_problem MODE TEXT — report a missing piece of the Orca layer.
+orca_problem() {
+  if [ "$1" = install ]; then
+    printf '  ERROR  %s\n' "$2" >&2
+  else
+    printf '  MISSING   %s\n' "$2"
+  fi
+}
+
+# Usage: orca_layer <install|check> — confirm orca/bin/doctor and the Orca
+# profile when an orca command is on PATH.
 orca_layer() {
   command -v orca >/dev/null 2>&1 || return 0
-  if [ ! -x "$ORCA_DOCTOR" ]; then
-    if [ "$1" = install ]; then
-      printf '  ERROR  orca found on PATH but %s is not executable\n' "$ORCA_DOCTOR" >&2
-    else
-      printf '  MISSING   %s (orca found on PATH)\n' "$ORCA_DOCTOR"
-    fi
+  if [ ! -x "$ORCA_DOCTOR" ] || [ ! -f "$ORCA_PROFILE_LIB" ]; then
+    orca_problem "$1" "$ORCA_DOCTOR (orca found on PATH, but the Orca layer is not executable)"
     return 1
   fi
   printf '  OK        orca found; run %s from an Orca terminal\n' "$ORCA_DOCTOR"
+
+  # shellcheck source=../orca/lib/profile.sh
+  . "$ORCA_PROFILE_LIB"
+  local name
+  name="$(orca_profile_name)"
+  if [ -z "$name" ]; then
+    orca_problem "$1" "Orca profile not selected: write 'profile <name>' in $ORCA_CONF or set MY_ORCA_PROFILE (choices: $(orca_profile_choices)). Without it, Antigravity stops at every step that launches an agent"
+    return 1
+  fi
+  if ! orca_profile_file "$name" >/dev/null; then
+    orca_problem "$1" "Orca profile '$name' has no orca/profiles/$name.conf (choices: $(orca_profile_choices))"
+    return 1
+  fi
+  printf '  OK        Orca profile: %s\n' "$name"
 }
 
 # --- main --------------------------------------------------------------------
