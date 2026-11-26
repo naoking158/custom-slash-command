@@ -22,5 +22,14 @@
         ]
       }
     ]
+  },
+  "retro-capture": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "./scripts/hooks/antigravity-stop.sh",
+        "timeout": 10
+      }
+    ]
   }
 }
