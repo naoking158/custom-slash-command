@@ -12,6 +12,11 @@
 #                                        AGENTS.md and antigravity.md is
 #                                        linked on its own)
 #
+# When an `orca` command is on PATH, install and --check also confirm that
+# orca/bin/doctor is executable and point at it; it is not run here, because it
+# needs a running Orca and an Orca terminal. Without `orca`, nothing about the
+# Orca layer is done or printed.
+#
 # Also cleans up symlinks from the pre-plugin layout when they point into
 # this repo:
 #   $HOME/.prompts, $HOME/.claude/commands, $HOME/.claude/agents
@@ -35,6 +40,7 @@ CLAUDE_DIR="$HOME/.claude"
 PLUGIN_LINK="$CLAUDE_DIR/skills/my"
 ANTIGRAVITY_PLUGIN_LINK="$HOME/.gemini/config/plugins/my"
 RULES_DIR="$CLAUDE_DIR/rules"
+ORCA_DOCTOR="$REPO_ROOT/orca/bin/doctor"
 
 # Symlinks from the pre-plugin layout. Removed when they point into this repo
 # (including dangling links left behind after the repo restructure).
@@ -59,6 +65,9 @@ Creates these symlinks (idempotent):
 
 and removes legacy symlinks ($HOME/.prompts, $HOME/.claude/commands,
 $HOME/.claude/agents) when they point into this repo.
+
+When an `orca` command is on PATH, install and --check also confirm that
+orca/bin/doctor is executable (run it from an Orca terminal yourself).
 
 Modes:
   (default)     Install the links if missing. Clean legacy links.
@@ -284,6 +293,16 @@ check_legacy() {
   return 0
 }
 
+# orca_layer — confirm orca/bin/doctor when an orca command is on PATH.
+orca_layer() {
+  command -v orca >/dev/null 2>&1 || return 0
+  if [ ! -x "$ORCA_DOCTOR" ]; then
+    printf '  MISSING   %s (orca found on PATH)\n' "$ORCA_DOCTOR"
+    return 1
+  fi
+  printf '  OK        orca found; run %s from an Orca terminal\n' "$ORCA_DOCTOR"
+}
+
 # --- main --------------------------------------------------------------------
 
 case "$MODE" in
@@ -301,6 +320,7 @@ case "$MODE" in
     for legacy in "${LEGACY_LINKS[@]}"; do
       cleanup_legacy "$legacy"
     done
+    orca_layer || failed=1
     ;;
   uninstall)
     uninstall_plugin_link "$PLUGIN_LINK" "$REPO_ROOT" || failed=1
@@ -317,6 +337,7 @@ case "$MODE" in
     for legacy in "${LEGACY_LINKS[@]}"; do
       check_legacy "$legacy" || failed=1
     done
+    orca_layer || failed=1
     ;;
 esac
 
