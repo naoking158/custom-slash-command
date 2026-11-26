@@ -22,7 +22,7 @@ setup() {
   export PATH="$FAKE_BIN:$(path_without_orca)"
   if command -v orca >/dev/null; then return 1; fi
   export HOME="$TMP/home"
-  export GIT_CONFIG_GLOBAL=/dev/null
+  export GIT_CONFIG_GLOBAL=/dev/null XDG_CONFIG_HOME="$TMP/home/.config"
   export MY_ORCA_PROFILE="work"
   export FAKE="$TMP"
   unset ORCA_TERMINAL_HANDLE
@@ -135,15 +135,30 @@ GOAL='README を直す。"引用" と `code` と $HOME
   [[ "$(arg_of create --name)" =~ ^goal-[0-9]{8}-[0-9]{6}$ ]]
 }
 
-@test "switching MY_ORCA_PROFILE changes the harness and model given to agent launch" {
-  MY_ORCA_PROFILE=work run_start_goal --name w "$REPO" "$GOAL"
+@test "switching MY_ORCA_PROFILE changes the model given to agent launch" {
+  kit="$TMP/kit/orca"
+  mkdir -p "$kit/bin" "$kit/lib" "$kit/profiles" "$kit/settings"
+  cp "$START_GOAL" "$kit/bin/"
+  cp "$REPO_ROOT/orca/lib/profile.sh" "$kit/lib/"
+  cp "$REPO_ROOT/orca/profiles/work.conf" "$kit/profiles/"
+  cp "$REPO_ROOT/orca/settings/goal.deny.json" "$kit/settings/"
+  printf 'implement claude alt-model\n' >"$kit/profiles/alt.conf"
+  MY_ORCA_PROFILE=work run --separate-stderr "$kit/bin/start-goal" --name w "$REPO" "$GOAL"
   [ "$status" -eq 0 ]
-  work_agent="$(arg_of launch --agent)" work_model="$(arg_of launch --model)"
-  MY_ORCA_PROFILE=private run_start_goal --name p "$REPO" "$GOAL"
+  [ "$(arg_of launch --model)" = "$(profile_value work implement 3)" ]
+  MY_ORCA_PROFILE=alt run --separate-stderr "$kit/bin/start-goal" --name a "$REPO" "$GOAL"
   [ "$status" -eq 0 ]
-  [ "$(arg_of launch --agent)" = "$(profile_value private implement 2)" ]
-  [ "$(arg_of launch --model)" = "$(profile_value private implement 3)" ]
-  [ "$work_agent/$work_model" != "$(arg_of launch --agent)/$(arg_of launch --model)" ]
+  [ "$(arg_of launch --agent)" = "claude" ]
+  [ "$(arg_of launch --model)" = "alt-model" ]
+}
+
+@test "a profile whose implement harness is not claude: exit 2 before creating a worktree" {
+  [ "$(profile_value private implement 2)" != claude ]
+  MY_ORCA_PROFILE=private run_start_goal "$REPO" "$GOAL"
+  [ "$status" -eq 2 ]
+  [ "$(last_line)" = "[start-goal] exit=2 -" ]
+  [[ "$stderr" == *"needs claude"* ]]
+  [ ! -f "$TMP/calls" ]
 }
 
 # --- deny before launch ---
@@ -177,6 +192,23 @@ JSON
   [ "$(cat "$TMP/wt/g1/.claude/settings.local.json")" = "not json" ]
   ! called "agent launch"
   called "worktree rm --worktree path:$TMP/wt/g1 --force --delete-branch"
+}
+
+@test "existing local settings whose deny is not an array: exit 2, worktree removed, no agent" {
+  echo '{"permissions":{"deny":"mcp__notion"}}' >"$TMP/existing.json"
+  run_start_goal --name g1 "$REPO" "$GOAL"
+  [ "$status" -eq 2 ]
+  ! called "agent launch"
+  called "worktree rm --worktree path:$TMP/wt/g1 --force --delete-branch"
+}
+
+@test "the local settings file is excluded from Git once, so it never shows as untracked" {
+  run_start_goal --name g1 "$REPO" "$GOAL"
+  [ "$status" -eq 0 ]
+  [ -z "$(git -C "$TMP/wt/g1" status --porcelain)" ]
+  run_start_goal --name g2 "$REPO" "$GOAL"
+  [ "$status" -eq 0 ]
+  [ "$(grep -cx '/.claude/settings.local.json' "$REPO/.git/info/exclude")" -eq 1 ]
 }
 
 # --- exit 2 ---

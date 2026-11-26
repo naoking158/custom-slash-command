@@ -13,10 +13,12 @@
 #   1. Create an Orca worktree of <repo> from origin's default branch
 #      (refs/remotes/origin/HEAD).
 #   2. Merge the deny rules of orca/settings/goal.deny.json into the worktree's
-#      .claude/settings.local.json, keeping what is already there, and mark the
-#      worktree for autopilot in its Git dir (my-autopilot-worktree).
+#      .claude/settings.local.json, keeping what is already there, add that file
+#      to the repository's info/exclude unless Git already ignores it, and mark
+#      the worktree for autopilot in its Git dir (my-autopilot-worktree).
 #   3. Launch the profile's `implement <harness> <model>` agent in the worktree
-#      as a terminal session with the prompt `/my:autopilot <goal>`.
+#      as a terminal session with the prompt `/my:autopilot <goal>`. The harness
+#      must be claude: autopilot and the deny rules are Claude Code settings.
 # When step 2 or 3 fails, the worktree is removed again.
 #
 # The profile is $MY_ORCA_PROFILE, else `profile <name>` in
@@ -24,8 +26,9 @@
 #
 # Exit codes:
 #   0  the agent was launched in the new worktree
-#   2  usage or configuration error (arguments, repo, profile, deny file,
-#      repo not registered in Orca, unreadable existing local settings)
+#   2  usage or configuration error (arguments, repo, profile, an implement
+#      harness other than claude, deny file, repo not registered in Orca,
+#      existing local settings that are not an object with a deny array)
 #   3  Orca unusable: no orca command, runtime unreachable, or Orca failed to
 #      create the worktree or launch the agent
 # The last line on stdout is `[start-goal] exit=<n> <worktree path or ->`.
@@ -98,6 +101,7 @@ while read -r r h m _ || [ -n "$r" ]; do
   if [ "$r" = implement ]; then harness="$h"; model="$m"; break; fi
 done < "$profile_file"
 [ -n "$harness" ] && [ -n "$model" ] || die 2 "profile $profile has no 'implement <harness> <model>' line"
+[ "$harness" = claude ] || die 2 "profile $profile runs implement on $harness; start-goal needs claude (autopilot and the deny rules are Claude Code settings)"
 
 command -v orca >/dev/null 2>&1 || die 3 "orca command not found on PATH"
 status_json="$(orca status --json 2>/dev/null)"
@@ -120,8 +124,9 @@ WT="$path"
 settings="$WT/.claude/settings.local.json"
 current='{}'
 if [ -f "$settings" ]; then
-  jq -e 'type == "object"' "$settings" >/dev/null 2>&1 \
-    || discard_worktree 2 "existing $settings is not a JSON object; not overwriting it"
+  jq -e 'type == "object" and ((.permissions // {}) | type == "object")
+    and ((.permissions.deny // []) | type == "array")' "$settings" >/dev/null 2>&1 \
+    || discard_worktree 2 "existing $settings is not a JSON object with a deny array; not overwriting it"
   current="$(cat "$settings")"
 fi
 mkdir -p "$WT/.claude" || discard_worktree 3 "cannot create $WT/.claude"
@@ -132,6 +137,11 @@ printf '%s' "$current" | jq --slurpfile add "$DENY_FILE" '
   || discard_worktree 3 "cannot write $settings"
 git_dir="$(git -C "$WT" rev-parse --absolute-git-dir 2>/dev/null)" \
   || discard_worktree 3 "not a Git worktree: $WT"
+if ! git -C "$WT" check-ignore -q .claude/settings.local.json; then
+  exclude="$(git -C "$WT" rev-parse --path-format=absolute --git-path info/exclude)"
+  mkdir -p "${exclude%/*}" && printf '/.claude/settings.local.json\n' >>"$exclude" \
+    || discard_worktree 3 "cannot write $exclude"
+fi
 printf '%s\n' "$goal" >"$git_dir/$MARKER" || discard_worktree 3 "cannot write $git_dir/$MARKER"
 
 launched="$(orca agent launch --agent "$harness" --worktree "path:$WT" --model "$model" \

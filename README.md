@@ -175,13 +175,16 @@ otherwise.
   caller; Claude Code keeps using subagents.
 - `orca/bin/start-goal [--name <name>] <repo> "<goal>"`: creates an Orca
   worktree of `<repo>` from origin's default branch, adds the deny rules of
-  `orca/settings/goal.deny.json` (every Slack and Notion tool) to its
-  `.claude/settings.local.json`, marks it as the goal's worktree for autopilot,
-  and then launches `/my:autopilot <goal>` there with the profile's `implement`
-  agent and model. Run one per goal to work on several goals at once; only one
-  of them at a time should use a `verify-<app>` skill, since verify runs one
-  app stack. `<repo>` must be registered in Orca (`orca repo add --path <repo>`).
-  Exit codes: 0 launched, 2 configuration error, 3 Orca unusable.
+  `orca/settings/goal.deny.json` to its `.claude/settings.local.json` (the
+  Slack and Notion MCP servers it names, and `orca slack`), marks it as the
+  goal's worktree for autopilot, and then launches `/my:autopilot <goal>` there
+  with the profile's `implement` agent and model. The `implement` harness must
+  be `claude`, so it runs on the work machine's profile. Run one per goal to
+  work on several goals at once. Start at most one goal at a time in a
+  repository with a `verify-<app>` skill: verify runs one app stack, and
+  nothing stops two goals from verifying at once. `<repo>` must be registered
+  in Orca (`orca repo add --path <repo>`). Exit codes: 0 launched, 2
+  configuration error, 3 Orca unusable.
 - `orca/profiles/<name>.conf`: the harness and model per role, one
   `<role> <harness> <model>` line each. run-role reads the `verify` line for
   `verifier` and the `review` line for `reviewer` and `diff-reviewer`;
