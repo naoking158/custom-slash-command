@@ -346,11 +346,20 @@ if [ -n "$text" ]; then
     f="$(printf '%s' "$arg" | sed -E 's#^(--body-file|--file|-F)[[:space:]=]+##')"
     f="${f%\"}"; f="${f#\"}"; f="${f%\'}"; f="${f#\'}"
     case "$f" in
+      -|/dev/stdin|/dev/fd/*) continue ;;
       /*|~*|\$*)
         f="${f/#\~/$HOME}"
         { [ -f "$f" ] && [ -r "$f" ]; } \
           || decide deny "本文のファイル ${f##*/} を読めない。ファイルを書くコマンドと送るコマンドを別の Bash 呼び出しに分け、パスを直接書く" ;;
-      *) f="$text_dir/$f"; [ -f "$f" ] || continue ;;
+      *)
+        if [ ! -f "$text_dir/$f" ]; then
+          case "$cmd" in
+            *">$f"*|*"> $f"*|*"tee $f"*|*"tee -a $f"*)
+              decide deny "本文のファイル $f を読めない。ファイルを書くコマンドと送るコマンドを別の Bash 呼び出しに分ける" ;;
+          esac
+          continue
+        fi
+        f="$text_dir/$f" ;;
     esac
     text="$text"$'\n'"$(cat "$f")"
     read_args+=("$arg")

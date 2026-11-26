@@ -432,6 +432,17 @@ main_and_worktree() {
   [ "$(decision)" = "deny" ]
 }
 
+@test "a body read from stdin is checked as the heredoc, not as a file" {
+  cmd="$(printf 'git commit -q -F /dev/stdin <<%sEOF%s\nfix: x\nEOF' "'" "'")"
+  run_guard "$(bash_payload "$cmd")"
+  [ -z "$output" ]
+}
+
+@test "a relative body file written in the same call is denied" {
+  run_guard "$(bash_payload "printf 'fix H001' > m.txt && git commit -q -F m.txt")"
+  [ "$(decision)" = "deny" ]
+}
+
 @test "commands mentioned inside a quoted message are not run" {
   run_guard "$(bash_payload 'git commit -m "explain why gh pr ready is denied"')"
   [ -z "$output" ]
