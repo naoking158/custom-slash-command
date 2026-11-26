@@ -1,6 +1,6 @@
 {
   "name": "my",
-  "description": "Personal toolkit: autopilot, review, verifier agent, learn/retro knowledge loop, outbound guard hook, working principles, PdM skills, and path-triggered language rules.",
+  "description": "Personal toolkit: autopilot with a decision trail and trail audit, review, verifier and adversary agents, before/after-change skills (sharpen, architect, babysit, interrogate), verify-skill upkeep, recurring-mistake fixes, worktree cleanup, learn/retro knowledge loop and skill evals, outbound guard hook, working principles, PdM skills, and path-triggered language rules.",
   "version": "1.0.0",
   "author": { "name": "naoking158" },
   "repository": "https://github.com/naoking158/custom-slash-command",
