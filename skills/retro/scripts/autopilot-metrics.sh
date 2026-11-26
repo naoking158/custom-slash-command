@@ -22,8 +22,7 @@
 #
 # Human pushback: auto/ PRs created in the period that carry an issue comment
 # or a COMMENTED / CHANGES_REQUESTED review whose author is neither the PR's
-# author nor a bot (REST user.type). Autopilot and the review skill write as the PR author, so
-# they are not counted (nor is the user's own comment on their own PR).
+# author nor a bot (REST user.type).
 # Reverts: commits on origin/HEAD (HEAD when absent) committed in the period
 # whose `This reverts commit <sha>` names an auto/ PR's merge commit, or whose
 # `Revert "... (#N)"` subject names an auto/ PR.
@@ -167,8 +166,7 @@ pr_is_auto() {
 
 # human_pushback <owner/name> <number> <PR author> — prints true/false: whether
 # someone other than the PR author, and not a bot, commented on the PR or left
-# a COMMENTED / CHANGES_REQUESTED review. `gh pr list` drops the bot marker of
-# app accounts, so the REST user.type decides.
+# a COMMENTED / CHANGES_REQUESTED review. Bots are told by the REST user.type.
 human_pushback() {
   local filter='map(select(.user.type != "Bot" and .user.login != $a and
     ((.state // "COMMENTED") == "COMMENTED" or .state == "CHANGES_REQUESTED"))) | length'
@@ -200,7 +198,7 @@ repo_metrics() {
       if [ "$linked" = true ]; then reverts=$((reverts + 1)); else unlinked=$((unlinked + 1)); fi
     done < <(git -C "$checkout" log "$ref" --since="$since 00:00:00" \
                --format='%H%x1f%cs%x1f%s%x1f%b%x1e' 2>/dev/null |
-             jq -Rr --arg s "$since" --arg u "$until" '
+             jq -Rsr --arg s "$since" --arg u "$until" '
                split("\u001e")[] | ltrimstr("\n") | select(. != "") | split("\u001f")
                | {date: .[1], subject: .[2], body: (.[3] // "")}
                | select(.date >= $s and .date <= $u)

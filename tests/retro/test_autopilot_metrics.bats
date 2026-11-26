@@ -220,6 +220,12 @@ SH
   [ "${lines[5]}" = "マージ後の手戻り: auto/ の PR を取り消したコミット 0、auto/ と結びつかない revert 0、不明のリポジトリ 1（o/r）" ]
 }
 
+@test "a revert whose body names the commit after its first line is counted" {
+  commit 2026-11-25 "Back out the old feature (#9)" "$(printf 'Squash of the revert PR.\n\nThis reverts commit %s.' "$OLD8")" >/dev/null
+  run -0 "$METRICS" --checkout "$REPO"
+  [ "${lines[5]}" = "マージ後の手戻り: auto/ の PR を取り消したコミット 3、auto/ と結びつかない revert 1、不明のリポジトリ 0" ]
+}
+
 @test "--repo keeps other repositories' goals out" {
   run -0 "$METRICS" --repo x/y
   [ "${lines[1]}" = "進行の記録: ゴール 0、タスク 0（Started が読めないゴール 0、タスクの見出しがないゴール 0）" ]

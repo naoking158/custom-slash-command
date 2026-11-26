@@ -138,7 +138,7 @@ Then add the autopilot metrics (orca.md 4.9) under a `### Autopilot の指標`
 heading, pasting the script's output lines as they are:
 
 ```bash
-"${CLAUDE_SKILL_DIR}/scripts/autopilot-metrics.sh" --checkout "$toolkit_repo"
+"${CLAUDE_SKILL_DIR}/scripts/autopilot-metrics.sh" --checkout "{toolkit_repo}"
 ```
 
 - The period is the script's default (the last 28 days), not `--since`: the
@@ -149,6 +149,8 @@ heading, pasting the script's output lines as they are:
   `--dry-run` stops at Step 5. It only reads, so it is not a write.
 - The script also needs git and gh (read-only). When gh is not logged in,
   the gh-based lines show the repository as `不明`.
+- Human pushback leaves out comments by the PR author, so pushback the user
+  gives on their own autopilot PR shows up only as a PR closed without merging.
 
 ## Critical rules
 
