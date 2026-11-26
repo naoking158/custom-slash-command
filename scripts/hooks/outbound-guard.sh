@@ -325,7 +325,7 @@ done <<<"$commands"
 # & or newline, plus the pipeline stages that feed it, with its quoted strings
 # and heredoc bodies put back. The other commands on the line address the machine.
 # Printed: a line "\x03<file>" per file any command on the line writes (>, >>,
-# tee, the last argument of cp / mv); then for each outbound command a line
+# >|, n>, &>, tee, the last argument of cp / mv); then for each outbound command a line
 # "\x02<file>" per body file its own --body-file / --file / -F arguments name
 # (outside quoted strings and heredocs; for `-` its < redirect), then its text
 # without those arguments.
@@ -342,15 +342,15 @@ text="$(printf '%s' "$cmd" | perl -0777 -ne '
   my $file = qr/(?<!\S)(?:(?:--body-file|--file)(?:\s+|=)|-F\s*)($word)/;
   my $out = qr/(?<![\w-])git(?:\s+-[Cc]\s+\S+)*\s+commit(?![\w-])|(?<![\w-])gh\s+(?:pr|issue)\s+(?:create|new|comment|edit|review)(?![\w-])/;
   my @segs = split /&&|\|\||;|\n|(?<![<>|])&(?![>&])/;
-  for my $st (map { split /\|&?/ } @segs) {
-    while ($st =~ /(?<![<\d&])>>?(?![&>(])\s*($word)/g) { print "\x03", $put->($1, 1), "\n" }
+  for my $st (map { split /(?<!>)\|&?/ } @segs) {
+    while ($st =~ /(?<!<)>[>|]?(?![&>(])\s*($word)/g) { print "\x03", $put->($1, 1), "\n" }
     if ($st =~ /(?<![\w.\/-])tee((?:\s+$word)+)/) {
       print "\x03", $put->($_, 1), "\n" for grep { !/^-/ } split " ", $1;
     }
     if ($st =~ /(?<![\w.\/-])(?:cp|mv)((?:\s+$word){2,})/) { print "\x03", $put->((split " ", $1)[-1], 1), "\n" }
   }
   for my $seg (@segs) {
-    my @stages = split /\|&?/, $seg;
+    my @stages = split /(?<!>)\|&?/, $seg;
     my ($k) = grep { $stages[$_] =~ $out } 0 .. $#stages;
     next unless defined $k;
     $stages[$k] =~ $out;

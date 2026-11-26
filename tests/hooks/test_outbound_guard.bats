@@ -446,6 +446,10 @@ main_and_worktree() {
   [ "$(decision)" = "deny" ]
   run_guard "$(bash_payload "cp $TMP/src.txt m.txt && git commit -q -F m.txt")"
   [ "$(decision)" = "deny" ]
+  for w in '1>' '2>' '&>' '>|'; do
+    run_guard "$(bash_payload "printf 'fix H001' $w m.txt && git commit -q -F m.txt")"
+    [ "$(decision)" = "deny" ]
+  done
 }
 
 @test "cp, mv and tee in a title or message do not count as writing the body file" {
