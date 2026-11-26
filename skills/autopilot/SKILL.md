@@ -47,6 +47,7 @@ For every task, in order:
    Never make a gate pass by loosening it: do not skip or delete a test, add a lint or type suppression, widen a threshold or tolerance, or turn a check into a soft failure in order to get CI, tests, lint or type checks green, and never merge such a change on your own. When the gate itself is wrong, fix it as a separate task whose PR says so and never merge that PR yourself, even in ship mode: leave it open and list it under "Waiting on a human" in the final report. Or record BLOCKED and leave the decision to a human.
 4. **Verify.** If the repository has a `verify-<app>` skill, launch `Agent` with `subagent_type: "my:verifier"`, giving it the worktree path and this task's criteria. FAIL → fix and verify again. BLOCKED → record it; continue only if the remaining criteria were observed some other way, else stop (see §3). No verify skill → record "unverified in the app" for the task.
 5. **Push and open the PR.** Body: 課題 → 対応 → 設計判断, short, plus for stack mode one line `Stack: n/N, base #<parent PR>`. ship: `gh pr create --base <default>`. stack: `gh pr create --draft --base <parent branch>`.
+   Copy any test result in the body from a run on the same HEAD, after checking its exit status (127 means the command was not found and nothing ran). A suite that could not run is written as not run.
 6. **Review and fix.** Run the `my:review` skill with `pr:<number> --no-screen --report-dir <absolute path of $S/reviews>`: the review runs in the session's directory, not in the worktree, and its report belongs with the run's state, not in anyone's checkout. Fix every Critical/High finding, push, and review again — at most 2 fix rounds. Medium/Low: fix when cheap, otherwise list them in `progress.md`. Never cite finding IDs or report paths in commits or PR text.
 7. **Land.**
    - ship:
@@ -71,6 +72,8 @@ Keep each PR to its task. When you notice something worth improving that the cur
 - **The repository's code** (a smell, a missing test, dead code, a confusing name outside the diff): append it to `$R/found.md` with this goal's slug, location, why it matters, and a size guess (S/M/L). A repository-local `verify-<app>` skill counts as repository code.
 - **A `my:*` asset** (this skill, `my:review`, `my:verifier`, the guard): run `/my:learn` with the category and target, then keep going. `/my:retro` decides on the change later with the user.
 - **Any other tool outside the repository** (a personal skill, global settings): record it under `## Tool friction` in `progress.md`.
+
+This routing also applies to follow-up work done in the same session after the final report. Before ending, check that each item you noticed went to `found.md`, `## Tool friction`, or `/my:learn`, not only into the report.
 
 Never edit toolkit skills, personal skills, settings or CLAUDE.md during a run: the run's own rules must not change under it.
 
