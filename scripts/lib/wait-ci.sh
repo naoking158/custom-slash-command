@@ -19,9 +19,10 @@
 # Exit status (the verdict; do not append `echo` or a pipe when calling):
 #   0  every run concluded success, skipped or neutral
 #   1  a run concluded otherwise (failure, cancelled, timed out ...)
-#   2  usage error (an abbreviated sha included), or gh failed
-#   3  no run for <sha>: the repository has no workflow, or none appeared
-#      within WAIT_CI_REGISTER seconds
+#   2  usage error (an abbreviated sha, or one the repository does not
+#      have, included), or gh failed
+#   3  no run for <sha>, which the repository has: the repository has no
+#      workflow, or none appeared within WAIT_CI_REGISTER seconds
 #   4  runs were still in progress after WAIT_CI_TIMEOUT seconds
 #
 # Environment, in seconds: WAIT_CI_REGISTER (default 120), WAIT_CI_TIMEOUT
@@ -45,6 +46,15 @@ register="${WAIT_CI_REGISTER:-120}"
 timeout="${WAIT_CI_TIMEOUT:-3600}"
 interval="${WAIT_CI_INTERVAL:-15}"
 
+# none MESSAGE — exit 3 with MESSAGE, or exit 2 when the repository has no
+# commit <sha>.
+none() {
+  gh api "repos/$repo/commits/$sha" --jq .sha >/dev/null 2>&1 \
+    || fail "no commit $sha in $repo (pass \$(git rev-parse HEAD))"
+  echo "CI: none ($1)"
+  exit 3
+}
+
 report() {
   printf '%s' "$json" | jq -r --arg repo "$repo" '.[]
     | "\(if .status == "completed" then .conclusion else .status end)\t\(.workflowName) (\(.event))\thttps://github.com/\($repo)/actions/runs/\(.databaseId)"'
@@ -52,7 +62,7 @@ report() {
 
 workflows="$(gh workflow list -R "$repo" --json id --jq length)" || fail "gh workflow list failed for $repo"
 case "$workflows" in
-  ""|0) echo "CI: none ($repo has no workflow)"; exit 3 ;;
+  ""|0) none "$repo has no workflow" ;;
 esac
 
 SECONDS=0
@@ -65,7 +75,7 @@ while :; do
   total="$(printf '%s' "$json" | jq 'length')"
   pending="$(printf '%s' "$json" | jq '[.[] | select(.status != "completed")] | length')"
   if [ "$total" -eq 0 ]; then
-    [ "$SECONDS" -lt "$register" ] || { echo "CI: none (no run for $sha after ${register}s)"; exit 3; }
+    [ "$SECONDS" -lt "$register" ] || none "no run for $sha after ${register}s"
   elif [ "$pending" -gt 0 ]; then
     [ "$SECONDS" -lt "$timeout" ] || { report; echo "CI: still running ($sha)"; exit 4; }
     settled=""

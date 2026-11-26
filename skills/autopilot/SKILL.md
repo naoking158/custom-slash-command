@@ -51,10 +51,10 @@ For every task, in order:
 7. **Land.**
    - ship:
      - Take in what landed under the PR: `git fetch -q origin <default>`. If `git log --oneline HEAD..origin/<default>` prints anything, note which files `git diff --name-only HEAD...origin/<default>` (what the default branch gained) shares with `git diff --name-only origin/<default>...HEAD` (what the PR changes), then merge `origin/<default>` into the branch, run the tests and push. A shared file means another goal, or the user, is changing the same code: review again as well (not a fix round). A merge that is clean as text can still break what the PR assumes.
-     - Wait for CI on the commit you pushed: run `"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/my}/scripts/lib/wait-ci.sh" <owner/name> <sha>` with `run_in_background`, as the whole command. `<sha>` is the full sha from `git rev-parse HEAD`. The exit status is the verdict, and a trailing `echo` or pipe would replace it. `gh pr checks --watch` is no substitute: right after a push GitHub has registered no run yet, and it exits at once with "no checks reported".
+     - Wait for CI on the commit you pushed: run `"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/my}/scripts/lib/wait-ci.sh" <owner/name> <sha>` with `run_in_background`, as the whole command. `<sha>` is the full sha from `git rev-parse HEAD`; write `$(git rev-parse HEAD)` in its place rather than typing the sha. The exit status is the verdict, and a trailing `echo` or pipe would replace it. `gh pr checks --watch` is no substitute: right after a push GitHub has registered no run yet, and it exits at once with "no checks reported".
        - 0: green.
        - 1: red. Fix on the branch (counts toward the failure limit).
-       - 2: gh failed (login, network) or the sha was abbreviated. Run it again once; a second 2 is BLOCKED.
+       - 2: gh failed (login, network), or the sha was abbreviated or is not in the repository. Run it again once with `$(git rev-parse HEAD)`; a second 2 is BLOCKED.
        - 3: no run exists for this commit. When no workflow of the repository runs for this change, the tests of step 3 are the gate: log `CI: none`. Otherwise treat it as red.
        - 4: still running after an hour. Run it again; this is not a failure.
      - A PR that changes a gate (step 3) is never merged here: leave it open, log it in `tasks.tsv` with outcome `stopped`, and list it under "Waiting on a human".
