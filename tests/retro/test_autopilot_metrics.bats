@@ -3,8 +3,9 @@
 # like real autopilot runs, a fake `gh` on PATH and a throwaway Git repository.
 #
 # Contract under test:
-#   - Review rounds and verify outcomes come from task heading sections only;
-#     what cannot be read is reported as 不明, not counted.
+#   - Review rounds and verify outcomes come from a goal's tasks.tsv when it has
+#     a row for the task (the last row per task_id wins), else from the task heading
+#     sections of progress.md; what cannot be read is reported as 不明.
 #   - Human pushback counts auto/ PRs created in the period with a comment or a
 #     COMMENTED / CHANGES_REQUESTED review by someone who is neither the PR
 #     author nor a bot, and auto/ PRs closed without merging.
@@ -17,6 +18,7 @@ bats_require_minimum_version 1.5.0
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
   METRICS="$REPO_ROOT/skills/retro/scripts/autopilot-metrics.sh"
+  LOG_TASK="$REPO_ROOT/skills/autopilot/scripts/log-task.sh"
   TMP="$(mktemp -d -t autopilot-metrics-test.XXXXXX)"
   TMP="$(cd "$TMP" && pwd -P)"
   mkdir -p "$TMP/bin" "$TMP/home"
@@ -47,6 +49,21 @@ goal() {
     [ "$2" = - ] || echo "- Started: $2"
   } >"$dir/goal.md"
   cat >"$dir/progress.md"
+}
+
+# tsv_goal <repo> <slug> <started> — a goal of <repo> started on <started>; its
+# progress.md comes from stdin and its tasks.tsv from the task() calls after it.
+tsv_goal() {
+  local dir="$STATE/${1%/*}-${1#*/}/$2"
+  mkdir -p "$dir"
+  printf '# %s\n\n- Repository: %s  Mode: ship\n- Started: %s\n' "$2" "$1" "$3" >"$dir/goal.md"
+  cat >"$dir/progress.md"
+  TSV_DIR="$dir"
+}
+
+# task <task_id> <review_rounds> <verify> — logs one task of the last tsv_goal with log-task.sh.
+task() {
+  "$LOG_TASK" "$TSV_DIR/tasks.tsv" "$1" "auto/t/$1" "#1" "$2" "$3" none merged
 }
 
 make_goals() {
@@ -241,4 +258,75 @@ SH
   run -2 "$METRICS" --since yesterday
   [[ "$output" == usage:* ]]
   run -2 "$METRICS" --until 26/11/2026
+}
+
+@test "tasks.tsv gives review rounds and verify outcomes, and fail is unknown" {
+  tsv_goal t/t tsv 2026-11-22 <<'MD'
+## Task 1: superseded by task 1 of tasks.tsv
+- review r9: PASS
+- verify: PASS
+MD
+  task 1 0 pass
+  task 2 1 pass_after_fix
+  task 3 2 blocked
+  task 4 1 unverified
+  task 5 3 fail
+  run -0 "$METRICS" --repo t/t
+  [ "${lines[1]}" = "進行の記録: ゴール 1、タスク 5（Started が読めないゴール 0、タスクの見出しがないゴール 0）" ]
+  [ "${lines[2]}" = "レビューの往復数: 読めた 5（0回 1、1回 2、2回 1、3回 1、平均 1.4）、不明 0" ]
+  [ "${lines[3]}" = "verify: PASS 1、修正後に PASS 1、BLOCKED 1、未検証 1、不明 1" ]
+}
+
+@test "the last tasks.tsv row of a task_id wins" {
+  tsv_goal t/t tsv 2026-11-22 </dev/null
+  task 1 4 fail
+  task 2 2 blocked
+  task 1 1 pass
+  run -0 "$METRICS" --repo t/t
+  [ "${lines[1]}" = "進行の記録: ゴール 1、タスク 2（Started が読めないゴール 0、タスクの見出しがないゴール 0）" ]
+  [ "${lines[2]}" = "レビューの往復数: 読めた 2（1回 1、2回 1、平均 1.5）、不明 0" ]
+  [ "${lines[3]}" = "verify: PASS 1、修正後に PASS 0、BLOCKED 1、未検証 0、不明 0" ]
+}
+
+@test "goals with tasks.tsv and goals with only progress.md add up" {
+  tsv_goal o/r tsv 2026-11-22 </dev/null
+  task 1 0 pass
+  task 2 1 pass_after_fix
+  task 3 2 blocked
+  task 4 1 unverified
+  task 5 3 fail
+  run -0 "$METRICS" --checkout "$REPO"
+  [ "${lines[1]}" = "進行の記録: ゴール 3、タスク 10（Started が読めないゴール 1、タスクの見出しがないゴール 1）" ]
+  [ "${lines[2]}" = "レビューの往復数: 読めた 9（0回 1、1回 4、2回 3、3回 1、平均 1.44）、不明 1" ]
+  [ "${lines[3]}" = "verify: PASS 2、修正後に PASS 2、BLOCKED 2、未検証 2、不明 2" ]
+}
+
+@test "a tasks.tsv with only its header falls back to progress.md" {
+  tsv_goal t/t tsv 2026-11-22 <<'MD'
+## Task 1: read from progress.md
+- review r2: PASS
+- verify: PASS
+MD
+  printf 'ts\ttask_id\tbranch\tpr\treview_rounds\tverify\tci\toutcome\n' >"$TSV_DIR/tasks.tsv"
+  run -0 "$METRICS" --repo t/t
+  [ "${lines[1]}" = "進行の記録: ゴール 1、タスク 1（Started が読めないゴール 0、タスクの見出しがないゴール 0）" ]
+  [ "${lines[2]}" = "レビューの往復数: 読めた 1（2回 1、平均 2）、不明 0" ]
+  [ "${lines[3]}" = "verify: PASS 1、修正後に PASS 0、BLOCKED 0、未検証 0、不明 0" ]
+}
+
+@test "tasks missing from tasks.tsv are still read from progress.md" {
+  tsv_goal t/t tsv 2026-11-22 <<'MD'
+## Task 1: only in progress.md
+- review r2: PASS
+- verify: PASS
+
+## Task 2: superseded by tasks.tsv
+- review r9: PASS
+- verify: BLOCKED
+MD
+  task 2 1 unverified
+  run -0 "$METRICS" --repo t/t
+  [ "${lines[1]}" = "進行の記録: ゴール 1、タスク 2（Started が読めないゴール 0、タスクの見出しがないゴール 0）" ]
+  [ "${lines[2]}" = "レビューの往復数: 読めた 2（1回 1、2回 1、平均 1.5）、不明 0" ]
+  [ "${lines[3]}" = "verify: PASS 1、修正後に PASS 0、BLOCKED 0、未検証 1、不明 0" ]
 }
