@@ -146,17 +146,11 @@ fi
 agent_file="$ROOT/agents/$AGENT.md"
 [ -f "$agent_file" ] || die 2 "no agent definition: $agent_file"
 
-profile="${MY_ORCA_PROFILE:-}"
-conf="$HOME/.claude/my-toolkit/orca.conf"
-if [ -z "$profile" ] && [ -f "$conf" ]; then
-  while read -r key value _ || [ -n "$key" ]; do
-    if [ "$key" = profile ] && [ -n "$value" ]; then profile="$value"; break; fi
-  done < "$conf"
-fi
-[ -n "$profile" ] || die 2 "no profile: set MY_ORCA_PROFILE or write 'profile <name>' in $conf"
-case "$profile" in *[!A-Za-z0-9_-]*) die 2 "invalid profile name: $profile" ;; esac
-profile_file="$ROOT/orca/profiles/$profile.conf"
-[ -f "$profile_file" ] || die 2 "no profile file: $profile_file"
+# shellcheck source=../lib/profile.sh
+. "$ROOT/orca/lib/profile.sh"
+profile="$(orca_profile_name)"
+[ -n "$profile" ] || die 2 "no profile: set MY_ORCA_PROFILE or write 'profile <name>' in $ORCA_CONF ($(orca_profile_choices))"
+profile_file="$(orca_profile_file "$profile")" || die 2 "no profile named '$profile' ($(orca_profile_choices))"
 
 harness="" model=""
 while read -r r h m _ || [ -n "$r" ]; do

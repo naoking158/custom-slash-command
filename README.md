@@ -160,9 +160,10 @@ agy plugin list        # my should be enabled, with my:* skills
 ## Orca
 
 `orca/` runs roles in their own context through [Orca](https://orca.dev)
-orchestration workers. Nothing here is needed without an `orca` command;
-`install.sh` only checks that `orca/bin/doctor` is executable when `orca` is on
-PATH.
+orchestration workers. Nothing here is needed without an `orca` command.
+When `orca` is on PATH, `install.sh` and `--check` confirm that
+`orca/bin/doctor` is executable and that a profile is selected, and fail
+otherwise.
 
 - `orca/bin/doctor`: run from an Orca terminal; checks that Orca is reachable
   and that both guards deny a push to `main`.
@@ -177,8 +178,10 @@ PATH.
   `verifier` and the `review` line for `reviewer` and `diff-reviewer`.
 - A profile must be selected on any machine with `orca` on PATH: set
   `MY_ORCA_PROFILE`, or write a `profile <name>` line in
-  `~/.claude/my-toolkit/orca.conf`. Without one, run-role exits 2 and
-  Antigravity stops at every step that launches an agent.
+  `~/.claude/my-toolkit/orca.conf` (`profile work` on the work machine,
+  `profile private` on the private one). Without one, run-role exits 2 and
+  Antigravity stops at every step that launches an agent; `install.sh --check`
+  reports it.
 
 ## Usage
 
@@ -289,7 +292,7 @@ custom-slash-command/
 │                                  #   AGENTS.md, antigravity.md for Antigravity only
 ├── hooks/hooks.json               # PreToolUse guard, SessionEnd index, UserPromptSubmit capture
 ├── hooks.json                     # Antigravity: PreToolUse guard on run_command
-├── orca/                          # bin/doctor, bin/run-role, profiles/ (work, private)
+├── orca/                          # bin/doctor, bin/run-role, lib/profile.sh, profiles/ (work, private)
 ├── scripts/                       # install.sh, lib/, hooks/, pdm/ (scheduling)
 ├── tests/                         # bats: hooks / install / orca / redact / review-screen / toolkit
 └── docs/                          # design notes and reviews of this repo itself

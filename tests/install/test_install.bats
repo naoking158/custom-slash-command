@@ -11,6 +11,7 @@ setup() {
 
   TMP="$(mktemp -d -t install-test.XXXXXX)"
   export HOME="$TMP"
+  unset MY_ORCA_PROFILE
   FAKE_BIN="$TMP/bin"
   mkdir -p "$FAKE_BIN"
   export PATH="$FAKE_BIN:$(path_without_orca)"
@@ -281,14 +282,50 @@ assert_links_to_repo() {
   [[ "$output" != *"doctor"* ]]
 }
 
+# select_profile NAME — write `profile NAME` to the machine-local orca.conf.
+select_profile() {
+  mkdir -p "$HOME/.claude/my-toolkit"
+  printf 'profile %s\n' "$1" >"$HOME/.claude/my-toolkit/orca.conf"
+}
+
 @test "orca present: install and check point at orca/bin/doctor" {
   fake_orca
+  select_profile work
   run "$INSTALL"
   [ "$status" -eq 0 ]
   [[ "$output" == *"run $REPO_ROOT/orca/bin/doctor from an Orca terminal"* ]]
   run "$INSTALL" --check
   [ "$status" -eq 0 ]
   [[ "$output" == *"orca/bin/doctor"* ]]
+  [[ "$output" == *"Orca profile: work"* ]]
+}
+
+@test "orca present without a profile: install and check fail and say how to select one" {
+  fake_orca
+  run "$INSTALL"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"ERROR"*"Orca profile not selected"*".claude/my-toolkit/orca.conf"*"private"* ]]
+  run "$INSTALL" --check
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"MISSING"*"Orca profile not selected"* ]]
+}
+
+@test "orca present: MY_ORCA_PROFILE selects the profile" {
+  fake_orca
+  export MY_ORCA_PROFILE=private
+  "$INSTALL" >/dev/null
+  run "$INSTALL" --check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Orca profile: private"* ]]
+}
+
+@test "orca present with an unknown profile: check fails" {
+  fake_orca
+  select_profile nope
+  MY_ORCA_PROFILE=work "$INSTALL" >/dev/null
+  run "$INSTALL" --check
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"MISSING"*"'nope'"* ]]
 }
 
 @test "orca present: install and check fail when orca/bin/doctor is missing" {
@@ -305,6 +342,7 @@ assert_links_to_repo() {
 
 @test "orca present: uninstall leaves the Orca layer alone" {
   fake_orca
+  select_profile work
   "$INSTALL" >/dev/null
   run "$INSTALL" --uninstall
   [ "$status" -eq 0 ]
