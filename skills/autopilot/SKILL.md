@@ -9,7 +9,7 @@ disable-model-invocation: true
 
 Goal: **$ARGUMENTS**
 
-Run without asking the user anything until a stop condition below is reached. Decide, record the decision in `decisions.tsv`, and continue. The user reads the log and the final report, not the conversation.
+Run without asking the user anything until a stop condition below is reached. Decide, record the decision in `decisions.tsv`, and continue. The user reads `progress.md`, `decisions.tsv` and the final report, not the conversation.
 
 ## 0. Set up
 
@@ -44,7 +44,7 @@ For every task, in order:
 2. **Implement** with completion criteria stated first (global CLAUDE.md rules apply: reproduce bugs first, regression test, small commits).
 3. **Test and lint** the way the repository's CLAUDE.md / CI does. Red → fix before moving on.
 
-   Never make a gate pass by loosening it: do not skip or delete a test, add a lint or type suppression, widen a threshold or tolerance, or turn a check into a soft failure in order to get CI, tests, lint or type checks green, and never merge such a change on your own. When the gate itself is wrong, fix it as a separate task whose PR says so, or record BLOCKED and leave the decision to a human.
+   Never make a gate pass by loosening it: do not skip or delete a test, add a lint or type suppression, widen a threshold or tolerance, or turn a check into a soft failure in order to get CI, tests, lint or type checks green, and never merge such a change on your own. When the gate itself is wrong, fix it as a separate task whose PR says so and never merge that PR yourself, even in ship mode: leave it open and list it under "Waiting on a human" in the final report. Or record BLOCKED and leave the decision to a human.
 4. **Verify.** If the repository has a `verify-<app>` skill, launch `Agent` with `subagent_type: "my:verifier"`, giving it the worktree path and this task's criteria. FAIL → fix and verify again. BLOCKED → record it; continue only if the remaining criteria were observed some other way, else stop (see §3). No verify skill → record "unverified in the app" for the task.
 5. **Push and open the PR.** Body: 課題 → 対応 → 設計判断, short, plus for stack mode one line `Stack: n/N, base #<parent PR>`. ship: `gh pr create --base <default>`. stack: `gh pr create --draft --base <parent branch>`.
 6. **Review and fix.** Run the `my:review` skill with `pr:<number> --no-screen --report-dir <absolute path of $S/reviews>`: the review runs in the session's directory, not in the worktree, and its report belongs with the run's state, not in anyone's checkout. Fix every Critical/High finding, push, and review again — at most 2 fix rounds. Medium/Low: fix when cheap, otherwise list them in the progress log. Never cite finding IDs or report paths in commits or PR text.
@@ -58,7 +58,7 @@ For every task, in order:
        - 3: no run exists for this commit. When no workflow of the repository runs for this change, the tests of step 3 are the gate: log `CI: none`. Otherwise treat it as red.
        - 4: still running after an hour. Run it again; this is not a failure.
      - Merge when green: `gh pr merge <n> -R <owner/name> --squash --delete-branch`. With `-R`, gh leaves local branches alone and deletes only the remote branch; without it, gh tries the local branch first, and when the worktree still has it checked out that fails before the remote is deleted.
-     - Confirm it landed: exit 0 from `gh pr merge` is not proof (a merge queue may still hold it, or the base may not be the default branch). Read `gh pr view <n> -R <owner/name> --json state,mergedAt,baseRefName,mergeCommit` and go on only when `state` is `MERGED` and `baseRefName` is `<default>`. Otherwise wait and read it again, or record BLOCKED.
+     - Confirm it landed: exit 0 from `gh pr merge` is not proof (a merge queue may still hold it, or the base may not be the default branch). Read `gh pr view <n> -R <owner/name> --json state,mergedAt,baseRefName,mergeCommit` and go on only when `state` is `MERGED` and `baseRefName` is `<default>`. Otherwise wait and read it again; still not landed after an hour → BLOCKED.
      - Then update the default branch, and delete the local branch with `git branch -D` once the worktree has moved to the next task's branch.
    - stack: leave the draft open. Never mark it ready and never merge it.
 8. **Log** the task in `progress.md` and `tasks.tsv`, then pick the next task.
@@ -82,7 +82,7 @@ Never edit toolkit skills, personal skills, settings or CLAUDE.md during a run: 
 
 **stack**
 - When a lower PR changes (review fix, rework), bring each PR above it up to date with `git merge <parent branch>` and push. Never rebase or force-push an open stack; after the user lands the bottom PR they restack themselves.
-- Carry verdicts over by patch-id: before and after that merge, run `"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/my}/scripts/lib/patch-id.sh" "$(git merge-base <parent branch> HEAD)" HEAD`. The same id, with no conflict in files or call sites the lower change touched, means the PR's own change is unchanged: keep its earlier test, verify and review verdicts and log both ids in `decisions.tsv`. A different id means test, verify and review it again.
+- Carry verdicts over by patch-id: before and after that merge, run `"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/my}/scripts/lib/patch-id.sh" "$(git merge-base <parent branch> HEAD)" HEAD`. Run the tests after every merge. The same id, when the PR shares no file with what the merge brought in (compare the files of `git diff --name-only` for the merge and for the PR, as in step 7), means the PR's own change is unchanged: keep its earlier verify and review verdicts and log both ids in `decisions.tsv`. A different id or a shared file means verify and review it again.
 - At most 5 open PRs in one stack. At the cap, stop.
 - Verification is serial (one app stack at a time); do not run tasks in parallel.
 - Do not turn `found.md` rows into PRs: an unrequested PR in the stack costs the user review time. They go in the final report.
@@ -99,7 +99,7 @@ Stop and write the final report when any of these holds:
 
 ## 4. Final report
 
-First audit this run's trail: read `decisions.tsv` from this run's `phase=start` row on, check that every `evidence` path exists, and append a row for any fork, pivot or blocker that is missing. Never edit or delete an earlier row.
+First audit this run's trail: read `decisions.tsv` from this run's `phase=start` row on, check that every `evidence` that is a file path exists, and append a row for any fork, pivot or blocker that is missing. Never edit or delete an earlier row.
 
 Then append the report to `progress.md` and show the user, decision first:
 
