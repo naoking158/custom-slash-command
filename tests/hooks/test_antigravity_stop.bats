@@ -53,6 +53,12 @@ run_hook() {
   [ "$(wc -l <"$MY_TOOLKIT_DATA/corrections.jsonl")" -eq 1 ]
 }
 
+@test "an input ending in a newline is also queued once" {
+  run_hook "$(stop_payload $'違う、それじゃない\n')"
+  run_hook "$(stop_payload $'違う、それじゃない\n')"
+  [ "$(wc -l <"$MY_TOOLKIT_DATA/corrections.jsonl")" -eq 1 ]
+}
+
 @test "an ordinary prompt is not queued" {
   run_hook "$(stop_payload 'list the files')"
   [ ! -f "$MY_TOOLKIT_DATA/corrections.jsonl" ]

@@ -6,7 +6,8 @@
 # Antigravity runs Stop at the end of each turn with {conversationId, cwd,
 # transcriptPath, terminationReason, lastUserInput}, and again for the same
 # input when a background command it started finishes. The conversation is
-# indexed in sessions.jsonl on its first turn only, and an input goes to
+# indexed in sessions.jsonl on its first turn only, so its ts is when the
+# conversation started, not when it ended. An input goes to
 # prompt-capture.sh, which keeps the corrections, unless the conversation
 # already queued it.
 # Always prints {"decision":""} and exits 0, so it never changes the turn.
@@ -24,8 +25,8 @@ if [ -n "$session" ]; then
       | jq -c '{session_id: .conversationId, cwd, transcript_path: .transcriptPath, reason: .terminationReason}' 2>/dev/null \
       | "$here/session-end.sh"
   fi
-  input="$(printf '%s' "$payload" | jq -r '.lastUserInput // empty' 2>/dev/null)"
-  if ! jq -e --arg s "$session" --arg p "$input" 'select(.session_id == $s and .prompt == ($p | .[0:500]))' \
+  input="$(printf '%s' "$payload" | jq -c '.lastUserInput // ""' 2>/dev/null)"
+  if ! jq -e --arg s "$session" --argjson p "${input:-\"\"}" 'select(.session_id == $s and .prompt == ($p | .[0:500]))' \
       "$dir/corrections.jsonl" >/dev/null 2>&1; then
     printf '%s' "$payload" \
       | jq -c '{session_id: .conversationId, cwd, prompt: .lastUserInput}' 2>/dev/null \
