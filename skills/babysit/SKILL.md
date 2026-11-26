@@ -118,4 +118,4 @@ Stop and report when any of these holds:
 3. **Done**: commits pushed (sha and one line each), threads replied to (fix / dismiss), the base merge, the CI verdict.
 4. **Left**: threads still open, and why.
 
-Adapted from pstack `babysit` and `bugbot-triage` (github.com/cursor/plugins, MIT).
+Adapted from the pstack `poteto-mode` playbook `babysit` and reference `bugbot-triage` (github.com/cursor/plugins, MIT).

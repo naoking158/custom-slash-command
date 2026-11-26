@@ -102,6 +102,8 @@ Stop and write the final report when any of these holds:
 
 First audit this run's trail: read `decisions.tsv` from this run's `phase=start` row on, check that every `evidence` that is a file path exists, and append a row for any fork, pivot or blocker that is missing. Never edit or delete an earlier row.
 
+Then get a second reader: launch `Agent` with `subagent_type: "my:trail-auditor"`, giving it `$S` and the worktree path. Put its `reviewed by` line and `## Attention` section into the report, right after the one line of item 1, and when it flags anything other than a missing log row, item 1 says a human has to read it; a flag that names a gap in the trail gets its `decisions.tsv` row before the report goes out. If the agent is unavailable or fails, say so in one line in the same place and go on.
+
 Then append the report to `progress.md` and show the user, decision first:
 
 1. **One line**: whether a human has to act, or that nothing is needed.

@@ -22,7 +22,7 @@ read its Claude Code terms as follows.
   Command exited with code <n>.` arrives when it ends; `<n>` is its exit
   status. `manage_task` with `status` or `kill` acts on the running task.
 - A step that starts a Claude Code agent (`Agent`, `Task`, `my:reviewer`,
-  `my:diff-reviewer`, `my:verifier`) or a skill marked `context: fork` (the
+  `my:diff-reviewer`, `my:verifier`, `my:adversary`, `my:trail-auditor`) or a skill marked `context: fork` (the
   `review` skill runs as `reviewer`): when an `orca` command is on PATH, run
   it in its own context with run-role, from your Orca terminal, with absolute
   paths:
@@ -46,6 +46,11 @@ read its Claude Code terms as follows.
     `--cwd <checkout>` before `--` when the checkout is an Orca workspace other
     than yours.
   - `reviewer`: the review target and its options.
+  - `adversary`: the target, the intent and the throwaway worktree, each as an
+    input (`"target: <range>" "intent: <text>" "worktree: <path>"`). The
+    throwaway worktree is not an Orca workspace: never pass it as `--cwd`.
+  - `trail-auditor`: the run's state directory (`"state: <path>"`) and,
+    when there is one, the repository checkout.
 
   The last line of the output is `[run-role] <name> exit=<n> <result file>`.
   Act on the exit code:
@@ -61,7 +66,8 @@ read its Claude Code terms as follows.
   - 4: the worker timed out or waited for an approval and was stopped. For
     `verifier`, return BLOCKED with that cause. For `diff-reviewer`, fall back
     as for exit 3. For `reviewer`, stop and report that the review did not
-    finish.
+    finish. For `adversary` and `trail-auditor`, do the step yourself as for
+    exit 3, with the `非隔離` line.
 
   For an agent with no file in `agents/`, such as `Explore`, do the step
   yourself and follow the brief the skill gives it.
