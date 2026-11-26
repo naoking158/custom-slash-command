@@ -3,9 +3,10 @@
 #
 # Contract under test:
 #   - Buckets, first match wins: hold-wip, hold-locked, hold-active (Orca
-#     pinned or active), hold-open-pr, verify-recent-chat, review when the Orca list is
-#     truncated and misses the worktree, safe (merged or PR merged/closed),
-#     review.
+#     pinned or active), hold-open-pr, verify-recent-chat, review when the
+#     Orca state is unknown (orca does not answer, or its truncated list
+#     misses the worktree), safe (merged, or PR merged/closed and its head
+#     contains the worktree's head), review.
 #   - A recent session counts when it ran in the worktree itself, or ran in
 #     another worktree and worked in it (a file inside it, a quoted path,
 #     cd / -C); a bare listing of the path does not count.
