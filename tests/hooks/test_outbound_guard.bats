@@ -344,6 +344,28 @@ main_and_worktree() {
   [ "$(decision)" = "deny" ]
 }
 
+@test "a push on a line with a case statement is denied unless it names its directory" {
+  main_and_worktree
+  run_guard "$(bash_payload "W=$WT; cd \"\$W\" && (cd $REPO && case x in a) true ;; esac && git push -q)")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$WT" "(cd $REPO && case x in a) echo hi ;; esac && git push -q)")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$WT" "case x in x) cd $REPO ;; esac; git push -q")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$WT" "case x in a) true ;; esac; git -C $WT push -q")"
+  [ -z "$output" ]
+  run_guard "$(payload_in "$WT" "case x in a) true ;; esac; git -C $REPO push -q")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$WT" "git push -q; case x in a) true ;; esac")"
+  [ -z "$output" ]
+}
+
+@test "a cd written after a closing parenthesis makes the directory unknown" {
+  main_and_worktree
+  run_guard "$(payload_in "$WT" "X=\$(true && true) cd $REPO && git push -q")"
+  [ "$(decision)" = "deny" ]
+}
+
 @test "a tag push asks only when nothing on the line is denied" {
   run_guard "$(bash_payload 'git push --tags')"
   [ "$(decision)" = "ask" ]
@@ -670,4 +692,14 @@ main_and_worktree() {
   [ "$(decision)" = "deny" ]
   run_guard "$(payload_in "$SHIP" "echo \$(cd $REPO && pwd) \$(true && gh pr merge 3)")"
   [ -z "$output" ]
+}
+
+@test "ship cwd: a PR command on a line with a case statement needs -R" {
+  ship_repo
+  run_guard "$(bash_payload 'case x in x) gh pr merge 3 -R work/app ;; esac')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'case x in x) gh pr merge 3 -R me/app ;; esac')"
+  [ -z "$output" ]
+  run_guard "$(bash_payload 'case x in x) gh pr merge 3 ;; esac')"
+  [ "$(decision)" = "deny" ]
 }

@@ -19,9 +19,11 @@
 # `git -C`. A push or PR command whose directory or arguments the line does not
 # show (`cd "$(mktemp -d)"`, a refspec from a command substitution) is denied
 # with the way to rewrite it: judging it in the session cwd would apply another
-# repository's rules. Not read: a command inside a quoted string
-# (`bash -c "git push"`, `out="$(git push)"`), and git options other than -C / -c
-# before the subcommand.
+# repository's rules. A `case` statement makes the rest of its line such a
+# line: its patterns end in `)` with no `(`, so the scopes cannot be followed.
+# Not read: a command inside a quoted string (`bash -c "git push"`,
+# `out="$(git push)"`), and git options other than -C / -c before the
+# subcommand.
 #
 # Autonomy modes. A repository is in `strict` mode unless the machine-local
 # config ($MY_AUTONOMY_CONF, default ~/.claude/my-toolkit/autonomy.conf) has a
@@ -96,12 +98,13 @@ cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null
 #   pr   <TAB> dir <TAB> the gh command, quoted strings and $( ) emptied; it
 #                      ends in " ?" when the line cuts its arguments short
 #   text <TAB> dir <TAB> git | gh, for each command that carries a message
-# dir is where the command runs, "?" when the line does not show it; a push
+# dir is where the command runs, "?" when the line does not show it and
+# "?case" when a case statement precedes it; a push
 # argument the line does not show is "?" as well. Heredoc bodies, quoted
 # strings and comments are set aside first, so that a message that mentions
 # `gh pr create` or `git push` is not mistaken for running it.
 commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
-  my (@lit, @saved);
+  my (@lit, @saved, $opaque);
   my %var = (HOME => $ENV{HOME});
   my $dir = length $ENV{CWD} ? $ENV{CWD} : undef;
   my $hold = sub { push @lit, [@_]; "\x00" . $#lit . "\x00" };
@@ -131,11 +134,13 @@ commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
   };
   my $emit = sub {
     my ($text, $at, $cut) = @_;
+    my $unknown = $opaque ? "?case" : "?";
+    $at = undef if $opaque;
     if ($text =~ /(?<![\w-])git((?:\s+-[Cc]\s+\S+)*)\s+push(?![\w-])([^)]*)/) {
       my ($opts, $args) = ($1, $2);
       my $in = $opts =~ /\s-C\s+(\S+)/ ? $enter->($at, $1) : $at;
       my @args = map { my $v = $value->($_); defined $v && $v !~ /[\s<>()]|\{.*,.*\}/ ? $v : "?" } split " ", $args;
-      print join("\t", "push", defined $in ? $in : "?", "@args"), "\n";
+      print join("\t", "push", defined $in ? $in : $unknown, "@args"), "\n";
     }
     while ($text =~ /(?<![\w-])gh\s+(?:pr\s+(?:create|new|merge|ready)|api)(?![\w-])/g) {
       my $gh = substr($text, $-[0]);
@@ -145,13 +150,13 @@ commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
       $gh .= " ?" if $cut && !$closed;
       $gh =~ s/\s+/ /g;
       $gh =~ s/ $//;
-      print join("\t", "pr", defined $at ? $at : "?", $gh), "\n";
+      print join("\t", "pr", defined $at ? $at : $unknown, $gh), "\n";
     }
     if ($text =~ /(?<![\w-])git((?:\s+-[Cc]\s+\S+)*)\s+commit(?![\w-])/) {
       my $in = $1 =~ /\s-C\s+(\S+)/ ? $enter->($at, $1) : $at;
-      print join("\t", "text", defined $in ? $in : "?", "git"), "\n";
+      print join("\t", "text", defined $in ? $in : $unknown, "git"), "\n";
     } elsif ($text =~ /(?<![\w-])gh\s+(?:pr|issue)\s+(?:create|new|comment|edit|review)(?![\w-])/) {
-      print join("\t", "text", defined $at ? $at : "?", "gh"), "\n";
+      print join("\t", "text", defined $at ? $at : $unknown, "gh"), "\n";
     }
   };
   my $moves = qr/(?<![\w.\/-])(?:cd|pushd|popd)(?![\w.\/-])/;
@@ -160,6 +165,7 @@ commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
     my ($text) = @_;
     $text =~ s/^\s+|\s+$//g;
     $text =~ s/^(?:(?:if|then|elif|else|while|until|do|time|!|\{|builtin|command)\s+)+//;
+    $opaque = 1 if $text =~ /^case\s/;
     if ($text =~ /^(?:(?:export|declare|local|readonly|typeset)\s+(?:-\w+\s+)*)?((?:\w+=\S*(?:\s+|$))+)$/) {
       my $assignments = $1;
       $var{$1} = $value->($2) while $assignments =~ /(\w+)=(\S*)/g;
@@ -190,7 +196,7 @@ commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
     for my $i (0 .. $#pieces) {
       my $piece = $pieces[$i];
       if ($i < @close) {
-        if ($i == 0) { $command->($piece) } else { $emit->($piece, $dir, 0) }
+        if ($i == 0) { $command->($piece) } else { $emit->($piece, $dir, 0); $dir = undef if $moved->($piece) }
         if (@saved) { ($dir, my $v) = @{ pop @saved }; %var = %$v }
       } elsif ($i < $#pieces) {
         $emit->($piece, $dir, 1);
@@ -199,6 +205,7 @@ commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
         push @saved, [$moved->($piece) ? undef : $dir, \%outer];
       } elsif (@close && !@open) {
         $emit->($piece, $dir, 0);
+        $dir = undef if $moved->($piece);
       } else {
         $command->($piece);
       }
@@ -233,7 +240,10 @@ judge_pr() {
   repo="$(printf '%s' "$gh" | sed -nE 's#.*(^|[[:space:]])(-R|--repo)[[:space:]=]+([^[:space:]]+).*#\3#p')"
   case "$repo" in
     "")
-      [ "$dir" != "?" ] || decide deny "gh を実行するリポジトリを判定できない。$hint"
+      case "$dir" in
+        "?case") decide deny "case 文と同じ行では gh を実行するリポジトリを判定できない。-R <owner/name> を付けるか別のコマンドに分ける" ;;
+        "?") decide deny "gh を実行するリポジトリを判定できない。$hint" ;;
+      esac
       repo="$(repo_slug "$dir")" ;;
     *\"*|*\'*) repo="" ;;
   esac
@@ -258,7 +268,10 @@ judge_push() {
       *) positional+=("$tok") ;;
     esac
   done
-  [ "$dir" != "?" ] || decide deny "$unknown_dir"
+  case "$dir" in
+    "?case") decide deny "case 文と同じ行では git push を実行する directory を判定できない。別のコマンドに分けるか git -C <絶対パス> push と書く" ;;
+    "?") decide deny "$unknown_dir" ;;
+  esac
   default_ref="$(git -C "$dir" symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null)"
   [ -n "$default_ref" ] && protected="$protected ${default_ref##*/}"
   if [ "${#positional[@]}" -ge 2 ]; then
@@ -289,11 +302,11 @@ while IFS=$'\t' read -r kind dir rest; do
     pr) judge_pr "$dir" "$rest" ;;
     push) judge_push "$dir" "$rest" ;;
     text)
-      if [ "$dir" != "?" ]; then
-        [ -n "$text_dir" ] || text_dir="$dir"
-      elif [ "$rest" = "gh" ]; then
-        decide deny "gh を実行する directory を判定できない。cd <絶対パス> で始める"
-      fi ;;
+      case "$dir" in
+        "?case") [ "$rest" != "gh" ] || decide deny "case 文と同じ行では gh を実行する directory を判定できない。別のコマンドに分ける" ;;
+        "?") [ "$rest" != "gh" ] || decide deny "gh を実行する directory を判定できない。cd <絶対パス> で始める" ;;
+        *) [ -n "$text_dir" ] || text_dir="$dir" ;;
+      esac ;;
   esac
 done <<<"$commands"
 
