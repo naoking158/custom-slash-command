@@ -19,6 +19,8 @@ State the mode in the first line of the reply: `Mode: check`, `Mode: threads-onl
 
 The PR is the argument, or `current` (the default) for the PR of the checked-out branch (`gh pr view --json number`). No PR → stop and say so.
 
+Before **threads-only** or **drive** changes anything, the checked-out branch must be the PR's head: `gh pr view <n> --json headRefName -q .headRefName` equals `git branch --show-current`. Otherwise stop and say which branch to check out (or run `gh pr checkout <n>` in a worktree of its own); a merge, commit or push on another branch lands in the wrong PR.
+
 ## Never
 
 These hold in every mode and every repository, ship mode included:
@@ -64,7 +66,7 @@ Triage each unresolved thread with [references/bot-triage.md](references/bot-tri
   - **fix**: reproduce the problem first (a failing test or command), fix it, run the tests, commit, push. Reply after the push, citing the commit sha.
   - **dismiss**: reply with the evidence (the command and its output, the line that already handles it, the later commit that fixed it).
   - **ask**: do not change the code. Collect it for the report; in **drive**, the PR is not merge-ready while an **ask** is open.
-  - Resolve a thread only when it is a bot's and you replied to it. Leave human reviewers' threads for them to resolve.
+  - Resolve a thread only when it is a bot's and you replied to it, with the thread's `id` from the listing: `gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -F id=<thread id>`. Leave human reviewers' threads for them to resolve.
 
 #### Replying
 

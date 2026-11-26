@@ -388,7 +388,7 @@ api="$(printf '%s' "$cmd" | perl -0777 -ne '
       }
       while ($gh =~ /(?<!\S)(?:--field|-F)(?:\s+|=)?($word)/g) {
         my $v = $put->($1, 1);
-        print "\x02$1\n" if $v =~ /^[^=]*=@(.+)$/s;
+        print "\x02$1\n" if $v =~ /^[^=]*=@(.+)$/s && $1 ne "-";
       }
       $gh =~ s/(?<!\S)--input(?:\s+|=)$word//g;
       $gh =~ s/(?<!\S)((?:--field|-F)(?:\s+|=)?)($word)/$put->($2, 1) =~ m{^[^=]*=@} ? "" : "$1$2"/ge;

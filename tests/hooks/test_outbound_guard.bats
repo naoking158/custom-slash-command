@@ -805,3 +805,10 @@ main_and_worktree() {
   run bash -c 'printf "%s" "$1" | /bin/bash "$2"' _ "$(bash_payload "gh api --method POST repos/o/r/issues/1/comments --input $TMP/a.json")" "$GUARD"
   [ "$(decision)" = "deny" ]
 }
+
+@test "api: a field read from stdin is checked through its pipe" {
+  run_guard "$(bash_payload "printf 'fixed H001' | gh api repos/o/r/issues/1/comments -F body=@-")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload "printf 'fixed in abc123' | gh api repos/o/r/issues/1/comments -F body=@-")"
+  [ -z "$output" ]
+}
