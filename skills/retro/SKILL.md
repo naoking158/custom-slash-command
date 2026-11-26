@@ -134,6 +134,22 @@ plain conversation otherwise). `--dry-run` stops here.
 Summarize: clusters found / proposed / applied / archived, files edited
 (with paths), test results, and any change handed off as a separate task.
 
+Then add the autopilot metrics (orca.md 4.9) under a `### Autopilot の指標`
+heading, pasting the script's output lines as they are:
+
+```bash
+"${CLAUDE_SKILL_DIR}/scripts/autopilot-metrics.sh" --checkout "$toolkit_repo"
+```
+
+- The period is the script's default (the last 28 days), not `--since`: the
+  metrics are compared against 4-week baselines.
+- `不明` counts records the script could not read; report them, do not guess
+  values for them. Exit 2 is a usage error: show its message instead.
+- Print this block also when Step 2 exits for lack of signals and when
+  `--dry-run` stops at Step 5. It only reads, so it is not a write.
+- The script also needs git and gh (read-only). When gh is not logged in,
+  the gh-based lines show the repository as `不明`.
+
 ## Critical rules
 
 - **Approval-gated writes.** No repo file changes before Step 5 approval.
