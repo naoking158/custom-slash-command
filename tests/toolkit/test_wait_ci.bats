@@ -5,7 +5,8 @@
 #   - The verdict is the exit status: 0 green, 1 red, 3 no run for the commit,
 #     4 still running at the timeout.
 #   - A commit whose runs are not registered yet is waited for, not reported.
-#   - Every run of the commit counts, including one that registers late.
+#   - Every run the commit triggered counts, including one that registers
+#     late; runs of other events (schedule ...) on the same commit do not.
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
@@ -31,6 +32,7 @@ GH
   chmod +x "$TMP/bin/gh"
   export PATH="$TMP/bin:$PATH"
   export WAIT_CI_INTERVAL=0
+  SHA=0123456789abcdef0123456789abcdef01234567
 }
 
 teardown() {
@@ -38,8 +40,8 @@ teardown() {
 }
 
 run_of() {
-  jq -cn --arg s "$1" --arg c "$2" --arg w "${3:-ci}" \
-    '{databaseId: 1, workflowName: $w, status: $s, conclusion: $c}'
+  jq -cn --arg s "$1" --arg c "$2" --arg w "${3:-ci}" --arg e "${4:-push}" \
+    '{databaseId: 1, workflowName: $w, status: $s, conclusion: $c, event: $e}'
 }
 
 @test "a run that registers late is waited for and reported green" {
@@ -49,14 +51,14 @@ run_of() {
     echo "[$(run_of in_progress "")]"
     echo "[$(run_of completed success)]"
   } >"$TMP/frames"
-  run "$WAIT_CI" me/app abc123
+  run "$WAIT_CI" me/app "$SHA"
   [ "$status" -eq 0 ]
   [[ "$output" == *"CI: green"* ]]
 }
 
 @test "a failed run is red" {
   echo "[$(run_of completed failure)]" >"$TMP/frames"
-  run "$WAIT_CI" me/app abc123
+  run "$WAIT_CI" me/app "$SHA"
   [ "$status" -eq 1 ]
   [[ "$output" == *"failure"* ]]
 }
@@ -67,27 +69,27 @@ run_of() {
     echo "[$(run_of completed success ci),$(run_of in_progress "" release)]"
     echo "[$(run_of completed success ci),$(run_of completed failure release)]"
   } >"$TMP/frames"
-  run "$WAIT_CI" me/app abc123
+  run "$WAIT_CI" me/app "$SHA"
   [ "$status" -eq 1 ]
 }
 
 @test "a repository without workflows is exit 3 without waiting" {
   export GH_WORKFLOWS=""
   echo '[]' >"$TMP/frames"
-  run "$WAIT_CI" me/app abc123
+  run "$WAIT_CI" me/app "$SHA"
   [ "$status" -eq 3 ]
   ! grep -q '^run list' "$TMP/calls"
 }
 
 @test "no run for the commit within the register window is exit 3" {
   echo '[]' >"$TMP/frames"
-  WAIT_CI_REGISTER=0 run "$WAIT_CI" me/app abc123
+  WAIT_CI_REGISTER=0 run "$WAIT_CI" me/app "$SHA"
   [ "$status" -eq 3 ]
 }
 
 @test "runs still in progress at the timeout are exit 4" {
   echo "[$(run_of in_progress "")]" >"$TMP/frames"
-  WAIT_CI_TIMEOUT=0 run "$WAIT_CI" me/app abc123
+  WAIT_CI_TIMEOUT=0 run "$WAIT_CI" me/app "$SHA"
   [ "$status" -eq 4 ]
 }
 
@@ -97,6 +99,31 @@ run_of() {
 echo "gh: not logged in" >&2
 exit 4
 GH
-  run "$WAIT_CI" me/app abc123
+  run "$WAIT_CI" me/app "$SHA"
   [ "$status" -eq 2 ]
+}
+
+@test "an abbreviated sha is a usage error, not a missing run" {
+  echo "[$(run_of completed success)]" >"$TMP/frames"
+  run "$WAIT_CI" me/app 0123456
+  [ "$status" -eq 2 ]
+  [ ! -e "$TMP/calls" ]
+}
+
+@test "a failed scheduled run on the same commit does not make it red" {
+  echo "[$(run_of completed failure nightly schedule),$(run_of completed success ci pull_request)]" >"$TMP/frames"
+  run "$WAIT_CI" me/app "$SHA"
+  [ "$status" -eq 0 ]
+}
+
+@test "only scheduled runs on the commit is exit 3" {
+  echo "[$(run_of completed success nightly schedule)]" >"$TMP/frames"
+  WAIT_CI_REGISTER=0 run "$WAIT_CI" me/app "$SHA"
+  [ "$status" -eq 3 ]
+}
+
+@test "more runs than the default page are asked for" {
+  echo "[$(run_of completed success)]" >"$TMP/frames"
+  run "$WAIT_CI" me/app "$SHA"
+  grep -qE '^run list .*(-L|--limit) [0-9]{3,}' "$TMP/calls"
 }
