@@ -11,6 +11,10 @@
 #     cite local working artifacts: review finding IDs (C001, H012 ...),
 #     docs/reviews/ paths, absolute local paths, or docs/ paths that git does
 #     not track.
+#   - `gh api` calls that write (--method / -X other than GET, or fields and
+#     --input without a method) get the same check over their fields, the
+#     stages that pipe into them, and the files --input / -F k=@file send. A
+#     file the hook cannot read yet (written on the same line) is denied.
 # Notion MCP writes get the same leak check (without the git-tracked test).
 #
 # Every push and PR command on the line is judged, each in the directory it
@@ -296,10 +300,13 @@ judge_push() {
 }
 
 text_dir=""
+api_dir=""
 pending_ask=""
 while IFS=$'\t' read -r kind dir rest; do
   case "$kind" in
-    pr) judge_pr "$dir" "$rest" ;;
+    pr)
+      case "$rest:$dir" in "gh api"*:\?*) ;; "gh api"*) [ -n "$api_dir" ] || api_dir="$dir" ;; esac
+      judge_pr "$dir" "$rest" ;;
     push) judge_push "$dir" "$rest" ;;
     text)
       case "$dir" in
@@ -345,6 +352,63 @@ if [ -n "$text" ]; then
     | sed -E 's#-C[[:space:]]+("[^"]*"|[^[:space:]]+)##g' \
     | sed -E 's#(--body-file|--file|-F)[[:space:]=]+[^[:space:]]+##g')"
   reason="$(leak_reason "$text" "$text_dir")"
+  [ -n "$reason" ] && decide deny "$reason"
+fi
+
+# --- gh api writes ---------------------------------------------------------------
+# For each `gh api` that writes: a line "\x02<file>" per file it sends, then its
+# text (the stages piping into it and its own arguments, quoted strings and
+# heredoc bodies put back) without the arguments that name those files.
+api="$(printf '%s' "$cmd" | perl -0777 -ne '
+  my @lit;
+  my $hold = sub { push @lit, [@_]; "\x00" . $#lit . "\x00" };
+  s/(<<-?\s*(["\x27]?)(\w+)\2)([^\n]*)\n(.*?)\n[ \t]*\3[ \t]*(?=\n|\z)/$1 . $hold->($5, $5) . $4/gse;
+  s/\\.|\$\x27((?:[^\x27\\]|\\.)*)\x27|"((?:[^"\\]|\\.)*)"|\x27([^\x27]*)\x27|(?<![^\s;&|()])#[^\n]*/
+    my ($m, $c) = ($&, defined $1 ? $1 : defined $2 ? $2 : $3);
+    $m =~ m{^\\}s ? $m : $m =~ m{^#} ? "" : $hold->($m, $c)/gse;
+  s/\\\n/ /g;
+  my $put = sub { my ($s, $i) = @_; 1 while $s =~ s/\x00(\d+)\x00/$lit[$1][$i]/g; $s };
+  my $word = qr/(?:\x00\d+\x00|[^\s\x00])+/;
+  for my $seg (split /&&|\|\||;|\n|(?<![<>|])&(?![>&])/) {
+    my @stages = split /\|&?/, $seg;
+    for my $k (0 .. $#stages) {
+      next unless $stages[$k] =~ /(?<![\w-])gh\s+api(?![\w-])/;
+      my $gh = substr($stages[$k], $-[0]);
+      my ($method) = $gh =~ /(?<!\S)(?:--method|-X)(?:\s+|=)?($word)/;
+      next unless defined $method ? $put->($method, 1) !~ /^(?:GET|HEAD)$/i
+        : $gh =~ /(?<!\S)(?:--input|--field|--raw-field|-[fF])/;
+      my $stdin;
+      while ($gh =~ /(?<!\S)--input(?:\s+|=)($word)/g) {
+        my $f = $put->($1, 1);
+        if ($f eq "-") { $stdin = 1 } else { print "\x02$f\n" }
+      }
+      if ($stdin) {
+        while ($gh =~ /(?<![<\d])<(?![<(&])\s*($word)/g) { print "\x02", $put->($1, 1), "\n" }
+        $gh =~ s/(?<![<\d])<(?![<(&])\s*$word//g;
+      }
+      while ($gh =~ /(?<!\S)(?:--field|-F)(?:\s+|=)?($word)/g) {
+        my $v = $put->($1, 1);
+        print "\x02$1\n" if $v =~ /^[^=]*=@(.+)$/s;
+      }
+      $gh =~ s/(?<!\S)--input(?:\s+|=)$word//g;
+      $gh =~ s/(?<!\S)((?:--field|-F)(?:\s+|=)?)($word)/$put->($2, 1) =~ m{^[^=]*=@} ? "" : "$1$2"/ge;
+      print $put->(join(" | ", @stages[0 .. $k - 1], $gh), 0), "\n";
+    }
+  }
+')"
+if [ -n "$api" ]; then
+  api_text="$(printf '%s\n' "$api" | grep -v $'^\x02')"
+  while IFS= read -r f; do
+    f="${f#$'\x02'}"
+    f="${f/#\~/$HOME}"
+    case "$f" in /*) ;; *) [ -z "$api_dir" ] || f="$api_dir/$f" ;; esac
+    { [ -f "$f" ] && [ -r "$f" ]; } \
+      || decide deny "gh api が送るファイル ${f##*/} を読めない。ファイルを書くコマンドと gh api を別の Bash 呼び出しに分け、パスを直接書く"
+    api_text="$api_text"$'\n'"$(cat "$f")"$'\n'"$(jq -r '.. | strings' "$f" 2>/dev/null)"
+  done < <(printf '%s\n' "$api" | grep $'^\x02')
+  # JSON escapes such as \n would hide the boundary before a review ID.
+  api_text="$(printf '%s' "$api_text" | sed -E 's/\\[nrt]/ /g')"
+  reason="$(leak_reason "$api_text" "$api_dir")"
   [ -n "$reason" ] && decide deny "$reason"
 fi
 

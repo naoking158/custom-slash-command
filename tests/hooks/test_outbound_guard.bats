@@ -703,3 +703,105 @@ main_and_worktree() {
   run_guard "$(bash_payload 'case x in x) gh pr merge 3 ;; esac')"
   [ "$(decision)" = "deny" ]
 }
+
+# ============================================================================
+# gh api writes carry outbound text
+# ============================================================================
+
+@test "api: a read-only gh api call is allowed" {
+  run_guard "$(bash_payload 'gh api repos/o/r/pulls/1/comments')"
+  [ -z "$output" ]
+  run_guard "$(bash_payload "gh api --paginate repos/o/r/pulls/1/comments --jq '.[] | select(.body | test(\"H001\"))'")"
+  [ -z "$output" ]
+}
+
+@test "api: GET with query fields is not a write" {
+  run_guard "$(bash_payload 'gh api -X GET search/issues -f q="repo:o/r H001"')"
+  [ -z "$output" ]
+}
+
+@test "api: a field with a local path is denied" {
+  run_guard "$(bash_payload 'gh api --method POST repos/o/r/issues/1/comments -f body="see /Users/alice/foo"')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "api: a typed field with a review ID is denied" {
+  run_guard "$(bash_payload 'gh api repos/o/r/issues/1/comments -F body=H001')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'gh api repos/o/r/issues/1/comments -F body="H001 fixed"')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'gh api repos/o/r/issues/1/comments --raw-field=body=H001')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "api: a clean field is allowed" {
+  run_guard "$(bash_payload 'gh api --method POST repos/o/r/issues/1/comments -f body="fixed in abc123"')"
+  [ -z "$output" ]
+}
+
+@test "api: an input file citing a review ID, a local path or docs/reviews is denied" {
+  printf '{"body":"fixed H001"}' >"$TMP/a.json"
+  run_guard "$(bash_payload "gh api --method POST repos/o/r/pulls/1/comments/9/replies --input $TMP/a.json")"
+  [ "$(decision)" = "deny" ]
+  printf '{"body":"see /Users/alice/x.md"}' >"$TMP/b.json"
+  run_guard "$(bash_payload "gh api -XPOST repos/o/r/pulls/1/comments/9/replies --input=$TMP/b.json")"
+  [ "$(decision)" = "deny" ]
+  printf '{"body":"see docs/reviews/r.md"}' >"$TMP/c.json"
+  run_guard "$(bash_payload "gh api --method=post repos/o/r/pulls/1/comments/9/replies --input '$TMP/c.json'")"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "api: a review ID after a JSON newline escape is denied" {
+  printf '{"body":"done\\nH001"}' >"$TMP/a.json"
+  run_guard "$(bash_payload "gh api --method POST repos/o/r/issues/1/comments --input $TMP/a.json")"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "api: an input file citing an untracked docs path is denied" {
+  printf '{"body":"see docs/plan/x.md"}' >"$REPO/a.json"
+  run_guard "$(bash_payload 'gh api --method POST repos/o/r/issues/1/comments --input a.json')"
+  [ "$(decision)" = "deny" ]
+  printf '{"body":"see docs/log/tracked.md"}' >"$REPO/b.json"
+  run_guard "$(bash_payload 'gh api --method POST repos/o/r/issues/1/comments --input b.json')"
+  [ -z "$output" ]
+}
+
+@test "api: a clean input file under a local path is allowed" {
+  mkdir -p "$TMP/home"
+  printf '{"body":"fixed in abc123"}' >"$TMP/home/reply.json"
+  HOME="$TMP/home" run_guard "$(bash_payload 'gh api --method POST repos/o/r/pulls/1/comments/9/replies --input ~/reply.json')"
+  [ -z "$output" ]
+}
+
+@test "api: an input file the hook cannot read is denied" {
+  run_guard "$(bash_payload "jq -n '{body:\"x\"}' >$TMP/new.json && gh api --method POST repos/o/r/issues/1/comments --input $TMP/new.json")"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "api: a field read from a file is checked" {
+  printf 'fixed H001\n' >"$TMP/body.md"
+  run_guard "$(bash_payload "gh api repos/o/r/issues/1/comments -F body=@$TMP/body.md")"
+  [ "$(decision)" = "deny" ]
+  printf 'fixed in abc123\n' >"$TMP/clean.md"
+  run_guard "$(bash_payload "gh api repos/o/r/issues/1/comments -F body=@$TMP/clean.md")"
+  [ -z "$output" ]
+}
+
+@test "api: a body piped into --input - is checked" {
+  run_guard "$(bash_payload "jq -n --arg b 'fixed H001' '{body:\$b}' | gh api --method POST repos/o/r/issues/1/comments --input -")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload "jq -n --arg b 'fixed in abc123' '{body:\$b}' | gh api --method POST repos/o/r/issues/1/comments --input -")"
+  [ -z "$output" ]
+}
+
+@test "api: the word --input inside a quoted body is not a flag" {
+  run_guard "$(bash_payload 'gh api --method POST repos/o/r/issues/1/comments -f body="pass --input reply.json"')"
+  [ -z "$output" ]
+}
+
+@test "api: an input file is read under the system bash too" {
+  [ -x /bin/bash ] || skip "no /bin/bash"
+  printf '{"body":"fixed H001"}' >"$TMP/a.json"
+  run bash -c 'printf "%s" "$1" | /bin/bash "$2"' _ "$(bash_payload "gh api --method POST repos/o/r/issues/1/comments --input $TMP/a.json")" "$GUARD"
+  [ "$(decision)" = "deny" ]
+}
