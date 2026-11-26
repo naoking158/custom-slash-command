@@ -86,7 +86,7 @@ case "$1 $2" in
         cp "$FAKE/result.src" "$(cat "$FAKE/result.dest")"; : >"$FAKE/result.done"
       fi ;;
     esac
-    printf '{"ok":true,"result":{"dispatchId":"ctx_fake","state":"%s","activity":"%s"}}\n' "$1" "$2" ;;
+    printf '{"ok":true,"result":{"dispatchId":"ctx_fake","state":"%s","activity":"%s","workspace":"ws_fake::%s"}}\n' "$1" "$2" "$FAKE/ws" ;;
   "orchestration worker-release"|"orchestration worker-stop")
     echo '{"ok":true,"result":{"dispatchId":"ctx_fake"}}' ;;
   *) exit 64 ;;
@@ -150,6 +150,7 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
 }
 
 @test "reviewer with a report path and an assessment: exit 0" {
+  mkdir -p "$TMP/ws/docs/reviews" && : >"$TMP/ws/docs/reviews/r.md"
   worker_writes $'output_path: docs/reviews/r.md\nassessment: NEEDS_REVISION\n'
   run --separate-stderr "$RUN_ROLE" reviewer --out "$OUT" -- "pr:12 --no-screen"
   [ "$status" -eq 0 ]
@@ -263,6 +264,13 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
   worker_writes $'Looks good to me.\nPASS\n'
   run --separate-stderr "$RUN_ROLE" verifier --out "$OUT"
   [ "$status" -eq 1 ]
+}
+
+@test "reviewer result naming a report the worker did not write: exit 1" {
+  worker_writes $'output_path: docs/reviews/r.md\nassessment: PASS\n'
+  run --separate-stderr "$RUN_ROLE" reviewer --out "$OUT"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"$TMP/ws/docs/reviews/r.md"* ]]
 }
 
 @test "reviewer result without an assessment: exit 1" {

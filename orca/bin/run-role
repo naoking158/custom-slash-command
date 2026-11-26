@@ -229,7 +229,15 @@ case "$AGENT" in
   reviewer)
     grep -Eq '(^|[^A-Z_])(PASS|NEEDS_REVISION)([^A-Z_]|$)' "$OUT" \
       || die 1 "reviewer result has no assessment (PASS or NEEDS_REVISION)"
-    grep -Eq '[^[:space:]]+\.md' "$OUT" \
-      || die 1 "reviewer result has no report path" ;;
+    report="$(grep -m 1 -A 1 'output_path' "$OUT" | grep -Eo '[^[:space:]`"'"'"']+\.md' | head -n 1)"
+    [ -n "$report" ] || die 1 "reviewer result has no report path (output_path)"
+    case "$report" in
+      /*) ;;
+      *)
+        workspace="$(printf '%s' "$show" | jq -r '.result.workspace // empty' 2>/dev/null)"
+        workspace="${workspace#*::}"
+        report="${workspace:-${cwd:-$PWD}}/$report" ;;
+    esac
+    [ -f "$report" ] || die 1 "reviewer report not found: $report" ;;
 esac
 finish 0
