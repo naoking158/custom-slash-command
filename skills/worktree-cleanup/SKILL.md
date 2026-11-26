@@ -25,7 +25,7 @@ Without `-b`, `MERGED` checks against `origin/HEAD`; pass `-b origin/<branch>` w
 | `hold-active` | Orca pinned, or with a live terminal or agent | keep |
 | `hold-open-pr` | its branch has an open or draft PR | keep |
 | `verify-recent-chat` | a Claude Code session touched it in the last 4 days | check (step 2) |
-| `safe` | merged into the base, or its PR merged or closed | candidate |
+| `safe` | merged into the base, or its PR merged or closed with no commit beyond the PR's head | candidate |
 | `review` | none of the above, or the Orca list was truncated | ask |
 
 `ORCA=?` means Orca's list was truncated and did not include this worktree, so its state is unknown. `AUTOPILOT=goal` marks a worktree made for an autopilot goal: check that goal's `progress.md` for a final report before removing it.
@@ -47,7 +47,7 @@ Get the user's explicit approval of the exact list of paths to remove. Keep `hol
 
 Per approved path:
 
-- `ORCA` is not `-` (Orca manages it): `orca worktree rm --worktree "path:<wt>" --json`. Add `--delete-branch` only when the branch is merged (`MERGED=YES` or a merged PR); Orca also keeps a branch it cannot prove merged.
+- `ORCA` is not `-` (Orca manages it): `orca worktree rm --worktree "path:<wt>" --json`. Add `--delete-branch` only when `MERGED=YES`: a squash-merged branch is not an ancestor of the base, and its branch is the only copy of commits made after the PR. Orca also keeps a branch it cannot prove merged.
 - `ORCA` is `-`: `git -C <repo> worktree remove --force <wt>`. When the directory survives on ignored build output, list what is left, then remove the directory. Finish with `git -C <repo> worktree prune`. The branch stays, so no commit is lost.
 
 ## 5. Report

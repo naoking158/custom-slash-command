@@ -12,8 +12,9 @@
 #
 # Buckets, first match wins: hold-wip (tracked edits), hold-active (Orca pinned
 # or active), hold-open-pr, verify-recent-chat (a session in the last 4 days),
-# review (Orca list truncated and this worktree not in it), safe (merged into
-# the base, or its PR merged or closed), review.
+# review (Orca list truncated and this worktree not in it, or git status
+# failed), safe (merged into the base, or its PR merged or closed and the
+# worktree has no commit beyond the PR's head), review.
 #
 # Exit: 0 table printed, 2 bad option, not a git repository or no base ref.
 set -u
@@ -77,9 +78,9 @@ trap 'rm -rf "$tmp"' EXIT
 # PR state by head branch: open, draft, merged or closed. Empty when gh cannot read.
 echo '[]' >"$tmp/prs.json"
 if command -v gh >/dev/null 2>&1 \
-  && raw=$(gh pr list --author "@me" --state all --limit 1000 --json number,state,isDraft,headRefName 2>/dev/null) \
+  && raw=$(gh pr list --author "@me" --state all --limit 1000 --json number,state,isDraft,headRefName,headRefOid 2>/dev/null) \
   && printf '%s' "$raw" | jq -e 'type == "array"' >/dev/null 2>&1; then
-  printf '%s' "$raw" | jq '[.[] | {number, head: .headRefName,
+  printf '%s' "$raw" | jq '[.[] | {number, head: .headRefName, oid: .headRefOid,
     state: (if .isDraft == true and .state == "OPEN" then "draft" else (.state | ascii_downcase) end)}]' >"$tmp/prs.json"
 fi
 
@@ -108,8 +109,14 @@ git worktree list --porcelain | awk '
   /^branch /   { b = substr($0, 8); sub(/^refs\/heads\//, "", b) }
   END          { if (p != "") print p "\t" h "\t" b }' >"$tmp/worktrees.tsv"
 
-main_wt=$(head -1 "$tmp/worktrees.tsv" | cut -f1)
 projects="$HOME/.claude/projects"
+# Claude Code session directories of every worktree, the main one included.
+while IFS=$'\t' read -r p _; do
+  for q in "$p" "$(canon "$p")"; do
+    d="$projects/$(slug "$q")"
+    [ -d "$d" ] && printf '%s\n' "$d"
+  done
+done <"$tmp/worktrees.tsv" | sort -u >"$tmp/sessiondirs"
 now=$(date +%s)
 
 echo "# base: $base"
@@ -128,8 +135,9 @@ tail -n +2 "$tmp/worktrees.tsv" | while IFS=$'\t' read -r wt head branch; do
 
   if [ ! -d "$wt" ]; then
     dirty=missing
+  elif ! porcelain=$(git -C "$wt" status --porcelain 2>/dev/null); then
+    dirty=unknown
   else
-    porcelain=$(git -C "$wt" status --porcelain 2>/dev/null)
     tracked=$(printf '%s\n' "$porcelain" | grep -v '^??' | grep -c . )
     untracked=$(printf '%s\n' "$porcelain" | grep -c '^??')
     if [ "$tracked" -gt 0 ]; then dirty="wip:$tracked"
@@ -139,13 +147,22 @@ tail -n +2 "$tmp/worktrees.tsv" | while IFS=$'\t' read -r wt head branch; do
 
   if [ -z "$branch" ]; then remote=detached
   elif git show-ref --verify --quiet "refs/remotes/origin/$branch"; then
-    if [ "$(git rev-parse "refs/remotes/origin/$branch")" = "$head" ]; then remote=pushed
-    else remote="ahead$(git rev-list --count "refs/remotes/origin/$branch..$head" 2>/dev/null)"; fi
+    upstream=$(git rev-parse "refs/remotes/origin/$branch")
+    if [ "$upstream" = "$head" ]; then remote=pushed
+    else
+      ahead=$(git rev-list --count "$upstream..$head" 2>/dev/null)
+      behind=$(git rev-list --count "$head..$upstream" 2>/dev/null)
+      remote="ahead${ahead:-?}/behind${behind:-?}"
+    fi
   else remote=no-remote; fi
 
-  pr="-"
+  # The PR state speaks for the worktree only when the PR's head contains it.
+  pr="-"; pr_covers=no
   if [ -n "$branch" ]; then
-    pr=$(jq -r --arg b "$branch" '[.[] | select(.head == $b)] | first | if . then "#\(.number)/\(.state)" else "-" end' "$tmp/prs.json")
+    row=$(jq -r --arg b "$branch" '[.[] | select(.head == $b)] | first | if . then "#\(.number)/\(.state)\t\(.oid // "")" else "-\t" end' "$tmp/prs.json")
+    pr=${row%%$'\t'*}
+    pr_oid=${row#*$'\t'}
+    [ -n "$pr_oid" ] && git merge-base --is-ancestor "$head" "$pr_oid" 2>/dev/null && pr_covers=yes
   fi
 
   cwt=$(canon "$wt")
@@ -158,18 +175,18 @@ tail -n +2 "$tmp/worktrees.tsv" | while IFS=$'\t' read -r wt head branch; do
   gitdir=$(git -C "$wt" rev-parse --absolute-git-dir 2>/dev/null) && [ -e "$gitdir/my-autopilot-worktree" ] && autopilot=goal
 
   # Sessions started in the worktree are stored under its own slug; sessions in
-  # the main checkout that touched it mention its path followed by / or a quote.
-  own_ts=0; main_ts=0
+  # any other worktree that touched it mention its path followed by / or a quote.
+  own_ts=0; mention_ts=0
   for d in "$projects/$(slug "$wt")" "$projects/$(slug "$cwt")"; do
     [ -d "$d" ] || continue
     t=$(find "$d" -type f -name '*.jsonl' 2>/dev/null | newest_ts)
     [ "$t" -gt "$own_ts" ] && own_ts="$t"
   done
-  d="$projects/$(slug "$main_wt")"
-  if [ -d "$d" ]; then
-    main_ts=$(grep -rlF --include='*.jsonl' -e "$wt/" -e "$wt\"" "$d" 2>/dev/null | newest_ts)
-  fi
-  last_ts=$own_ts; [ "$main_ts" -gt "$last_ts" ] && last_ts=$main_ts
+  while IFS= read -r d; do
+    t=$(grep -rlF --include='*.jsonl' -e "$wt/" -e "$wt\"" "$d" 2>/dev/null | newest_ts)
+    [ "$t" -gt "$mention_ts" ] && mention_ts="$t"
+  done <"$tmp/sessiondirs"
+  last_ts=$own_ts; [ "$mention_ts" -gt "$last_ts" ] && last_ts=$mention_ts
   if [ "$last_ts" -gt 0 ]; then last=$(fmt_day "$last_ts"); else last="-"; fi
   if [ "$last_ts" -gt 0 ] && [ $(( (now - last_ts) / 86400 )) -le 4 ]; then recent=yes; else recent=no; fi
 
@@ -177,9 +194,11 @@ tail -n +2 "$tmp/worktrees.tsv" | while IFS=$'\t' read -r wt head branch; do
     case "$orca" in pinned|active*) bucket=hold-active ;; *)
       case "$pr" in */open|*/draft) bucket=hold-open-pr ;; *)
         if [ "$recent" = yes ]; then bucket=verify-recent-chat
-        elif [ "$orca" = "?" ]; then bucket=review
+        elif [ "$orca" = "?" ] || [ "$dirty" = unknown ]; then bucket=review
         elif [ "$merged" = YES ]; then bucket=safe
-        else case "$pr" in */merged|*/closed) bucket=safe ;; *) bucket=review ;; esac
+        elif [ "$pr_covers" = yes ]; then
+          case "$pr" in */merged|*/closed) bucket=safe ;; *) bucket=review ;; esac
+        else bucket=review
         fi ;;
       esac ;;
     esac ;;

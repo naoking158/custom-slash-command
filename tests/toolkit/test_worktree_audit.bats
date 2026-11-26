@@ -164,7 +164,7 @@ audit() {
   touch "$(git -C "$TMP/merged" rev-parse --absolute-git-dir)/my-autopilot-worktree"
   add_wt squashed
   add_wt closed
-  echo '[{"number":3,"state":"MERGED","isDraft":false,"headRefName":"squashed"},{"number":4,"state":"CLOSED","isDraft":false,"headRefName":"closed"}]' >"$TMP/prs.json"
+  echo "[{\"number\":3,\"state\":\"MERGED\",\"isDraft\":false,\"headRefName\":\"squashed\",\"headRefOid\":\"$(git -C "$TMP/squashed" rev-parse HEAD)\"},{\"number\":4,\"state\":\"CLOSED\",\"isDraft\":false,\"headRefName\":\"closed\",\"headRefOid\":\"$(git -C "$TMP/closed" rev-parse HEAD)\"}]" >"$TMP/prs.json"
   audit
   [ "$(field "$TMP/merged" MERGED)" = "YES" ]
   [ "$(field "$TMP/merged" BUCKET)" = "safe" ]
@@ -172,6 +172,26 @@ audit() {
   [ "$(field "$TMP/squashed" BUCKET)" = "safe" ]
   [ "$(field "$TMP/closed" BUCKET)" = "safe" ]
   [ "$(field "$TMP/closed" AUTOPILOT)" = "-" ]
+}
+
+@test "a commit beyond the merged PR head keeps the worktree out of safe" {
+  add_wt extra
+  echo "[{\"number\":5,\"state\":\"MERGED\",\"isDraft\":false,\"headRefName\":\"extra\",\"headRefOid\":\"$(git -C "$TMP/extra" rev-parse HEAD)\"}]" >"$TMP/prs.json"
+  git -C "$TMP/extra" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m after-merge
+  audit
+  [ "$(field "$TMP/extra" PR)" = "#5/merged" ]
+  [ "$(field "$TMP/extra" BUCKET)" = "review" ]
+}
+
+@test "session in a sibling worktree naming the worktree makes verify-recent-chat" {
+  add_wt target
+  git -C "$REPO" merge -q --ff-only target
+  add_wt coordinator
+  local d="$HOME/.claude/projects/$(printf '%s' "$TMP/coordinator" | sed 's/[^A-Za-z0-9]/-/g')"
+  mkdir -p "$d"
+  printf '{"cwd":"%s"}\n' "$TMP/target" >"$d/session.jsonl"
+  audit
+  [ "$(field "$TMP/target" BUCKET)" = "verify-recent-chat" ]
 }
 
 @test "unmerged without PR or session is review" {
