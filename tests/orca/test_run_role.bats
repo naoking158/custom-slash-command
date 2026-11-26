@@ -23,6 +23,7 @@ setup() {
   if command -v orca >/dev/null; then return 1; fi
   export HOME="$TMP/home"
   export ORCA_TERMINAL_HANDLE="term_fake"
+  unset ORCA_AGENT_SESSION_ID
   export MY_ORCA_PROFILE="work"
   export MY_ORCA_POLL_SECONDS="0.1"
   export FAKE="$TMP"
@@ -172,6 +173,15 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
   run_diff_reviewer --from term_other
   [ "$status" -eq 0 ]
   [ "$(start_arg --from)" = "term_other" ]
+}
+
+@test "in an Orca agent session without a terminal, the worker starts without --from" {
+  unset ORCA_TERMINAL_HANDLE
+  export ORCA_AGENT_SESSION_ID="sess_fake"
+  worker_writes "$pass1"
+  run_diff_reviewer
+  [ "$status" -eq 0 ]
+  ! grep -qx -- --from "$TMP/start.args"
 }
 
 @test "relative --cwd is resolved to the directory's absolute path" {
@@ -367,7 +377,7 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
   [ "$(last_line)" = "[run-role] diff-reviewer exit=3 $OUT" ]
 }
 
-@test "outside an Orca terminal without --from: exit 3, no worker started" {
+@test "outside Orca without --from: exit 3, no worker started" {
   unset ORCA_TERMINAL_HANDLE
   run_diff_reviewer
   [ "$status" -eq 3 ]

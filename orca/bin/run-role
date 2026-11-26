@@ -16,7 +16,8 @@
 #                 `orca worktree list`). Default: the calling terminal's workspace.
 #   --timeout     seconds to wait for the worker (default 3600).
 #   --from        Orca terminal handle passed to worker-start; needed when
-#                 $ORCA_TERMINAL_HANDLE is unset.
+#                 neither $ORCA_TERMINAL_HANDLE nor $ORCA_AGENT_SESSION_ID is
+#                 set. Orca refuses it inside an agent session.
 #   role inputs   diff-reviewer: --patch <file> --hunks <file> --checklist <file>
 #                 (repeatable); nothing else is accepted.
 #                 verifier, reviewer: free-form inputs, one per argument.
@@ -159,8 +160,8 @@ done < "$profile_file"
 [ -n "$harness" ] && [ -n "$model" ] || die 2 "profile $profile has no '$ROLE <harness> <model>' line"
 
 command -v orca >/dev/null 2>&1 || die 3 "orca command not found on PATH"
-handle="${ORCA_TERMINAL_HANDLE:-$from}"
-[ -n "$handle" ] || die 3 "not in an Orca terminal and no --from <handle>"
+[ -n "${ORCA_TERMINAL_HANDLE:-}${ORCA_AGENT_SESSION_ID:-}$from" ] \
+  || die 3 "not in an Orca terminal or agent session, and no --from <handle>"
 status_json="$(orca status --json 2>/dev/null)"
 [ "$(printf '%s' "$status_json" | jq -r '(.ok == true) and (.result.runtime.reachable == true)' 2>/dev/null)" = true ] \
   || die 3 "Orca runtime not reachable (orca status --json)"
