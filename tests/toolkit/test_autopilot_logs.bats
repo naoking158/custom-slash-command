@@ -9,7 +9,8 @@
 #   - log-task.sh rejects a wrong argument count or an invalid value with
 #     exit 2 and writes nothing.
 #   - patch-id.sh prints the same id for the same change on different bases, a
-#     different id for a different change, `empty` for no change, and exits 2
+#     different id for a different change (whitespace included), `empty` for no
+#     change, and exits 2
 #     on an invalid ref or outside a repository.
 
 bats_require_minimum_version 1.5.0
@@ -141,6 +142,20 @@ make_repo() {
   run -0 "$PATCH_ID" b0 different "$R"
   [[ "$output" =~ ^[0-9a-f]{40}$ ]]
   [ "$output" != "$first" ]
+}
+
+@test "patch-id differs when changes differ only in whitespace" {
+  make_repo
+  git_in "$R" checkout -q -b indent4 b0
+  printf 'one\n    two\nthree\n' >"$R/a.txt"
+  git_in "$R" commit -q -am indent4
+  git_in "$R" checkout -q -b indent1 b0
+  printf 'one\n two\nthree\n' >"$R/a.txt"
+  git_in "$R" commit -q -am indent1
+  run -0 "$PATCH_ID" b0 indent4 "$R"
+  four="$output"
+  run -0 "$PATCH_ID" b0 indent1 "$R"
+  [ "$output" != "$four" ]
 }
 
 @test "patch-id prints empty for no change and defaults to the current directory" {

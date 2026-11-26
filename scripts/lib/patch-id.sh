@@ -3,8 +3,9 @@
 #
 #   scripts/lib/patch-id.sh <base-ref> <head-ref> [repo-dir]
 #
-# The id depends only on the change itself (`git patch-id --stable`), so the
-# same change on top of a different base prints the same id. A branch whose id
+# The id depends only on the change itself (`git patch-id --verbatim`, which
+# unlike --stable keeps whitespace), so the same change on top of a different
+# base prints the same id and a whitespace-only difference does not. A branch whose id
 # is unchanged after merging its parent can keep its earlier review and verify
 # verdicts. <base-ref> is expected to be an ancestor of <head-ref> (the parent
 # branch after it was merged in): when the base moves on alone, the diff and
@@ -28,5 +29,5 @@ for ref in "$base" "$head"; do
   fi
 done
 
-id="$(git -C "$repo" diff --no-color --no-ext-diff "$base..$head" | git patch-id --stable | cut -d' ' -f1)"
+id="$(git -C "$repo" diff --no-color --no-ext-diff "$base..$head" | git patch-id --verbatim | cut -d' ' -f1)"
 printf '%s\n' "${id:-empty}"

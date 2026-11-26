@@ -83,7 +83,7 @@ repo_wanted() {
 }
 
 # parse_goal <goal dir> — one JSON object: the goal's repository, start date,
-# whether it had task headings, and one {rounds, verify} per task.
+# and one {rounds, verify} per task from tasks.tsv and progress.md.
 parse_goal() {
   local goal_md="$1/goal.md" progress="$1/progress.md" tsv="$1/tasks.tsv" head="" rows=""
   [ -f "$goal_md" ] && head="$(cat "$goal_md")"
