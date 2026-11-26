@@ -68,7 +68,8 @@ Data dir: `data="${MY_TOOLKIT_DATA:-$HOME/.claude/my-toolkit}"`.
   `question`; within a group by recurrence desc, date desc.
 - **Six-month filter**: keep only signals that will still hold in six months
   and would change what a future agent does. Drop one-off events tied to a
-  specific commit SHA, a count, or a temporary version.
+  specific commit SHA, a count, or a temporary version, and list them in
+  Step 5 as "dropped by the six-month filter" so the user can overrule.
 - Corrections that concern *project* behavior rather than toolkit assets
   are noted at the end as "not toolkit-related" — suggest the user let auto
   memory keep them; do not fabricate a toolkit change from them.
@@ -130,7 +131,8 @@ plain conversation otherwise). `--dry-run` stops here.
 
 - For each journal entry whose cluster was applied: set `status: promoted`
   and move the file to `$data/journal/archive/`.
-- Rejected-with-reason clusters: set `status: archived` and move to
+- Signals dropped by the six-month filter and not overruled, and
+  rejected-with-reason clusters: set `status: archived` and move to
   `archive/` so they stop resurfacing. "Not now" clusters stay `raw`.
 - Consumed corrections: append their lines to
   `$data/corrections.archive.jsonl` and rewrite `corrections.jsonl`
