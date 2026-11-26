@@ -69,11 +69,14 @@ checked out there: no `gh pr checkout`, no `git checkout` / `git switch` to
 another branch, no creating or deleting branches, no `git stash`, `git merge`,
 `git reset` or `git pull`.
 
-- Read a PR with `gh pr diff` and `gh pr view`. For a file as the PR has it:
-  `git fetch -q origin pull/{number}/head && git show FETCH_HEAD:{path}` in one
-  command, because the next fetch moves `FETCH_HEAD`.
-- Try a merge without a working tree: `git merge-tree --write-tree {head}
-  origin/{base}` reports the conflicts, if any.
+- Read a PR with `gh pr diff` and `gh pr view`. `{head}` below is the PR's head
+  commit, `gh pr view {number} --json headRefOid -q .headRefOid`; run
+  `git fetch -q origin pull/{number}/head` once so that the commit exists
+  locally. Name it by that sha, not by `FETCH_HEAD`, which the next fetch moves.
+  A file as the PR has it: `git show {head}:{path}`.
+- Try a merge without a working tree: `git fetch -q origin {base}`, then
+  `git merge-tree --write-tree {head} origin/{base}` reports the conflicts, if
+  any.
 - When the files must be on disk, to run tests or a linter, add a detached
   worktree in a temporary directory (`git worktree add --detach "$T" {head}`)
   and remove it when you are done (`git worktree remove --force "$T"`).
@@ -106,13 +109,15 @@ one-pass review, and with `--no-screen`. Never hand any of this to the Pass 1
 
 - `pr:` targets: read the base branch. When the base is another PR's branch
   (`gh pr view {number} --json baseRefName`), read that PR's diff too.
-- `pr:` targets: the base keeps moving while the PR is open. Fetch it and read
-  what landed after the PR branched, in the files the PR changes or calls into
-  (`git log {head}..origin/{base} -- {files}`), and list the open PRs that
-  touch those files (`gh pr list --json number,title,files`). A change that
-  merges without a text conflict can still break what the PR assumes: a
-  function whose meaning changed, a caller added elsewhere. Report that as a
-  finding that names the commit or PR.
+- `pr:` targets: the base keeps moving while the PR is open. Fetch it and list
+  everything that landed after the PR branched
+  (`git log --stat {head}..origin/{base}`), then look in what landed for the
+  names the PR changes (a function, a file, a flag): a caller added in another
+  file does not show up when you look only at the PR's own files. Also list the
+  open PRs that touch the PR's files (`gh pr list --json number,title,files`).
+  A change that merges without a text conflict can still break what the PR
+  assumes: a function whose meaning changed, a caller added elsewhere. Report
+  that as a finding that names the commit or PR.
 - Code the diff relies on but does not contain (a submodule, a vendored or
   generated copy, another repository): read the upstream default branch, not
   the pinned copy, and name the version you read in the finding.
