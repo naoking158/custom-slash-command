@@ -238,6 +238,71 @@ main_and_worktree() {
   [ "$(decision)" = "deny" ]
 }
 
+@test "a redirection is not a push argument" {
+  main_and_worktree
+  run_guard "$(bash_payload 'git push origin &>/dev/null')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'git push &> /dev/null')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'git push origin > /tmp/out.log')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'git push -q >/dev/null 2>&1')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'git push origin main>/dev/null')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$WT" 'cd . > /dev/null && git push origin feature/x 2> err.txt')"
+  [ -z "$output" ]
+}
+
+@test "a cd behind if, builtin, a command substitution or a function is followed" {
+  main_and_worktree
+  run_guard "$(payload_in "$WT" "if cd $REPO; then git push -q; fi")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$WT" "builtin cd $REPO && git push -q")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$WT" "out=\$(cd $REPO && git push -q 2>&1); echo \"\$out\"")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$WT" "f() { cd $REPO && git push -q; }; f")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(payload_in "$REPO" "out=\$(cd $WT && git push -q 2>&1); echo \"\$out\"")"
+  [ -z "$output" ]
+}
+
+@test "an escaped quote or a \$'…' string does not hide a later push" {
+  cmd="git commit -q -m 'it'\\''s done' && git push origin main 2>&1 | grep -v '^remote'"
+  run_guard "$(bash_payload "$cmd")"
+  [ "$(decision)" = "deny" ]
+  cmd="git commit -q -m \$'it\\'s done' && git push origin main && echo 'ok'"
+  run_guard "$(bash_payload "$cmd")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'echo \"start\" && git push origin main && echo "done"')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "a comment is not read as part of the command" {
+  main_and_worktree
+  cmd="$(printf "# it's time to publish\ngit push --force origin feature/x\necho 'done'")"
+  run_guard "$(payload_in "$WT" "$cmd")"
+  [ "$(decision)" = "deny" ]
+  cmd="$(printf 'cd %s  # the worktree\ngit push -u origin feature/x' "$WT")"
+  run_guard "$(bash_payload "$cmd")"
+  [ -z "$output" ]
+  run_guard "$(payload_in "$WT" 'git push origin feature/x  # not main, no --force')"
+  [ -z "$output" ]
+  cmd="$(printf '(cd %s && make)  # build (see the notes\ngit push -q' "$REPO")"
+  run_guard "$(payload_in "$WT" "$cmd")"
+  [ -z "$output" ]
+}
+
+@test "a tag push asks only when nothing on the line is denied" {
+  run_guard "$(bash_payload 'git push --tags')"
+  [ "$(decision)" = "ask" ]
+  run_guard "$(bash_payload 'git push --tags && gh pr merge 3')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'git push --tags origin feature/x && git push origin main')"
+  [ "$(decision)" = "deny" ]
+}
+
 # --- outbound text ---------------------------------------------------------------
 
 @test "commit message with a review finding ID is denied" {
@@ -467,4 +532,41 @@ main_and_worktree() {
   [ "$(decision)" = "deny" ]
   run_guard "$(payload_in / "X=1; cd $REPO && git commit -m \"record the result in docs/log/tracked.md\"")"
   [ -z "$output" ]
+}
+
+@test "strict: a PR command closed by a parenthesis or followed by a redirection is judged" {
+  run_guard "$(bash_payload '(gh pr merge)')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'out=$(gh pr ready)')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'gh pr merge>/dev/null')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'gh pr new --title t --body b')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "ship cwd: a cd inside a command substitution into a strict repo is followed" {
+  ship_repo
+  WORK="$TMP/work"
+  git init -q -b main "$WORK"
+  git -C "$WORK" remote add origin https://github.com/work/app.git
+  run_guard "$(bash_payload "url=\$(cd $WORK && gh pr create --title t --body b)")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload "if cd $WORK; then gh pr merge 3 --squash; fi")"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "a gh message command whose directory cannot be followed is denied" {
+  printf 'see docs/reviews/r.md\n' >"$REPO/body.md"
+  run_guard "$(bash_payload 'W=$(pwd); cd "$W" && gh pr create --draft --title t --body-file body.md')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'W=$(pwd); cd "$W" && gh pr comment 3 --body "plan is in docs/plans/features/x.md"')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "the hint for gh api does not offer -R" {
+  ship_repo
+  run_guard "$(bash_payload 'cd "$(mktemp -d)" && gh api -X PUT repos/me/app/pulls/3/merge')"
+  [ "$(decision)" = "deny" ]
+  [[ "$output" != *"-R"* ]]
 }
