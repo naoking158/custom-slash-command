@@ -4,8 +4,8 @@
 # `#!/usr/bin/env bash` shebang with that bash instead of the first one on
 # PATH. macOS hooks run under /bin/bash 3.2, so run the suite once more with
 # TEST_BASH=/bin/bash (tests/run.sh does both). bats picks this file up only
-# when given the tests/ directory itself (`bats -r tests/`); a run of one
-# subdirectory or file ignores TEST_BASH.
+# when given tests/ itself (`bats -r tests/`); a run of a subdirectory or of a
+# file in one ignores TEST_BASH.
 
 setup_suite() {
   [ -n "${TEST_BASH:-}" ] || return 0

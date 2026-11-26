@@ -448,6 +448,20 @@ main_and_worktree() {
   [ "$(decision)" = "deny" ]
 }
 
+@test "cp, mv and tee in a title or message do not count as writing the body file" {
+  echo body >"$REPO/body.md"
+  run_guard "$(bash_payload 'gh pr create --draft --title "Add tcp keepalive" --body-file body.md')"
+  [ -z "$output" ]
+  run_guard "$(bash_payload 'git commit -q -m "rename via mv x" -F body.md')"
+  [ -z "$output" ]
+}
+
+@test "a body redirected into stdin is checked" {
+  printf 'fixed H001\n' >"$TMP/leak.md"
+  run_guard "$(bash_payload "git commit -q -F - < $TMP/leak.md")"
+  [ "$(decision)" = "deny" ]
+}
+
 @test "file flags quoted inside a message are message text, not body files" {
   run_guard "$(bash_payload "git commit -q -m 'read config with --file \$CONFIG or -F /etc/nothere'")"
   [ -z "$output" ]
