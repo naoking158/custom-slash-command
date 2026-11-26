@@ -341,16 +341,20 @@ text="$(printf '%s' "$cmd" | perl -0777 -ne '
   }
 ')"
 if [ -n "$text" ]; then
-  for f in $(printf '%s' "$text" | grep -oE -- '(--body-file|--file|-F)[[:space:]=]+[^[:space:]]+' | sed -E 's#^(--body-file|--file|-F)[[:space:]=]+##'); do
+  read_args=()
+  while IFS= read -r arg; do
+    f="$(printf '%s' "$arg" | sed -E 's#^(--body-file|--file|-F)[[:space:]=]+##')"
     f="${f%\"}"; f="${f#\"}"; f="${f%\'}"; f="${f#\'}"
     case "$f" in /*|~*) ;; *) f="$text_dir/$f" ;; esac
     f="${f/#\~/$HOME}"
-    [ -f "$f" ] && text="$text"$'\n'"$(cat "$f")"
-  done
-  # Drop the parts that address the machine, not the reader.
-  text="$(printf '%s' "$text" \
-    | sed -E 's#-C[[:space:]]+("[^"]*"|[^[:space:]]+)##g' \
-    | sed -E 's#(--body-file|--file|-F)[[:space:]=]+[^[:space:]]+##g')"
+    [ -f "$f" ] || continue
+    text="$text"$'\n'"$(cat "$f")"
+    read_args+=("$arg")
+  done < <(printf '%s' "$text" | grep -oE -- '(--body-file|--file|-F)[[:space:]=]+[^[:space:]]+')
+  # Drop the parts that address the machine, not the reader: -C paths and the
+  # arguments that named a file read above.
+  for arg in ${read_args[@]+"${read_args[@]}"}; do text="${text//"$arg"/}"; done
+  text="$(printf '%s' "$text" | sed -E 's#-C[[:space:]]+("[^"]*"|[^[:space:]]+)##g')"
   reason="$(leak_reason "$text" "$text_dir")"
   [ -n "$reason" ] && decide deny "$reason"
 fi

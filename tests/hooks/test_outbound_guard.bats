@@ -418,6 +418,12 @@ main_and_worktree() {
   [ -z "$output" ]
 }
 
+@test "a file flag written inside a commit message does not hide a review ID" {
+  cmd="$(printf 'git commit -q -F - <<%sEOF%s\nfix: x\n\ncomment with -F body=H001\nEOF' "'" "'")"
+  run_guard "$(bash_payload "$cmd")"
+  [ "$(decision)" = "deny" ]
+}
+
 @test "commands mentioned inside a quoted message are not run" {
   run_guard "$(bash_payload 'git commit -m "explain why gh pr ready is denied"')"
   [ -z "$output" ]
