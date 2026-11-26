@@ -1,0 +1,241 @@
+#!/usr/bin/env bash
+# run-role — Run one toolkit role as a supervised Orca worker in its own
+# context, wait for it from the shell, and check its result file.
+#
+# Usage:
+#   orca/bin/run-role <agent-name> --out <file> [--cwd <dir>] [--timeout <sec>]
+#                     [--from <handle>] [-- <role inputs>...]
+#
+#   <agent-name>  verifier | reviewer | diff-reviewer. The worker's task is the
+#                 body of agents/<agent-name>.md in this checkout, the role
+#                 inputs, and three rules: write the result to --out, report
+#                 completion in one line, ask no questions.
+#   --out         result file the worker writes. An existing file is removed
+#                 before the worker starts.
+#   --cwd         Orca workspace the worker runs in (a path Orca lists in
+#                 `orca worktree list`). Default: the calling terminal's workspace.
+#   --timeout     seconds to wait for the worker (default 3600).
+#   --from        Orca terminal handle passed to worker-start; needed when
+#                 $ORCA_TERMINAL_HANDLE is unset.
+#   role inputs   diff-reviewer: --patch <file> --hunks <file> --checklist <file>
+#                 (repeatable); nothing else is accepted.
+#                 verifier, reviewer: free-form inputs, one per argument.
+#
+# The profile is $MY_ORCA_PROFILE, else `profile <name>` in
+# ~/.claude/my-toolkit/orca.conf; it names orca/profiles/<name>.conf, whose
+# `<role> <harness> <model>` lines give the worker's agent and model.
+#
+# Exit codes:
+#   0  the result file meets the role's contract
+#   1  the worker failed, stopped or was abandoned, or the result breaks the contract
+#   2  usage or configuration error (profile, role, inputs, --cwd)
+#   3  Orca unusable: no orca command, runtime unreachable, no terminal
+#      handle, the worker could not start, or worker-show kept failing
+#   4  timed out (including a worker blocked on an approval) or interrupted;
+#      the worker is stopped
+# The last line on stdout is `[run-role] <agent-name> exit=<n> <absolute --out>`.
+#
+# Environment: MY_ORCA_PROFILE, MY_ORCA_POLL_SECONDS (polling interval, default 5).
+# Dependencies: bash, jq.
+set -u
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+AGENT="-"
+OUT="-"
+WORK=""
+DISPATCH=""
+SETTLED=""
+
+cleanup() {
+  if [ -n "$DISPATCH" ]; then
+    [ -n "$SETTLED" ] || orca orchestration worker-stop --dispatch "$DISPATCH" --json >/dev/null 2>&1
+    orca orchestration worker-release --dispatch "$DISPATCH" --json >/dev/null 2>&1
+  fi
+  [ -z "$WORK" ] || rm -rf "$WORK"
+}
+trap cleanup EXIT
+
+usage() {
+  sed -n '2,/^# Dependencies/s/^# \{0,1\}//p' "$0"
+}
+
+finish() {
+  printf '[run-role] %s exit=%s %s\n' "$AGENT" "$1" "$OUT"
+  exit "$1"
+}
+
+die() {
+  local code="$1"
+  shift
+  printf 'run-role: %s\n' "$*" >&2
+  finish "$code"
+}
+
+abspath() {
+  case "$1" in
+    /*) printf '%s' "$1" ;;
+    *) printf '%s/%s' "$PWD" "${1#./}" ;;
+  esac
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+  "") die 2 "missing <agent-name>" ;;
+esac
+AGENT="$1"
+shift
+cwd="" timeout=3600 from=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --) shift; break ;;
+    --out|--cwd|--timeout|--from)
+      [ $# -ge 2 ] || die 2 "$1 needs a value"
+      case "$1" in
+        --out) OUT="$(abspath "$2")" ;;
+        --cwd) cwd="$(cd "$2" 2>/dev/null && pwd -P)" || die 2 "--cwd: no such directory: $2" ;;
+        --timeout) timeout="$2" ;;
+        --from) from="$2" ;;
+      esac
+      shift 2 ;;
+    *) die 2 "unknown argument: $1" ;;
+  esac
+done
+case "$AGENT" in
+  verifier) ROLE=verify ;;
+  reviewer|diff-reviewer) ROLE=review ;;
+  *) die 2 "unknown agent: $AGENT (verifier, reviewer, diff-reviewer)" ;;
+esac
+
+[ "$OUT" != "-" ] || die 2 "--out is required"
+case "$timeout" in ''|*[!0-9]*) die 2 "--timeout takes whole seconds: $timeout" ;; esac
+poll="${MY_ORCA_POLL_SECONDS:-5}"
+case "$poll" in ''|.|*[!0-9.]*|*.*.*) die 2 "MY_ORCA_POLL_SECONDS takes seconds above 0: $poll" ;; esac
+case "$poll" in *[1-9]*) ;; *) die 2 "MY_ORCA_POLL_SECONDS takes seconds above 0: $poll" ;; esac
+command -v jq >/dev/null 2>&1 || die 2 "jq is required"
+
+INPUTS=""
+add_input() { INPUTS="${INPUTS}- $1
+"; }
+
+if [ "$AGENT" = diff-reviewer ]; then
+  patch="" hunks="" checklists=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --patch|--hunks|--checklist)
+        [ $# -ge 2 ] || die 2 "$1 needs a value"
+        [ -f "$2" ] || die 2 "$1: no such file: $2"
+        case "$1" in
+          --patch) patch="$(abspath "$2")" ;;
+          --hunks) hunks="$(abspath "$2")" ;;
+          --checklist) checklists+=("$(abspath "$2")") ;;
+        esac
+        shift 2 ;;
+      *) die 2 "diff-reviewer takes only --patch, --hunks and --checklist: $1" ;;
+    esac
+  done
+  [ -n "$patch" ] && [ -n "$hunks" ] && [ "${#checklists[@]}" -gt 0 ] \
+    || die 2 "diff-reviewer needs --patch, --hunks and at least one --checklist"
+  add_input "Patch file: $patch"
+  add_input "Hunk index (hunks.tsv): $hunks"
+  for c in "${checklists[@]}"; do add_input "Checklist: $c"; done
+  add_input "Write pass1.json to: $OUT"
+else
+  for a in "$@"; do add_input "$a"; done
+fi
+
+agent_file="$ROOT/agents/$AGENT.md"
+[ -f "$agent_file" ] || die 2 "no agent definition: $agent_file"
+
+profile="${MY_ORCA_PROFILE:-}"
+conf="$HOME/.claude/my-toolkit/orca.conf"
+if [ -z "$profile" ] && [ -f "$conf" ]; then
+  while read -r key value _ || [ -n "$key" ]; do
+    if [ "$key" = profile ] && [ -n "$value" ]; then profile="$value"; break; fi
+  done < "$conf"
+fi
+[ -n "$profile" ] || die 2 "no profile: set MY_ORCA_PROFILE or write 'profile <name>' in $conf"
+case "$profile" in *[!A-Za-z0-9_-]*) die 2 "invalid profile name: $profile" ;; esac
+profile_file="$ROOT/orca/profiles/$profile.conf"
+[ -f "$profile_file" ] || die 2 "no profile file: $profile_file"
+
+harness="" model=""
+while read -r r h m _ || [ -n "$r" ]; do
+  if [ "$r" = "$ROLE" ]; then harness="$h"; model="$m"; break; fi
+done < "$profile_file"
+[ -n "$harness" ] && [ -n "$model" ] || die 2 "profile $profile has no '$ROLE <harness> <model>' line"
+
+command -v orca >/dev/null 2>&1 || die 3 "orca command not found on PATH"
+handle="${ORCA_TERMINAL_HANDLE:-$from}"
+[ -n "$handle" ] || die 3 "not in an Orca terminal and no --from <handle>"
+status_json="$(orca status --json 2>/dev/null)"
+[ "$(printf '%s' "$status_json" | jq -r '(.ok == true) and (.result.runtime.reachable == true)' 2>/dev/null)" = true ] \
+  || die 3 "Orca runtime not reachable (orca status --json)"
+
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/run-role.XXXXXX")" || die 2 "mktemp failed"
+spec="$WORK/spec.md"
+{
+  awk 'NR == 1 && $0 == "---" { fm = 1; next } fm && $0 == "---" { fm = 0; next } !fm' "$agent_file"
+  printf '\n## Inputs\n\n%s\n' "$INPUTS"
+  printf '## Reporting\n\n'
+  printf -- '- Write your result to %s. That file is the only result anyone reads.\n' "$OUT"
+  printf -- '- Report completion in one line.\n'
+  printf -- '- Do not ask questions. Make each judgment call yourself and state it in the result.\n'
+} > "$spec"
+
+rm -f "$OUT"
+worktree="current"
+[ -z "$cwd" ] || worktree="path:$cwd"
+from_args=()
+[ -z "$from" ] || from_args=(--from "$from")
+
+receipt="$(orca orchestration worker-start --spec-file "$spec" --task-title "run-role $AGENT" \
+  --agent "$harness" --model "$model" --worktree "$worktree" \
+  ${from_args[@]+"${from_args[@]}"} --json 2>"$WORK/start.err")"
+id="$(printf '%s' "$receipt" | jq -r '.result.dispatchId // empty' 2>/dev/null)"
+if [ -z "$id" ]; then
+  { printf '%s\n' "$receipt"; cat "$WORK/start.err"; } >&2
+  if [ "$(printf '%s' "$receipt" | jq -r '.error.code // empty' 2>/dev/null)" = selector_not_found ]; then
+    die 2 "not an Orca workspace: ${cwd:-the workspace of the calling terminal}"
+  fi
+  die 3 "worker-start failed ($harness, $model)"
+fi
+DISPATCH="$id"
+trap 'die 4 "interrupted; stopped $DISPATCH"' INT TERM
+printf 'run-role: %s started as %s (%s, %s, profile %s)\n' "$AGENT" "$id" "$harness" "$model" "$profile" >&2
+
+started=$SECONDS
+state="" activity="" misses=0
+while :; do
+  show="$(orca orchestration worker-show --dispatch "$id" --json 2>/dev/null)"
+  state="$(printf '%s' "$show" | jq -r '.result.state // empty' 2>/dev/null)"
+  activity="$(printf '%s' "$show" | jq -r '.result.activity // empty' 2>/dev/null)"
+  case "$state" in succeeded|failed|stopped|abandoned) break ;; esac
+  if [ -z "$state" ]; then
+    misses=$((misses + 1))
+    [ "$misses" -lt 3 ] || die 3 "worker-show failed 3 times in a row for $id"
+  else
+    misses=0
+  fi
+  if [ $((SECONDS - started)) -ge "$timeout" ]; then
+    die 4 "timed out after ${timeout}s (state ${state:-unknown}, activity ${activity:-unknown}); stopped $id"
+  fi
+  sleep "$poll"
+done
+SETTLED=1
+
+[ "$state" = succeeded ] || die 1 "worker $id ended as $state"
+[ -s "$OUT" ] || die 1 "worker left no result at $OUT"
+case "$AGENT" in
+  verifier)
+    head -n 1 "$OUT" | grep -Eq '^(PASS|FAIL|BLOCKED)' \
+      || die 1 "verifier result does not start with PASS, FAIL or BLOCKED" ;;
+  diff-reviewer)
+    jq -e '.findings | type == "array"' "$OUT" >/dev/null 2>&1 \
+      || die 1 "pass1.json is not JSON with a findings array" ;;
+  reviewer)
+    grep -Eq '(^|[^A-Z_])(PASS|NEEDS_REVISION)([^A-Z_]|$)' "$OUT" \
+      || die 1 "reviewer result has no assessment (PASS or NEEDS_REVISION)"
+    grep -Eq '[^[:space:]]+\.md' "$OUT" \
+      || die 1 "reviewer result has no report path" ;;
+esac
+finish 0
