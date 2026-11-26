@@ -556,8 +556,9 @@ bare_profile() {
   [ "$status" -eq 2 ]
 }
 
-@test "adversary that ran nothing (BLOCKED) is not a clean result: exit 1" {
+@test "adversary that ran nothing returns BLOCKED, passed on for the caller: exit 0" {
   worker_writes $'BLOCKED: no worktree to run in\n'
   run --separate-stderr "$RUN_ROLE" adversary --out "$OUT"
-  [ "$status" -eq 1 ]
+  [ "$status" -eq 0 ]
+  [ "$(head -n 1 "$OUT")" = "BLOCKED: no worktree to run in" ]
 }

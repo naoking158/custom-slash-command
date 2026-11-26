@@ -32,7 +32,7 @@
 #
 # Result contracts: verifier starts with PASS, FAIL or BLOCKED; diff-reviewer
 # writes JSON with a findings array; reviewer names an assessment and an
-# existing report (output_path); adversary's first line is `FINDINGS <n>`;
+# existing report (output_path); adversary's first line is `FINDINGS <n>` or BLOCKED;
 # trail-auditor has an `## Attention` heading.
 #
 # Exit codes:
@@ -262,8 +262,8 @@ case "$AGENT" in
     esac
     [ -f "$report" ] || die 1 "reviewer report not found: $report" ;;
   adversary)
-    head -n 1 "$OUT" | grep -Eq '^FINDINGS [0-9]+$' \
-      || die 1 "adversary result does not start with 'FINDINGS <n>'" ;;
+    head -n 1 "$OUT" | grep -Eq '^(FINDINGS [0-9]+$|BLOCKED)' \
+      || die 1 "adversary result does not start with 'FINDINGS <n>' or BLOCKED" ;;
   trail-auditor)
     grep -Eq '^## Attention' "$OUT" \
       || die 1 "trail-auditor result has no '## Attention' section" ;;

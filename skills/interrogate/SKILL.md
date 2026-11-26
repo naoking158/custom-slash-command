@@ -29,10 +29,11 @@ When the target is the working tree (no argument), carry the uncommitted changes
 
 ```bash
 git diff --binary HEAD > "$T.patch" && { [ ! -s "$T.patch" ] || git -C "$T" apply "$T.patch"; }
-git ls-files -z --others --exclude-standard | tar --null -T - -cf - | tar -xf - -C "$T"
+git -C "$(git rev-parse --show-toplevel)" ls-files -z --others --exclude-standard \
+  | tar -C "$(git rev-parse --show-toplevel)" --null -T - -cf - | tar -xf - -C "$T"
 ```
 
-A `pr:<n>` target: `git fetch origin pull/<n>/head` and add the worktree at `FETCH_HEAD`. Write `$T` out as a literal absolute path in every later step: each Bash call starts a new shell. From here on, step 5 runs whatever happens, even when a later step fails or you stop early.
+A `pr:<n>` target: `git fetch origin pull/<n>/head`, then add the worktree at the sha from `gh pr view <n> --json headRefOid -q .headRefOid` (not `FETCH_HEAD`, which another fetch can move). Write `$T` out as a literal absolute path in every later step: each Bash call starts a new shell. From here on, step 5 runs whatever happens, even when a later step fails or you stop early.
 
 ## 3. Attack
 
@@ -43,7 +44,7 @@ Start `my:adversary` with the target, the intent and the worktree path `$T`:
 
 For a large or risky change, start two or three breakers in parallel, each told to focus on one area (inputs and boundaries, state and concurrency, callers and contracts). Where the profile maps `adversary` to a different model than yours, prefer it: a different model misses different things.
 
-A breaker's result starts with `FINDINGS <n>`. `BLOCKED` means it ran nothing (check the worktree path); any other first line means it failed. Run it once more; if it fails again, report the run as not done rather than as "no finding".
+A breaker's result starts with `FINDINGS <n>`, or `BLOCKED` when it ran nothing. On `BLOCKED`, check the worktree path and start it again once; a second `BLOCKED` is reported as "not run", never as "no finding". A result that starts with neither failed: run it once more, then go on with what you have.
 
 ## 4. Verify
 
