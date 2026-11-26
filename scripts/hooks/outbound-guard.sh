@@ -102,7 +102,6 @@ cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null
 # `gh pr create` or `git push` is not mistaken for running it.
 commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
   my (@lit, @saved);
-  my $depth = 0;
   my %var = (HOME => $ENV{HOME});
   my $dir = length $ENV{CWD} ? $ENV{CWD} : undef;
   my $hold = sub { push @lit, [@_]; "\x00" . $#lit . "\x00" };
@@ -156,41 +155,54 @@ commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
     }
   };
   my $moves = qr/(?<![\w.\/-])(?:cd|pushd|popd)(?![\w.\/-])/;
-  for my $seg (split /&&|\|\||;|\n|(?<!>)\|&?|(?<![<>|&])&(?![>&])/) {
-    $seg =~ s/(?:(?:(?<!\S)\d+)?(?:>>|>\||>&|>|<<<|<<-?|<&|<>|<)|&>>?)\s*[^\s()<>&|;]+//g;
-    my (@open, $closes);
-    while ($seg =~ /([()])/g) {
-      if ($1 eq "(") { push @open, $-[0] } elsif (@open) { pop @open } else { $closes++ }
-    }
-    my $cut = 0;
-    for my $at (@open) {
-      my $before = substr($seg, 0, $at - $cut);
-      $seg = substr($seg, $at - $cut + 1);
-      $cut = $at + 1;
-      $emit->($before, $dir, 1);
-      my %outer = %var;
-      $outer{$1} = undef while $before =~ /(?:^|\s)(\w+)=/g;
-      push @saved, [$depth++, $before =~ $moves ? undef : $dir, \%outer];
-    }
-    $seg =~ s/^\s+|\s+$//g;
-    $seg =~ s/^(?:(?:if|then|elif|else|while|until|do|time|!|\{|builtin|command)\s+)+//;
-    if ($seg =~ /^(?:(?:export|declare|local|readonly|typeset)\s+(?:-\w+\s+)*)?((?:\w+=\S*(?:\s+|$))+)$/) {
+  my $moved = sub { my $flat = $_[0]; 1 while $flat =~ s/\([^()]*\)/ /; $flat =~ $moves };
+  my $command = sub {
+    my ($text) = @_;
+    $text =~ s/^\s+|\s+$//g;
+    $text =~ s/^(?:(?:if|then|elif|else|while|until|do|time|!|\{|builtin|command)\s+)+//;
+    if ($text =~ /^(?:(?:export|declare|local|readonly|typeset)\s+(?:-\w+\s+)*)?((?:\w+=\S*(?:\s+|$))+)$/) {
       my $assignments = $1;
       $var{$1} = $value->($2) while $assignments =~ /(\w+)=(\S*)/g;
-    } elsif ($seg =~ /^cd(?:\s+(?:-[LP]\s+|--\s+)*([^\s)]+))?\s*\)?$/) {
+    } elsif ($text =~ /^cd(?:\s+(?:-[LP]\s+|--\s+)*(\S+))?$/) {
       $dir = defined $1 ? $enter->($dir, $1) : $ENV{HOME};
-    } elsif ($seg =~ /^pushd\s+([^\s)]+)\s*\)?$/) {
+    } elsif ($text =~ /^pushd\s+(\S+)$/) {
       $dir = $enter->($dir, $1);
     } else {
-      $dir = undef if $seg =~ $moves;
-      $var{$1} = undef while $seg =~ /(?:^|\s)(\w+)=/g;
-      $var{$1} = undef if $seg =~ /^for\s+(\w+)\s/;
-      if ($seg =~ /^read\s+(.*)/) { $var{$_} = undef for grep { /^\w+$/ } split " ", $1 }
-      $emit->($seg, $dir);
+      $dir = undef if $moved->($text);
+      $var{$1} = undef while $text =~ /(?:^|\s)(\w+)=/g;
+      $var{$1} = undef if $text =~ /^for\s+(\w+)\s/;
+      if ($text =~ /^read\s+(.*)/) { $var{$_} = undef for grep { /^\w+$/ } split " ", $1 }
+      $emit->($text, $dir, 0);
     }
-    $depth -= $closes || 0;
-    $depth = 0 if $depth < 0;
-    while (@saved && $depth <= $saved[-1][0]) { (undef, $dir, my $v) = @{ pop @saved }; %var = %$v }
+  };
+  for my $seg (split /&&|\|\||;|\n|(?<!>)\|&?|(?<![<>|&])&(?![>&])/) {
+    $seg =~ s/(?:(?:(?<!\S)\d+)?(?:>>|>\||>&|>|<<<|<<-?|<&|<>|<)|&>>?)\s*[^\s()<>&|;]+//g;
+    my (@open, @close);
+    while ($seg =~ /([()])/g) {
+      if ($1 eq "(") { push @open, $-[0] } elsif (@open) { pop @open } else { push @close, $-[0] }
+    }
+    my ($from, @pieces) = (0);
+    for my $at (@close, @open) {
+      push @pieces, substr($seg, $from, $at - $from);
+      $from = $at + 1;
+    }
+    push @pieces, substr($seg, $from);
+    for my $i (0 .. $#pieces) {
+      my $piece = $pieces[$i];
+      if ($i < @close) {
+        if ($i == 0) { $command->($piece) } else { $emit->($piece, $dir, 0) }
+        if (@saved) { ($dir, my $v) = @{ pop @saved }; %var = %$v }
+      } elsif ($i < $#pieces) {
+        $emit->($piece, $dir, 1);
+        my %outer = %var;
+        $outer{$1} = undef while $piece =~ /(?:^|\s)(\w+)=/g;
+        push @saved, [$moved->($piece) ? undef : $dir, \%outer];
+      } elsif (@close && !@open) {
+        $emit->($piece, $dir, 0);
+      } else {
+        $command->($piece);
+      }
+    }
   }
 ')"
 
