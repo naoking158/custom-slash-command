@@ -23,6 +23,7 @@ Break one and the result is void; start over.
 - The change: the diff of the skill, rule or agent, and the behavior it is meant to change.
 - One to three tasks where that behavior shows: real requests from this toolkit's history, or a realistic one in a real repository.
 - A rubric of three to six items, each observable in a transcript or a diff ("reproduced the bug before fixing", "ran the verify skill", "the diff touches only X"). Write it now and do not change it after seeing a result.
+- The tools the task needs, as one `--allowedTools` list shared by every run (edits, plus the Bash commands for the build, tests and git). A run without them cannot change anything, and the comparison measures nothing.
 
 ## 2. Prepare clean directories
 
@@ -30,12 +31,20 @@ For each variant and each task, one working directory that looks like ordinary w
 
 - A fresh clone or worktree of the target repository with a plain name (for example the feature the task is about), under `${TMPDIR:-/tmp}`.
 - A toolkit checkout of this repository in the variant's state: the baseline at `main`, the change on its branch. Delete `skills/eval-skill/` from it, so the subject's skill list does not name this evaluation.
-- A home directory of its own with a plain name, where `HOME=<that dir> <toolkit checkout>/scripts/install.sh` links `~/.claude/skills/my` to that checkout. This is what switches the toolkit: a session loads `my` from `$HOME/.claude/skills/my`, and a subagent (`Agent`) or `--plugin-dir` would keep the session's own copy loaded beside it. Give it credentials without copying your own home (`ANTHROPIC_API_KEY`, or a token from `claude setup-token` in `CLAUDE_CODE_OAUTH_TOKEN`); none available → stop and say so.
+- A home directory of its own with a plain name, where `HOME=<that dir> MY_ORCA_PROFILE=work <toolkit checkout>/scripts/install.sh` links `~/.claude/skills/my` to that checkout (without `MY_ORCA_PROFILE`, a machine with `orca` on PATH makes it exit 1 after linking; check that `<that dir>/.claude/skills/my` points at the checkout). This is what switches the toolkit: a session loads `my` from `$HOME/.claude/skills/my`, and a subagent (`Agent`) or `--plugin-dir` would keep the session's own copy loaded beside it. Give it credentials without copying your own home (`ANTHROPIC_API_KEY`, or a token from `claude setup-token` in `CLAUDE_CODE_OAUTH_TOKEN`); none available → stop and say so.
 - Randomize which variant is `a` and which is `b`, and record the mapping where the judge cannot read it.
 
 ## 3. Run
 
-Run each variant on each task as its own session, in parallel: `HOME=<variant home> claude -p "<the task>" --output-format stream-json --verbose > <outside the working directory>` from the variant's working directory. Give every run the same prompt, word for word. Keep each transcript and the final diff (`git -C <working directory> diff`). Do not run subjects as `Agent` subagents or through `orca/bin/run-role`: a subagent shares this session's toolkit, and run-role runs only its fixed roles.
+Run each variant on each task as its own session, in parallel, from the variant's working directory:
+
+```bash
+HOME=<variant home> claude -p "<the task>" --permission-mode acceptEdits \
+  --allowedTools "<the commands the task needs, e.g. Bash(git *) Bash(npm test *)>" \
+  --output-format stream-json --verbose > <transcript file outside the working directory>
+```
+
+`-p` denies every tool the flags do not allow, so pass the list from step 1, the same for every variant. Do not use `bypassPermissions`: the subject runs as you, on your machine, outside any sandbox. Give every run the same prompt, word for word. Keep each transcript and the final diff, new files included (`git -C <working directory> add -A -N && git -C <working directory> diff`). Do not run subjects as `Agent` subagents or through `orca/bin/run-role`: a subagent shares this session's toolkit, and run-role runs only its fixed roles.
 
 ## 4. Judge blind
 
@@ -43,7 +52,7 @@ Start a read-only judge, from a different model family when the profile offers o
 
 ## 5. Check the transcripts
 
-First confirm that each run loaded its own variant: the transcript reads the changed file from that variant's toolkit checkout (or invokes the changed skill and shows its variant text). A run that loaded the other variant, or neither, voids the comparison; fix step 2 and run again.
+First confirm that each run loaded its own variant: the transcript reads the changed file from that variant's toolkit checkout (or invokes the changed skill and shows its variant text). Then confirm that no tool call was denied for permission (`permission_denials` in the result line). A run that loaded the other variant or neither, or that hit a denial, voids the comparison: fix step 2 or the allowed list and run again.
 
 Do not take the judge's word or the subject's account. For each rubric item, check the transcript yourself: which files were read, which checks actually ran and what they printed, the shape of the final diff. Where the transcript and the judge disagree, the transcript wins; note the disagreement.
 
