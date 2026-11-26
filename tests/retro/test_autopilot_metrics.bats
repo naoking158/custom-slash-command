@@ -182,7 +182,7 @@ SH
 
 @test "four metrics and the unreadable counts come out of logs, gh and git" {
   run -0 "$METRICS" --checkout "$REPO"
-  [ "${lines[0]}" = "期間: 2026-10-29..2026-11-26" ]
+  [ "${lines[0]}" = "期間: 2026-10-30..2026-11-26" ]
   [ "${lines[1]}" = "進行の記録: ゴール 2、タスク 5（Started が読めないゴール 1、タスクの見出しがないゴール 1）" ]
   [ "${lines[2]}" = "レビューの往復数: 読めた 4（1回 2、2回 2、平均 1.5）、不明 1" ]
   [ "${lines[3]}" = "verify: PASS 1、修正後に PASS 1、BLOCKED 1、未検証 1、不明 1" ]
@@ -200,8 +200,8 @@ SH
   [ "${lines[5]}" = "マージ後の手戻り: auto/ の PR を取り消したコミット 0、auto/ と結びつかない revert 0、不明のリポジトリ 0" ]
 }
 
-@test "--since Nd counts back from --until, and a goal started that day is in" {
-  run -0 "$METRICS" --since 6d --until 2026-11-26
+@test "--since Nd covers N days ending on --until, and a goal started on the first day is in" {
+  run -0 "$METRICS" --since 7d --until 2026-11-26
   [ "${lines[0]}" = "期間: 2026-11-20..2026-11-26" ]
   [ "${lines[1]}" = "進行の記録: ゴール 2、タスク 5（Started が読めないゴール 1、タスクの見出しがないゴール 1）" ]
 }

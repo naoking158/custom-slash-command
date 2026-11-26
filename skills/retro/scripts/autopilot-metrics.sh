@@ -4,7 +4,8 @@
 #   autopilot-metrics.sh [--since <Nd|YYYY-MM-DD>] [--until YYYY-MM-DD]
 #                        [--state-dir DIR] [--checkout PATH]... [--repo OWNER/NAME]...
 #
-# Metrics, over the period --since..--until (inclusive; default the last 28 days):
+# Metrics, over the period --since..--until (inclusive; Nd is the N days ending
+# on --until; default the last 28 days):
 #   1. review rounds per change     autopilot progress logs
 #   2. verify outcomes              autopilot progress logs
 #   3. human pushback on auto/ PRs  gh
@@ -61,7 +62,7 @@ is_date "$today" || usage
 is_date "$until" || usage
 if [[ "$since_arg" =~ ^[0-9]+d$ ]]; then
   since="$(jq -nr --arg t "$until" --argjson n "${since_arg%d}" \
-    '($t + "T00:00:00Z" | fromdateiso8601) - $n * 86400 | strftime("%Y-%m-%d")')"
+    '($t + "T00:00:00Z" | fromdateiso8601) - ($n - 1) * 86400 | strftime("%Y-%m-%d")')"
 elif is_date "$since_arg"; then
   since="$since_arg"
 else
