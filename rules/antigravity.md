@@ -18,12 +18,15 @@ read its Claude Code terms as follows.
   AskUserQuestion → `ask_question`.
 - A step that starts a Claude Code agent (`Agent`, `Task`, `my:reviewer`,
   `my:diff-reviewer`, `my:verifier`) or a skill marked `context: fork` (the
-  `review` skill runs as `reviewer`): run it in its own context with run-role,
-  from your Orca terminal, with absolute paths:
+  `review` skill runs as `reviewer`): when an `orca` command is on PATH, run
+  it in its own context with run-role, from your Orca terminal, with absolute
+  paths:
 
   ```
-  $HOME/.gemini/config/plugins/my/orca/bin/run-role <name> --out <result file> -- <inputs>
+  $HOME/.gemini/config/plugins/my/orca/bin/run-role <name> --out <result file> [--cwd <checkout>] -- <inputs>
   ```
+
+  Without `orca` on PATH, handle the step as for exit 3 below.
 
   `<name>` is the agent without `my:`. If your own task came from run-role
   (it is an agent's instructions followed by a `## Reporting` section), you
@@ -34,8 +37,9 @@ read its Claude Code terms as follows.
   - `diff-reviewer`: `--patch <patch> --hunks <hunks.tsv> --checklist <file>`
     (once per checklist), with the `pass1.json` path as `--out`. Never pass the
     plan or spec, neither its path nor its content.
-  - `verifier`: the checkout path and the completion criteria. Add
-    `--cwd <checkout>` when the checkout is an Orca workspace other than yours.
+  - `verifier`: the checkout path and the completion criteria. Put
+    `--cwd <checkout>` before `--` when the checkout is an Orca workspace other
+    than yours.
   - `reviewer`: the review target and its options.
 
   The last line of the output is `[run-role] <name> exit=<n> <result file>`.
@@ -43,12 +47,12 @@ read its Claude Code terms as follows.
   - 0: read the result file and continue.
   - 1: run it once more. If it fails again, treat it as exit 4.
   - 2: stop and report it; the profile or the inputs are wrong.
-  - 3, or run-role is missing: Orca is not usable. For `diff-reviewer`, skip
-    the plan-blind first pass: review in one pass and say in the report that
-    the first pass was skipped because it could not be isolated. For the other
-    agents, do the step yourself in this conversation, following
-    `agents/<name>.md` in the plugin root, keep its return contract, and write
-    `非隔離` (not isolated) in its result.
+  - 3: Orca is not usable. For `diff-reviewer`, skip the plan-blind first
+    pass: review in one pass and say in the report that the first pass was
+    skipped because it could not be isolated. For the other agents, do the
+    step yourself in this conversation, following `agents/<name>.md` in the
+    plugin root, keep its return contract, and add a line `非隔離` (not
+    isolated) right after the first line of its result.
   - 4: the worker timed out or waited for an approval and was stopped. For
     `verifier`, return BLOCKED with that cause. For `diff-reviewer`, fall back
     as for exit 3. For `reviewer`, stop and report that the review did not
