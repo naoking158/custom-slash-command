@@ -28,7 +28,7 @@ git worktree add --detach "$T" <target commit, HEAD by default>
 When the target is the working tree (no argument), carry the uncommitted changes over, untracked files included:
 
 ```bash
-git diff HEAD > "$T.patch" && { [ ! -s "$T.patch" ] || git -C "$T" apply "$T.patch"; }
+git diff --binary HEAD > "$T.patch" && { [ ! -s "$T.patch" ] || git -C "$T" apply "$T.patch"; }
 git ls-files -z --others --exclude-standard | tar --null -T - -cf - | tar -xf - -C "$T"
 ```
 
@@ -43,7 +43,7 @@ Start `my:adversary` with the target, the intent and the worktree path `$T`:
 
 For a large or risky change, start two or three breakers in parallel, each told to focus on one area (inputs and boundaries, state and concurrency, callers and contracts). Where the profile maps `adversary` to a different model than yours, prefer it: a different model misses different things.
 
-A breaker's result starts with `FINDINGS <n>`. A result without it failed: run it once more, then go on with what you have.
+A breaker's result starts with `FINDINGS <n>`. `BLOCKED` means it ran nothing (check the worktree path); any other first line means it failed. Run it once more; if it fails again, report the run as not done rather than as "no finding".
 
 ## 4. Verify
 

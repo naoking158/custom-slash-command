@@ -555,3 +555,9 @@ bare_profile() {
   run --separate-stderr "$TMP/root/orca/bin/run-role" verifier --out "$OUT"
   [ "$status" -eq 2 ]
 }
+
+@test "adversary that ran nothing (BLOCKED) is not a clean result: exit 1" {
+  worker_writes $'BLOCKED: no worktree to run in\n'
+  run --separate-stderr "$RUN_ROLE" adversary --out "$OUT"
+  [ "$status" -eq 1 ]
+}
