@@ -158,14 +158,19 @@ commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
   my $moves = qr/(?<![\w.\/-])(?:cd|pushd|popd)(?![\w.\/-])/;
   for my $seg (split /&&|\|\||;|\n|(?<!>)\|&?|(?<![<>|&])&(?![>&])/) {
     $seg =~ s/(?:(?:(?<!\S)\d+)?(?:>>|>\||>&|>|<<<|<<-?|<&|<>|<)|&>>?)\s*[^\s()<>&|;]+//g;
-    my $nesting = ($seg =~ tr/(//) - ($seg =~ tr/)//);
-    if ($nesting > 0 && $seg =~ /^(.*)\((.*)$/s) {
-      my ($before, $inside) = ($1, $2);
+    my (@open, $closes);
+    while ($seg =~ /([()])/g) {
+      if ($1 eq "(") { push @open, $-[0] } elsif (@open) { pop @open } else { $closes++ }
+    }
+    my $cut = 0;
+    for my $at (@open) {
+      my $before = substr($seg, 0, $at - $cut);
+      $seg = substr($seg, $at - $cut + 1);
+      $cut = $at + 1;
       $emit->($before, $dir, 1);
       my %outer = %var;
       $outer{$1} = undef while $before =~ /(?:^|\s)(\w+)=/g;
-      push @saved, [$depth, $before =~ $moves ? undef : $dir, \%outer];
-      $seg = $inside;
+      push @saved, [$depth++, $before =~ $moves ? undef : $dir, \%outer];
     }
     $seg =~ s/^\s+|\s+$//g;
     $seg =~ s/^(?:(?:if|then|elif|else|while|until|do|time|!|\{|builtin|command)\s+)+//;
@@ -183,7 +188,7 @@ commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
       if ($seg =~ /^read\s+(.*)/) { $var{$_} = undef for grep { /^\w+$/ } split " ", $1 }
       $emit->($seg, $dir);
     }
-    $depth += $nesting;
+    $depth -= $closes || 0;
     $depth = 0 if $depth < 0;
     while (@saved && $depth <= $saved[-1][0]) { (undef, $dir, my $v) = @{ pop @saved }; %var = %$v }
   }
