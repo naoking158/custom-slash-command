@@ -11,6 +11,26 @@ setup() {
 
   TMP="$(mktemp -d -t install-test.XXXXXX)"
   export HOME="$TMP"
+  FAKE_BIN="$TMP/bin"
+  mkdir -p "$FAKE_BIN"
+  export PATH="$FAKE_BIN:$(path_without_orca)"
+  if command -v orca >/dev/null; then return 1; fi
+}
+
+# path_without_orca — $PATH minus every directory holding an orca executable.
+path_without_orca() {
+  local dir out="" IFS=:
+  for dir in $PATH; do
+    [ -x "$dir/orca" ] && continue
+    out="${out:+$out:}$dir"
+  done
+  printf '%s' "$out"
+}
+
+# fake_orca — put an orca on PATH that fails if install.sh ever runs it.
+fake_orca() {
+  printf '#!/bin/bash\nexit 99\n' >"$FAKE_BIN/orca"
+  chmod +x "$FAKE_BIN/orca"
 }
 
 teardown() {
@@ -246,4 +266,47 @@ assert_links_to_repo() {
   [ "$status" -eq 0 ]
   [ ! -e "$HOME/.claude/rules/principles.md" ]
   [ -f "$HOME/.claude/rules/other.md" ]
+}
+
+# ============================================================================
+# Orca layer (only when an orca command is on PATH)
+# ============================================================================
+
+@test "orca absent: install and check say nothing about Orca" {
+  run "$INSTALL"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"doctor"* ]]
+  run "$INSTALL" --check
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"doctor"* ]]
+}
+
+@test "orca present: install and check point at orca/bin/doctor" {
+  fake_orca
+  run "$INSTALL"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"run $REPO_ROOT/orca/bin/doctor from an Orca terminal"* ]]
+  run "$INSTALL" --check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"orca/bin/doctor"* ]]
+}
+
+@test "orca present: install and check fail when orca/bin/doctor is missing" {
+  fake_orca
+  mkdir -p "$TMP/tree/scripts"
+  cp "$INSTALL" "$TMP/tree/scripts/install.sh"
+  run "$TMP/tree/scripts/install.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"ERROR"*"orca/bin/doctor"* ]]
+  run "$TMP/tree/scripts/install.sh" --check
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"MISSING"*"orca/bin/doctor"* ]]
+}
+
+@test "orca present: uninstall leaves the Orca layer alone" {
+  fake_orca
+  "$INSTALL" >/dev/null
+  run "$INSTALL" --uninstall
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"doctor"* ]]
 }
