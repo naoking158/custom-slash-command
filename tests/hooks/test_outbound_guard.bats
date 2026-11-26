@@ -605,6 +605,16 @@ main_and_worktree() {
   [ "$(decision)" = "deny" ]
 }
 
+@test "ship cwd: a substitution inside a subshell does not hide where the subshell opens" {
+  ship_repo
+  run_guard "$(bash_payload '(gh pr merge $(gh pr view 3 --json number -q .number) -R me/app | cat)')"
+  [ -z "$output" ]
+  run_guard "$(bash_payload '(gh pr merge $(gh pr view 3 --json number -q .number) -R work/app | cat)')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload '(echo $(date) && gh pr merge 3 -R work/app)')"
+  [ "$(decision)" = "deny" ]
+}
+
 @test "a PR command whose arguments are cut by a pipe inside a substitution is denied" {
   ship_repo
   cmd="gh pr merge \$(gh pr list --json number -q '.[0].number' | head -1) -R work/app --squash"
