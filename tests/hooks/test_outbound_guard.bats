@@ -294,6 +294,18 @@ main_and_worktree() {
   [ -z "$output" ]
 }
 
+@test "a command written before an unclosed command substitution is still judged" {
+  run_guard "$(bash_payload 'git push origin main $(echo a && echo b)')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'gh pr merge 3 $(true && true)')"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload 'git push origin feature/x $(true && true)')"
+  [ "$(decision)" = "deny" ]
+  main_and_worktree
+  run_guard "$(payload_in "$WT" "X=$WT; X=\$(cd $REPO && pwd); cd \$X && git push -q")"
+  [ "$(decision)" = "deny" ]
+}
+
 @test "a tag push asks only when nothing on the line is denied" {
   run_guard "$(bash_payload 'git push --tags')"
   [ "$(decision)" = "ask" ]

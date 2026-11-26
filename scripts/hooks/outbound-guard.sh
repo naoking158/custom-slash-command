@@ -129,12 +129,39 @@ commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
     return undef unless defined $path && length $path && $path ne "-";
     $path =~ /^\// ? $path : defined $base ? "$base/$path" : undef;
   };
+  my $emit = sub {
+    my ($text, $at) = @_;
+    if ($text =~ /(?<![\w-])git((?:\s+-[Cc]\s+\S+)*)\s+push(?![\w-])([^)]*)/) {
+      my ($opts, $args) = ($1, $2);
+      my $in = $opts =~ /\s-C\s+(\S+)/ ? $enter->($at, $1) : $at;
+      my @args = map { my $v = $value->($_); defined $v && $v !~ /\s/ ? $v : "?" } split " ", $args;
+      print join("\t", "push", defined $in ? $in : "?", "@args"), "\n";
+    }
+    if ($text =~ /(?<![\w-])(gh\s+(?:pr\s+(?:create|new|merge|ready)|api)(?![\w-])[^)]*)/) {
+      my $gh = $1;
+      $gh =~ s/\x00(\d+)\x00/$lit[$1][1] ? q("") : "\x27\x27"/ge;
+      $gh =~ s/\s+/ /g;
+      $gh =~ s/ $//;
+      print join("\t", "pr", defined $at ? $at : "?", $gh), "\n";
+    }
+    if ($text =~ /(?<![\w-])git((?:\s+-[Cc]\s+\S+)*)\s+commit(?![\w-])/) {
+      my $in = $1 =~ /\s-C\s+(\S+)/ ? $enter->($at, $1) : $at;
+      print join("\t", "text", defined $in ? $in : "?", "git"), "\n";
+    } elsif ($text =~ /(?<![\w-])gh\s+(?:pr|issue)\s+(?:create|new|comment|edit|review)(?![\w-])/) {
+      print join("\t", "text", defined $at ? $at : "?", "gh"), "\n";
+    }
+  };
+  my $moves = qr/(?<![\w.\/-])(?:cd|pushd|popd)(?![\w.\/-])/;
   for my $seg (split /&&|\|\||;|\n|(?<!>)\|&?|(?<![<>|&])&(?![>&])/) {
     $seg =~ s/(?:(?:(?<!\S)\d+)?(?:>>|>\||>&|>|<<<|<<-?|<&|<>|<)|&>>?)\s*[^\s()<>&|;]+//g;
     my $nesting = ($seg =~ tr/(//) - ($seg =~ tr/)//);
-    if ($nesting > 0) {
-      push @saved, [$depth, $dir, {%var}];
-      $seg =~ s/^.*\(\s*//s;
+    if ($nesting > 0 && $seg =~ /^(.*)\((.*)$/s) {
+      my ($before, $inside) = ($1, $2);
+      $emit->($before, $dir);
+      my %outer = %var;
+      $outer{$1} = undef while $before =~ /(?:^|\s)(\w+)=/g;
+      push @saved, [$depth, $before =~ $moves ? undef : $dir, \%outer];
+      $seg = $inside;
     }
     $seg =~ s/^\s+|\s+$//g;
     $seg =~ s/^(?:(?:if|then|elif|else|while|until|do|time|!|\{|builtin|command)\s+)+//;
@@ -146,29 +173,11 @@ commands="$(printf '%s' "$cmd" | CWD="$cwd" perl -0777 -ne '
     } elsif ($seg =~ /^pushd\s+([^\s)]+)\s*\)?$/) {
       $dir = $enter->($dir, $1);
     } else {
-      $dir = undef if $seg =~ /(?<![\w.\/-])(?:cd|pushd|popd)(?![\w.\/-])/;
+      $dir = undef if $seg =~ $moves;
       $var{$1} = undef while $seg =~ /(?:^|\s)(\w+)=/g;
       $var{$1} = undef if $seg =~ /^for\s+(\w+)\s/;
       if ($seg =~ /^read\s+(.*)/) { $var{$_} = undef for grep { /^\w+$/ } split " ", $1 }
-      if ($seg =~ /(?<![\w-])git((?:\s+-[Cc]\s+\S+)*)\s+push(?![\w-])([^)]*)/) {
-        my ($opts, $args) = ($1, $2);
-        my $at = $opts =~ /\s-C\s+(\S+)/ ? $enter->($dir, $1) : $dir;
-        my @args = map { my $v = $value->($_); defined $v && $v !~ /\s/ ? $v : "?" } split " ", $args;
-        print join("\t", "push", defined $at ? $at : "?", "@args"), "\n";
-      }
-      if ($seg =~ /(?<![\w-])(gh\s+(?:pr\s+(?:create|new|merge|ready)|api)(?![\w-])[^)]*)/) {
-        my $gh = $1;
-        $gh =~ s/\x00(\d+)\x00/$lit[$1][1] ? q("") : "\x27\x27"/ge;
-        $gh =~ s/\s+/ /g;
-        $gh =~ s/ $//;
-        print join("\t", "pr", defined $dir ? $dir : "?", $gh), "\n";
-      }
-      if ($seg =~ /(?<![\w-])git((?:\s+-[Cc]\s+\S+)*)\s+commit(?![\w-])/) {
-        my $at = $1 =~ /\s-C\s+(\S+)/ ? $enter->($dir, $1) : $dir;
-        print join("\t", "text", defined $at ? $at : "?", "git"), "\n";
-      } elsif ($seg =~ /(?<![\w-])gh\s+(?:pr|issue)\s+(?:create|new|comment|edit|review)(?![\w-])/) {
-        print join("\t", "text", defined $dir ? $dir : "?", "gh"), "\n";
-      }
+      $emit->($seg, $dir);
     }
     $depth += $nesting;
     $depth = 0 if $depth < 0;
