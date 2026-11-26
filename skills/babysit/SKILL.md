@@ -94,7 +94,7 @@ Wait for the runs of the head commit:
 "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/my}/scripts/lib/wait-ci.sh" <owner/name> <full sha of the PR head>
 ```
 
-Run it with `run_in_background` as the whole command, so its exit status is the verdict: 0 green, 1 red, 2 gh failed (run once more), 3 no run for this commit (the repository's own tests are the gate), 4 still running (run again).
+Run it with `run_in_background` as the whole command, so its exit status is the verdict: 0 green, 1 red, 2 gh failed, or the sha is abbreviated or not in the repository (run once more with the PR head's full sha), 3 no run for this commit (the repository's own tests are the gate), 4 still running (run again).
 
 - **check**: report the verdict and the failing job names.
 - **drive**, red: read the failing log (`gh run view <run-id> --log-failed`).

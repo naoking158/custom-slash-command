@@ -13,14 +13,18 @@ setup() {
   WAIT_CI="$REPO_ROOT/scripts/lib/wait-ci.sh"
   TMP="$(mktemp -d -t wait-ci-test.XXXXXX)"
   mkdir -p "$TMP/bin"
-  # Stub gh: `workflow list` prints $GH_WORKFLOWS; each `run list` prints the
-  # next line of $TMP/frames and repeats the last one.
+  # Stub gh: `workflow list` prints $GH_WORKFLOWS; `api` finds the commit
+  # unless $GH_NO_COMMIT is set; each `run list` prints the next line of
+  # $TMP/frames and repeats the last one.
   cat >"$TMP/bin/gh" <<'GH'
 #!/usr/bin/env bash
 dir="$(cd "$(dirname "$0")/.." && pwd)"
 echo "$*" >>"$dir/calls"
 case "$1 $2" in
   "workflow list") printf '%s\n' "${GH_WORKFLOWS-1}" ;;
+  api*)
+    [ -z "${GH_NO_COMMIT:-}" ] || { echo "gh: Not Found (HTTP 404)" >&2; exit 1; }
+    echo '{}' ;;
   "run list")
     n="$(cat "$dir/n" 2>/dev/null || echo 1)"
     total="$(wc -l <"$dir/frames" | tr -d ' ')"
@@ -85,6 +89,15 @@ run_of() {
   echo '[]' >"$TMP/frames"
   WAIT_CI_REGISTER=0 run "$WAIT_CI" me/app "$SHA"
   [ "$status" -eq 3 ]
+}
+
+@test "a sha the repository does not have is exit 2, not exit 3" {
+  export GH_NO_COMMIT=1
+  echo '[]' >"$TMP/frames"
+  WAIT_CI_REGISTER=0 run "$WAIT_CI" me/app "$SHA"
+  [ "$status" -eq 2 ]
+  GH_WORKFLOWS="" run "$WAIT_CI" me/app "$SHA"
+  [ "$status" -eq 2 ]
 }
 
 @test "runs still in progress at the timeout are exit 4" {

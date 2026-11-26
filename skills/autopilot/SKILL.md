@@ -47,14 +47,15 @@ For every task, in order:
    Never make a gate pass by loosening it: do not skip or delete a test, add a lint or type suppression, widen a threshold or tolerance, or turn a check into a soft failure in order to get CI, tests, lint or type checks green, and never merge such a change on your own. When the gate itself is wrong, fix it as a separate task whose PR says so and never merge that PR yourself, even in ship mode: leave it open and list it under "Waiting on a human" in the final report. Or record BLOCKED and leave the decision to a human.
 4. **Verify.** If the repository has a `verify-<app>` skill, launch `Agent` with `subagent_type: "my:verifier"`, giving it the worktree path and this task's criteria. FAIL → fix and verify again. BLOCKED → record it; continue only if the remaining criteria were observed some other way, else stop (see §3). No verify skill → record "unverified in the app" for the task.
 5. **Push and open the PR.** Body: 課題 → 対応 → 設計判断, short, plus for stack mode one line `Stack: n/N, base #<parent PR>`. ship: `gh pr create --base <default>`. stack: `gh pr create --draft --base <parent branch>`.
+   Copy any test result in the body from a run on the same HEAD, after checking its exit status (127 means the command was not found and nothing ran). A suite that could not run is written as not run.
 6. **Review and fix.** Run the `my:review` skill with `pr:<number> --no-screen --report-dir <absolute path of $S/reviews>`: the review runs in the session's directory, not in the worktree, and its report belongs with the run's state, not in anyone's checkout. Fix every Critical/High finding, push, and review again — at most 2 fix rounds. Medium/Low: fix when cheap, otherwise list them in `progress.md`. Never cite finding IDs or report paths in commits or PR text.
 7. **Land.**
    - ship:
      - Take in what landed under the PR: `git fetch -q origin <default>`. If `git log --oneline HEAD..origin/<default>` prints anything, note which files `git diff --name-only HEAD...origin/<default>` (what the default branch gained) shares with `git diff --name-only origin/<default>...HEAD` (what the PR changes), then merge `origin/<default>` into the branch, run the tests and push. A shared file means another goal, or the user, is changing the same code: review again as well (not a fix round). A merge that is clean as text can still break what the PR assumes.
-     - Wait for CI on the commit you pushed: run `"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/my}/scripts/lib/wait-ci.sh" <owner/name> <sha>` with `run_in_background`, as the whole command. `<sha>` is the full sha from `git rev-parse HEAD`. The exit status is the verdict, and a trailing `echo` or pipe would replace it. `gh pr checks --watch` is no substitute: right after a push GitHub has registered no run yet, and it exits at once with "no checks reported".
+     - Wait for CI on the commit you pushed: run `"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/my}/scripts/lib/wait-ci.sh" <owner/name> <sha>` with `run_in_background`, as the whole command. For `<sha>` write `$(git -C <worktree> rev-parse HEAD)`, the full sha of the commit pushed from the task's worktree, rather than typing it. The exit status is the verdict, and a trailing `echo` or pipe would replace it. `gh pr checks --watch` is no substitute: right after a push GitHub has registered no run yet, and it exits at once with "no checks reported".
        - 0: green.
        - 1: red. Fix on the branch (counts toward the failure limit).
-       - 2: gh failed (login, network) or the sha was abbreviated. Run it again once; a second 2 is BLOCKED.
+       - 2: gh failed (login, network), or the sha was abbreviated or is not in the repository. Run it again once with `$(git -C <worktree> rev-parse HEAD)`; a second 2 is BLOCKED.
        - 3: no run exists for this commit. When no workflow of the repository runs for this change, the tests of step 3 are the gate: log `CI: none`. Otherwise treat it as red.
        - 4: still running after an hour. Run it again; this is not a failure.
      - A PR that changes a gate (step 3) is never merged here: leave it open, log it in `tasks.tsv` with outcome `stopped`, and list it under "Waiting on a human".
@@ -71,6 +72,8 @@ Keep each PR to its task. When you notice something worth improving that the cur
 - **The repository's code** (a smell, a missing test, dead code, a confusing name outside the diff): append it to `$R/found.md` with this goal's slug, location, why it matters, and a size guess (S/M/L). A repository-local `verify-<app>` skill counts as repository code.
 - **A `my:*` asset** (this skill, `my:review`, `my:verifier`, the guard): run `/my:learn` with the category and target, then keep going. `/my:retro` decides on the change later with the user.
 - **Any other tool outside the repository** (a personal skill, global settings): record it under `## Tool friction` in `progress.md`.
+
+This routing also applies to follow-up work done in the same session after the final report. Before ending, check that each item you noticed went to `found.md`, `## Tool friction`, or `/my:learn`, not only into the report.
 
 Never edit toolkit skills, personal skills, settings or CLAUDE.md during a run: the run's own rules must not change under it.
 

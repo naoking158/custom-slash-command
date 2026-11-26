@@ -418,6 +418,65 @@ main_and_worktree() {
   [ -z "$output" ]
 }
 
+@test "a file flag written inside a commit message does not hide a review ID" {
+  cmd="$(printf 'git commit -q -F - <<%sEOF%s\nfix: x\n\ncomment with -F body=H001\nEOF' "'" "'")"
+  run_guard "$(bash_payload "$cmd")"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "a body file that cannot be read yet is denied with how to split the call" {
+  run_guard "$(bash_payload "printf 'x' >$TMP/msg.txt && git commit -q -F $TMP/later.txt")"
+  [ "$(decision)" = "deny" ]
+  [[ "$(printf '%s' "$output" | jq -r .hookSpecificOutput.permissionDecisionReason)" == *"later.txt を読めない"* ]]
+  run_guard "$(bash_payload 'MSG=$(mktemp); git commit -q -F "$MSG"')"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "a body read from stdin is checked as the heredoc, not as a file" {
+  cmd="$(printf 'git commit -q -F /dev/stdin <<%sEOF%s\nfix: x\nEOF' "'" "'")"
+  run_guard "$(bash_payload "$cmd")"
+  [ -z "$output" ]
+}
+
+@test "a body file written in the same call is denied, even when it already exists" {
+  run_guard "$(bash_payload "printf 'fix H001' > m.txt && git commit -q -F m.txt")"
+  [ "$(decision)" = "deny" ]
+  echo old >"$REPO/m.txt"
+  run_guard "$(bash_payload "printf 'fix H001' > ./m.txt && git commit -q -F m.txt")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload "cp $TMP/src.txt m.txt && git commit -q -F m.txt")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload "cp $TMP/src.txt m.txt 2>/dev/null && git commit -q -F m.txt")"
+  [ "$(decision)" = "deny" ]
+  for w in '1>' '2>' '&>' '>|'; do
+    run_guard "$(bash_payload "printf 'fix H001' $w m.txt && git commit -q -F m.txt")"
+    [ "$(decision)" = "deny" ]
+  done
+}
+
+@test "cp, mv and tee in a title or message do not count as writing the body file" {
+  echo body >"$REPO/body.md"
+  run_guard "$(bash_payload 'gh pr create --draft --title "Add tcp keepalive" --body-file body.md')"
+  [ -z "$output" ]
+  run_guard "$(bash_payload 'git commit -q -m "rename via mv x" -F body.md')"
+  [ -z "$output" ]
+}
+
+@test "a body redirected into stdin is checked" {
+  printf 'fixed H001\n' >"$TMP/leak.md"
+  run_guard "$(bash_payload "git commit -q -F - < $TMP/leak.md")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload "git commit -q -F - 0<$TMP/leak.md")"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "file flags quoted inside a message are message text, not body files" {
+  run_guard "$(bash_payload "git commit -q -m 'read config with --file \$CONFIG or -F /etc/nothere'")"
+  [ -z "$output" ]
+  run_guard "$(bash_payload "git commit -q --allow-empty -F /dev/null")"
+  [ -z "$output" ]
+}
+
 @test "commands mentioned inside a quoted message are not run" {
   run_guard "$(bash_payload 'git commit -m "explain why gh pr ready is denied"')"
   [ -z "$output" ]
