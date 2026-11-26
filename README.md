@@ -8,6 +8,78 @@ hook for pushes and outbound text, PdM skills, a session-knowledge loop
 The same repository also loads in Google Antigravity as a plugin (see
 [Antigravity](#antigravity)).
 
+## How work flows
+
+You decide what to work on and land the results; agents do the work in
+between. Each goal runs as `/my:autopilot` in its own Orca worktree and
+session, so several goals move at once. What goes wrong with the toolkit
+along the way comes back as signals that `/my:retro` turns into edits of this
+repository, with your approval.
+
+```mermaid
+flowchart TB
+  catchup["/my:catchup<br/>digest of Slack and Notion"]
+  you([You])
+  goals["Goal sessions in Orca<br/>/my:autopilot, one worktree per goal,<br/>several goals in parallel"]
+  gh[("GitHub<br/>small PRs")]
+  signals["Signals<br/>hooks and /my:learn"]
+  retro["/my:retro<br/>proposals and autopilot metrics"]
+  toolkit[("This repository<br/>skills, agents, rules")]
+
+  catchup -->|what needs doing| you
+  you -->|"orca/bin/start-goal, once per goal"| goals
+  goals -->|"ship: merged on green<br/>strict: draft stack"| gh
+  gh -->|strict: review and land| you
+  goals -.->|friction with my:* assets| signals
+  signals --> retro
+  you -->|approve| retro
+  retro -->|edits| toolkit
+  toolkit -.->|loaded by every session| goals
+```
+
+Inside a goal, autopilot runs each task through the same loop and logs it in
+`~/.local/state/autopilot/`. It never asks; it stops on the conditions in
+`skills/autopilot/SKILL.md` §3 (done criteria observed, budget spent, the same
+failure twice, BLOCKED) and writes a final report.
+
+```mermaid
+flowchart TD
+  branch[Branch] --> impl[Implement with tests]
+  impl --> test{Tests and lint}
+  test -->|red| impl
+  test -->|green| verify{"Verify in the real app<br/>my:verifier"}
+  verify -->|FAIL| impl
+  verify -->|"PASS, or no verify-&lt;app&gt; skill"| pr[Push and open a PR]
+  pr --> review{"my:review<br/>Critical or High?"}
+  review -->|"yes: fix and push, at most 2 rounds"| review
+  review -->|no| mode{Autonomy mode}
+  mode -->|ship| ci{CI green?}
+  ci -->|yes| merge[Squash-merge]
+  ci -->|red| impl
+  mode -->|strict| draft[Leave the draft in the stack]
+  merge --> log[Log in progress.md]
+  draft --> log
+  log --> branch
+```
+
+Where each role runs depends on the machine. `orca/profiles/<name>.conf`
+picks the harness and model per role.
+
+| Role | Work machine (Claude Code) | Private machine (Antigravity) |
+|------|----------------------------|-------------------------------|
+| implement | `start-goal` session | Not supported yet: autopilot needs Claude Code |
+| verify, review | Subagents of the goal's session | Orca workers through `orca/bin/run-role` |
+
+Guardrails:
+
+- The outbound guard denies pushes to the default branch and force-pushes, and
+  keeps strict repositories to draft PRs ([Autonomy modes](#autonomy-modes)).
+- A goal's session cannot reach Slack or Notion: `start-goal` denies them in
+  the worktree's local settings.
+- In a repository with a `verify-<app>` skill, start one goal at a time:
+  verify runs one app stack, and nothing stops two goals from verifying at
+  once.
+
 ## Skills
 
 | Skill | Purpose | Output |
