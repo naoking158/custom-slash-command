@@ -1,7 +1,7 @@
 ---
 name: review
 description: Review an artifact (spec, plan, code, commit, PR, PRD) against perspective checklists and write a review report. Use for any request to review, critique, or verify a document or a change — self-review and adversarial checks included — whether it is phrased in English or Japanese (レビュー, 検証).
-argument-hint: "[perspective:]<target> [--no-screen]  e.g. code:user-auth, commit:abc1234, pr:current"
+argument-hint: "[perspective:]<target> [--no-screen] [--report-dir <dir>]  e.g. code:user-auth, commit:abc1234, pr:current"
 context: fork
 agent: reviewer
 ---
@@ -54,6 +54,29 @@ would create them, then stop.
 review, the JSON, and the HTML screen, leaving exactly the markdown-only
 behavior. It is meaningful for `code:` / `commit:` / `pr:` only — on a doc
 target, ignore it and report one line saying it applies to diff targets only.
+
+`--report-dir <dir>` may appear anywhere in the arguments. It replaces
+`docs/reviews` as the root of every output path in the steps below: the report
+goes to `<dir>/{type}/{id}.md`, and a screen review's `.json` and `.html` go
+beside it. Use it when the report does not belong in the checkout you run in;
+autopilot passes its state directory.
+
+### Leave the checkout as you found it
+
+You run in a checkout someone is working in: the user's, or one an autopilot
+run shares with its worktrees. Read from it freely, but do not change what is
+checked out there: no `gh pr checkout`, no `git checkout` / `git switch` to
+another branch, no creating or deleting branches, no `git stash`, `git merge`,
+`git reset` or `git pull`.
+
+- Read a PR with `gh pr diff` and `gh pr view`. For a file as the PR has it:
+  `git fetch -q origin pull/{number}/head && git show FETCH_HEAD:{path}` in one
+  command, because the next fetch moves `FETCH_HEAD`.
+- Try a merge without a working tree: `git merge-tree --write-tree {head}
+  origin/{base}` reports the conflicts, if any.
+- When the files must be on disk, to run tests or a linter, add a detached
+  worktree in a temporary directory (`git worktree add --detach "$T" {head}`)
+  and remove it when you are done (`git worktree remove --force "$T"`).
 
 ## Step 2 — Select checklists
 

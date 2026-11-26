@@ -24,11 +24,12 @@ Run without asking the user anything until a stop condition below is reached. De
 2. State lives outside the repository in `R=~/.local/state/autopilot/<owner>-<name>/`, one directory per goal in `S=$R/<goal-slug>/`:
    - `goal.md` from [`goal-template.md`](goal-template.md). Fill purpose, done criteria (observable), scope, out of scope and the budget. Derive what the user did not say and mark it `(derived)`. With `resume <goal-slug>`, read the existing files instead and continue from the log.
    - `progress.md`: append one entry per task (task, branch, PR, review rounds, verify verdict, CI, outcome) and one line per decision you made on the user's behalf.
+   - `reviews/`: the `my:review` reports for this goal's PRs (step 1.6 writes them here).
    - `$R/found.md`: the repository's Found list, shared by every goal, so that no goal has to know where another one wrote. Read it at every start, resume included, and log how many rows are open. Missing → create it with the header `| Goal | Where | Why it matters | Size | State |`, then move the rows of any `## Found` section still left in an earlier goal's `goal.md` into it, tagged with that goal's slug, and delete those sections.
 
 3. Work in a dedicated worktree so the user's checkout is never touched: `git -C <repo> worktree add <repo>-autopilot-<goal-slug> origin/<default>` (reuse it on resume).
 
-4. Keep review reports out of commits: add `docs/reviews/` to the worktree's `$(git rev-parse --git-common-dir)/info/exclude` if missing, and stage files by name, never `git add -A`.
+4. Stage files by name, never `git add -A`, so that a stray file in the worktree does not ride along.
 
 5. Write the task list into `goal.md`: changes small enough to review in one sitting, ordered so each one leaves the build green.
 
@@ -41,7 +42,7 @@ For every task, in order:
 3. **Test and lint** the way the repository's CLAUDE.md / CI does. Red → fix before moving on.
 4. **Verify.** If the repository has a `verify-<app>` skill, launch `Agent` with `subagent_type: "my:verifier"`, giving it the worktree path and this task's criteria. FAIL → fix and verify again. BLOCKED → record it; continue only if the remaining criteria were observed some other way, else stop (see §3). No verify skill → record "unverified in the app" for the task.
 5. **Push and open the PR.** Body: 課題 → 対応 → 設計判断, short, plus for stack mode one line `Stack: n/N, base #<parent PR>`. ship: `gh pr create --base <default>`. stack: `gh pr create --draft --base <parent branch>`.
-6. **Review and fix.** Run the `my:review` skill with `pr:<number> --no-screen`. Fix every Critical/High finding, push, and review again — at most 2 fix rounds. Medium/Low: fix when cheap, otherwise list them in the progress log. Never cite finding IDs or report paths in commits or PR text.
+6. **Review and fix.** Run the `my:review` skill with `pr:<number> --no-screen --report-dir <absolute path of $S/reviews>`: the review runs in the session's directory, not in the worktree, and its report belongs with the run's state, not in anyone's checkout. Fix every Critical/High finding, push, and review again — at most 2 fix rounds. Medium/Low: fix when cheap, otherwise list them in the progress log. Never cite finding IDs or report paths in commits or PR text.
 7. **Land.**
    - ship:
      - Wait for CI on the commit you pushed: run `"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/my}/scripts/lib/wait-ci.sh" <owner/name> <sha>` with `run_in_background`, as the whole command. Its exit status is the verdict, and a trailing `echo` or pipe would replace it. `gh pr checks --watch` is no substitute: right after a push GitHub has registered no run yet, and it exits at once with "no checks reported".
