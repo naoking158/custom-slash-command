@@ -144,7 +144,7 @@ it into `~/.gemini/config/plugins/`.
 | Skills | Load from `skills/`; `rules/antigravity.md` maps the Claude Code terms |
 | `rules/principles.md` | Always on, through `rules/AGENTS.md` |
 | Outbound guard | Root `hooks.json` → `antigravity-guard.sh` on `run_command`. The guard's `ask` becomes `force_ask`; the Notion write check is not wired |
-| Agents | Hidden (`mainAgent: false`, `subagent: false`): their tool lists use Claude Code tool names. With `orca` on PATH, a step that launches one runs it as an Orca worker through `orca/bin/run-role` (see [Orca](#orca)). Without `orca`, or when run-role exits 3 (Orca unreachable, or not in an Orca terminal), verifier and reviewer run in the same conversation with the result marked `非隔離`, and diff-reviewer is skipped (see the next row) |
+| Agents | Hidden (`mainAgent: false`, `subagent: false`): their tool lists use Claude Code tool names. With `orca` on PATH, a step that launches one runs it as an Orca worker through `orca/bin/run-role` (see [Orca](#orca)). Without `orca`, or when run-role exits 3 (Orca unreachable, or not in an Orca terminal), verifier and reviewer run in the same conversation with the result marked `非隔離`, and diff-reviewer is skipped (see the next row). `rules/antigravity.md` gives the handling of the other exit codes, including a timeout (4) |
 | `/my:autopilot`, `/my:retro` | Not supported: they depend on Claude Code agents, background commands, or transcripts |
 | Two-pass diff review | With Orca, the plan-blind first pass runs as a separate `diff-reviewer` worker. Without Orca, the first pass is skipped and the review runs in one pass |
 | `SessionEnd` / `UserPromptSubmit` capture | Not wired: Antigravity has no matching event |
