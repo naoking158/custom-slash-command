@@ -438,9 +438,21 @@ main_and_worktree() {
   [ -z "$output" ]
 }
 
-@test "a relative body file written in the same call is denied" {
+@test "a body file written in the same call is denied, even when it already exists" {
   run_guard "$(bash_payload "printf 'fix H001' > m.txt && git commit -q -F m.txt")"
   [ "$(decision)" = "deny" ]
+  echo old >"$REPO/m.txt"
+  run_guard "$(bash_payload "printf 'fix H001' > ./m.txt && git commit -q -F m.txt")"
+  [ "$(decision)" = "deny" ]
+  run_guard "$(bash_payload "cp $TMP/src.txt m.txt && git commit -q -F m.txt")"
+  [ "$(decision)" = "deny" ]
+}
+
+@test "file flags quoted inside a message are message text, not body files" {
+  run_guard "$(bash_payload "git commit -q -m 'read config with --file \$CONFIG or -F /etc/nothere'")"
+  [ -z "$output" ]
+  run_guard "$(bash_payload "git commit -q --allow-empty -F /dev/null")"
+  [ -z "$output" ]
 }
 
 @test "commands mentioned inside a quoted message are not run" {

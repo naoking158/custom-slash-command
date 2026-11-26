@@ -49,8 +49,9 @@ interval="${WAIT_CI_INTERVAL:-15}"
 # none MESSAGE — exit 3 with MESSAGE, or exit 2 when the repository has no
 # commit <sha>.
 none() {
-  gh api "repos/$repo/commits/$sha" --jq .sha >/dev/null 2>&1 \
-    || fail "no commit $sha in $repo (pass \$(git rev-parse HEAD))"
+  local err
+  err="$(gh api "repos/$repo/commits/$sha" --jq .sha 2>&1 >/dev/null)" \
+    || fail "no commit $sha in $repo, or gh failed (pass \$(git rev-parse HEAD)): $err"
   echo "CI: none ($1)"
   exit 3
 }

@@ -10,7 +10,9 @@
 #   - Outbound text (commit messages, PR / issue bodies and comments) must not
 #     cite local working artifacts: review finding IDs (C001, H012 ...),
 #     docs/reviews/ paths, absolute local paths, or docs/ paths that git does
-#     not track.
+#     not track. The files their --body-file / --file / -F arguments name are
+#     read and checked too; a body file the hook cannot read, or one the same
+#     line writes, is denied.
 #   - `gh api` calls that write (--method / -X other than GET, or fields and
 #     --input without a method) get the same check over their fields, the
 #     stages that pipe into them, and the files --input / -F k=@file send. A
@@ -322,53 +324,49 @@ done <<<"$commands"
 # own name (an env prefix addresses the machine) to the next top-level ; && ||
 # & or newline, plus the pipeline stages that feed it, with its quoted strings
 # and heredoc bodies put back. The other commands on the line address the machine.
+# For each: a line "\x02<file>" per body file its own --body-file / --file / -F
+# arguments name (outside quoted strings and heredocs), then its text without
+# those arguments.
 text="$(printf '%s' "$cmd" | perl -0777 -ne '
   my @lit;
-  my $hold = sub { push @lit, $_[0]; "\x00" . $#lit . "\x00" };
-  s/(<<-?\s*(["\x27]?)(\w+)\2)([^\n]*)\n(.*?)\n[ \t]*\3[ \t]*(?=\n|\z)/$1 . $hold->($5) . $4/gse;
-  s/\\.|\$\x27(?:[^\x27\\]|\\.)*\x27|"(?:[^"\\]|\\.)*"|\x27[^\x27]*\x27|(?<![^\s;&|()])#[^\n]*/
-    my $m = $&; $m =~ m{^\\}s ? $m : $m =~ m{^#} ? "" : $hold->($m)/gse;
+  my $hold = sub { push @lit, [@_]; "\x00" . $#lit . "\x00" };
+  s/(<<-?\s*(["\x27]?)(\w+)\2)([^\n]*)\n(.*?)\n[ \t]*\3[ \t]*(?=\n|\z)/$1 . $hold->($5, $5) . $4/gse;
+  s/\\.|\$\x27((?:[^\x27\\]|\\.)*)\x27|"((?:[^"\\]|\\.)*)"|\x27([^\x27]*)\x27|(?<![^\s;&|()])#[^\n]*/
+    my ($m, $c) = ($&, defined $1 ? $1 : defined $2 ? $2 : $3);
+    $m =~ m{^\\}s ? $m : $m =~ m{^#} ? "" : $hold->($m, $c)/gse;
   s/\\\n/ /g;
+  my $put = sub { my ($s, $i) = @_; 1 while $s =~ s/\x00(\d+)\x00/$lit[$1][$i]/g; $s };
+  my $word = qr/(?:\x00\d+\x00|[^\s\x00])+/;
+  my $file = qr/(?<!\S)(?:(?:--body-file|--file)(?:\s+|=)|-F\s*)($word)/;
   my $out = qr/(?<![\w-])git(?:\s+-[Cc]\s+\S+)*\s+commit(?![\w-])|(?<![\w-])gh\s+(?:pr|issue)\s+(?:create|new|comment|edit|review)(?![\w-])/;
   for my $seg (split /&&|\|\||;|\n|(?<![<>|])&(?![>&])/) {
     my @stages = split /\|&?/, $seg;
     my ($k) = grep { $stages[$_] =~ $out } 0 .. $#stages;
     next unless defined $k;
     $stages[$k] =~ $out;
-    my $s = join " | ", @stages[0 .. $k - 1], substr($stages[$k], $-[0]);
-    1 while $s =~ s/\x00(\d+)\x00/$lit[$1]/g;
-    print $s, "\n";
+    my $own = substr($stages[$k], $-[0]);
+    while ($own =~ /$file/g) { print "\x02", $put->($1, 1), "\n" }
+    $own =~ s/$file//g;
+    print $put->(join(" | ", @stages[0 .. $k - 1], $own), 0), "\n";
   }
 ')"
 if [ -n "$text" ]; then
-  read_args=()
-  while IFS= read -r arg; do
-    f="$(printf '%s' "$arg" | sed -E 's#^(--body-file|--file|-F)[[:space:]=]+##')"
-    f="${f%\"}"; f="${f#\"}"; f="${f%\'}"; f="${f#\'}"
-    case "$f" in
-      -|/dev/stdin|/dev/fd/*) continue ;;
-      /*|~*|\$*)
-        f="${f/#\~/$HOME}"
-        { [ -f "$f" ] && [ -r "$f" ]; } \
-          || decide deny "本文のファイル ${f##*/} を読めない。ファイルを書くコマンドと送るコマンドを別の Bash 呼び出しに分け、パスを直接書く" ;;
-      *)
-        if [ ! -f "$text_dir/$f" ]; then
-          case "$cmd" in
-            *">$f"*|*"> $f"*|*"tee $f"*|*"tee -a $f"*)
-              decide deny "本文のファイル $f を読めない。ファイルを書くコマンドと送るコマンドを別の Bash 呼び出しに分ける" ;;
-          esac
-          continue
-        fi
-        f="$text_dir/$f" ;;
-    esac
-    text="$text"$'\n'"$(cat "$f")"
-    read_args+=("$arg")
-  done < <(printf '%s' "$text" | grep -oE -- '(--body-file|--file|-F)[[:space:]=]+[^[:space:]]+')
-  # Drop the parts that address the machine, not the reader: -C paths and the
-  # arguments that named a file read above.
-  for arg in ${read_args[@]+"${read_args[@]}"}; do text="${text//"$arg"/}"; done
-  text="$(printf '%s' "$text" | sed -E 's#-C[[:space:]]+("[^"]*"|[^[:space:]]+)##g')"
-  reason="$(leak_reason "$text" "$text_dir")"
+  body_text="$(printf '%s\n' "$text" | grep -v $'^\x02')"
+  while IFS= read -r f; do
+    f="${f#$'\x02'}"
+    case "$f" in -|/dev/stdin|/dev/fd/*|/dev/null) continue ;; esac
+    base_re="$(printf '%s' "${f##*/}" | sed 's/[][\.*^$()+?{}|]/\\&/g')"
+    printf '%s' "$cmd" | grep -qE "(>|tee([[:space:]]+-a)?|(cp|mv)[[:space:]].*)[[:space:]]*[\"']?([^[:space:]\"']*/)?${base_re}([\"'[:space:];&|)]|\$)" \
+      && decide deny "本文のファイル ${f##*/} を同じ呼び出しで書いている。ファイルを書くコマンドと送るコマンドを別の Bash 呼び出しに分ける"
+    f="${f/#\~/$HOME}"
+    case "$f" in /*) ;; *) f="$text_dir/$f" ;; esac
+    { [ -f "$f" ] && [ -r "$f" ]; } \
+      || decide deny "本文のファイル ${f##*/} を読めない。ファイルを書くコマンドと送るコマンドを別の Bash 呼び出しに分け、パスを直接書く"
+    body_text="$body_text"$'\n'"$(cat "$f")"
+  done < <(printf '%s\n' "$text" | grep $'^\x02')
+  # -C paths address the machine, not the reader.
+  body_text="$(printf '%s' "$body_text" | sed -E 's#-C[[:space:]]+("[^"]*"|[^[:space:]]+)##g')"
+  reason="$(leak_reason "$body_text" "$text_dir")"
   [ -n "$reason" ] && decide deny "$reason"
 fi
 
