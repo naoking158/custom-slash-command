@@ -45,6 +45,7 @@ For every task, in order:
 6. **Review and fix.** Run the `my:review` skill with `pr:<number> --no-screen --report-dir <absolute path of $S/reviews>`: the review runs in the session's directory, not in the worktree, and its report belongs with the run's state, not in anyone's checkout. Fix every Critical/High finding, push, and review again — at most 2 fix rounds. Medium/Low: fix when cheap, otherwise list them in the progress log. Never cite finding IDs or report paths in commits or PR text.
 7. **Land.**
    - ship:
+     - Check that nothing landed under the PR: `git fetch -q origin <default>`, then compare `git diff --name-only HEAD...origin/<default>` (what the default branch gained since this branch left it) with `git diff --name-only origin/<default>...HEAD` (what the PR changes). A file in both means another goal, or the user, is changing the same code: merge `origin/<default>` into the branch, run the tests, push and review again before going on. A merge that is clean as text can still break what the PR assumes.
      - Wait for CI on the commit you pushed: run `"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/my}/scripts/lib/wait-ci.sh" <owner/name> <sha>` with `run_in_background`, as the whole command. Its exit status is the verdict, and a trailing `echo` or pipe would replace it. `gh pr checks --watch` is no substitute: right after a push GitHub has registered no run yet, and it exits at once with "no checks reported".
        - 0: green.
        - 1 or 4: red. Fix on the branch (counts toward the failure limit).
