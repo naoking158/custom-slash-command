@@ -15,10 +15,10 @@ Assume every contributor is an agent that sees only the files it opened, copies 
 
 ## 1. Mine the mistake classes
 
-In the target repository (default: the current one), over `--since` (default `60d`), read:
+In the target repository (default: the current one), over `--since` (default `60d`), read the sources below. First turn `--since` into a date `<date>` (YYYY-MM-DD; `60d` is 60 days before today): `git log --since=60d` matches nothing, without an error.
 
-- `git log --since=<since>`: reverts and the commits that fix an earlier change;
-- `gh pr list --state all --search "updated:>=<date>"` and the review comments on those PRs;
+- `git log --since=<date>`: reverts and the commits that fix an earlier change;
+- `gh pr list --state all --limit 1000 --search "updated:>=<date>"` (the default limit is 30) and the review comments on those PRs;
 - the agent instruction files: `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`;
 - comments that explain a workaround (`workaround`, `HACK`, `do not remove`, `must`, `don't`);
 - `~/.local/state/autopilot/<owner>-<name>/found.md`, when it exists.
@@ -37,11 +37,11 @@ For each class, take the first level that can stop it:
 
 ## 3. Propose
 
-For each class, show: the evidence (commits, PRs, files), the level picked, why each higher level does not work, and the change. Ask which classes to apply. `--dry-run` stops here.
+For each class, show: the evidence (commits, PRs, files), the level picked, why each higher level does not work, and the change, including the rows step 5 adds to or deletes from the enforcement table. Ask which classes to apply; edit `CLAUDE.md` / `AGENTS.md` only as approved here. `--dry-run` stops here.
 
 ## 4. Fix and prove
 
-Fix the approved classes, most frequent first, one commit per class. Prove that each new type, lint, CI check or test fails on a real past mistake: revert the fix locally or rebuild the original case, watch the check fail, then restore it and watch it pass. Run the same command locally and in CI. Open the PR as `"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/my}/scripts/lib/autonomy.sh" <repo>` says: `gh pr create --draft` when it prints `strict`.
+Fix the approved classes, most frequent first, one commit per class. Prove that each new type, lint, CI check or test fails on a real past mistake: revert the fix locally or rebuild the original case, watch the check fail, then restore it and watch it pass. Run the same command locally and in CI. Open the PR as `"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/my}/scripts/lib/autonomy.sh" <repo>` says; the first word of its output is the mode: `strict` → `gh pr create --draft`, `ship` → `gh pr create`. Either way, leave merging to the user.
 
 An exception to a new check goes on the offending line with a reason, an expiry date and the name of the human who approved it.
 
