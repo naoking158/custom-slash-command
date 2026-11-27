@@ -130,6 +130,46 @@ git worktree list --porcelain | awk '
   /^branch /   { b = substr($0, 8); sub(/^refs\/heads\//, "", b) }
   END          { if (p != "") print p "\t" h "\t" l "\t" b }' >"$tmp/worktrees.tsv"
 
+# Commit time of every worktree head, and the commit of every origin branch,
+# each read once.
+heads=() branches=()
+while IFS=$'\t' read -r _ h _ b; do
+  [ -z "$h" ] || heads+=("$h")
+  [ -z "$b" ] || branches+=("refs/remotes/origin/$b")
+done < <(tail -n +2 "$tmp/worktrees.tsv")
+: >"$tmp/head_ts"
+[ ${#heads[@]} -eq 0 ] || git log --no-walk=unsorted --format='%H %ct' "${heads[@]}" >"$tmp/head_ts" 2>/dev/null
+: >"$tmp/remotes.tsv"
+[ ${#branches[@]} -eq 0 ] \
+  || git for-each-ref --format='%(refname:strip=3)%09%(objectname)' "${branches[@]}" >"$tmp/remotes.tsv" 2>/dev/null
+
+# commit_time HEAD — the commit time of HEAD, empty when it cannot be read.
+commit_time() {
+  local h t
+  while read -r h t; do
+    if [ "$h" = "$1" ]; then printf '%s' "$t"; return; fi
+  done <"$tmp/head_ts"
+  git log -1 --format=%ct "$1" 2>/dev/null
+}
+
+# origin_branch BRANCH — the commit of origin/BRANCH; fails when there is none.
+origin_branch() {
+  local name oid
+  while IFS=$'\t' read -r name oid; do
+    if [ "$name" = "$1" ]; then printf '%s' "$oid"; return 0; fi
+  done <"$tmp/remotes.tsv"
+  return 1
+}
+
+# git_dir WORKTREE — the git directory of WORKTREE, read from its .git.
+git_dir() {
+  local line
+  if [ -d "$1/.git" ]; then printf '%s' "$1/.git"; return 0; fi
+  [ -f "$1/.git" ] || return 1
+  { IFS= read -r line || [ -n "$line" ]; } <"$1/.git" || return 1
+  case "$line" in gitdir:\ /*) printf '%s' "${line#gitdir: }" ;; gitdir:\ *) printf '%s/%s' "$1" "${line#gitdir: }" ;; *) return 1 ;; esac
+}
+
 projects="$HOME/.claude/projects"
 # Claude Code session directories of every worktree, the main one included.
 while IFS=$'\t' read -r p _; do
@@ -148,7 +188,7 @@ tail -n +2 "$tmp/worktrees.tsv" | while IFS=$'\t' read -r wt head lock branch; d
   [ -n "$kb" ] || kb=0
   size=$(awk -v k="$kb" 'BEGIN { if (k >= 1048576) printf "%.1fG", k/1048576; else if (k >= 1024) printf "%.0fM", k/1024; else printf "%dK", k }')
 
-  head_ts=$(git log -1 --format=%ct "$head" 2>/dev/null)
+  head_ts=$(commit_time "$head")
   if [ -n "$head_ts" ]; then age="$(( (now - head_ts) / 86400 ))d"; else age="?"; fi
 
   # A squash merge leaves the head outside the base, so PR state is the other signal.
@@ -173,8 +213,7 @@ tail -n +2 "$tmp/worktrees.tsv" | while IFS=$'\t' read -r wt head lock branch; d
   fi
 
   if [ -z "$branch" ]; then remote=detached
-  elif git show-ref --verify --quiet "refs/remotes/origin/$branch"; then
-    upstream=$(git rev-parse "refs/remotes/origin/$branch")
+  elif upstream=$(origin_branch "$branch"); then
     if [ "$upstream" = "$head" ]; then remote=pushed
     else
       ahead=$(git rev-list --count "$upstream..$head" 2>/dev/null)
@@ -203,7 +242,7 @@ tail -n +2 "$tmp/worktrees.tsv" | while IFS=$'\t' read -r wt head lock branch; d
   fi
 
   autopilot="-"
-  gitdir=$(git -C "$wt" rev-parse --absolute-git-dir 2>/dev/null) && [ -e "$gitdir/my-autopilot-worktree" ] && autopilot=goal
+  gitdir=$(git_dir "$wt") && [ -e "$gitdir/my-autopilot-worktree" ] && autopilot=goal
 
   # Sessions started in the worktree are stored under its own slug. A session
   # elsewhere worked in it when it names a file inside it, quotes the path, or
