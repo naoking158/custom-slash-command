@@ -22,8 +22,8 @@ missing_dep() {
 # boundary.
 looks_outbound() {
   printf '%s' "$1" | grep -qE \
-    -e '(^|[^[:alnum:]_./-]|\\[nrt])git([[:space:]]|\\[nrt]|\\\\)(.*([^[:alnum:]_-]|\\[nrt]))?push([^[:alnum:]_-]|$)' \
-    -e 'gh[[:space:]]+(pr|api|issue|release)' \
+    -e '(^|[^[:alnum:]_.-]|\\[nrt])git([[:space:]]|\\[nrt]|\\\\)(.*([^[:alnum:]_-]|\\[nrt]))?push([^[:alnum:]_-]|$)' \
+    -e '(^|[^[:alnum:]_.-]|\\[nrt])gh([[:space:]]|\\[nrt]|\\\\)+(pr|api|issue|release)([^[:alnum:]_-]|$)' \
     -e 'notion-(create|update)-'
 }
 

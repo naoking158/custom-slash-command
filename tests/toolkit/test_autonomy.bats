@@ -124,7 +124,7 @@ record() {
   payload="$(jq -cn --arg d "$REPO" '{tool_name:"Bash",cwd:$d,tool_input:{command:"gh pr merge 3 --squash"}}')"
   run bash -c 'printf "%s" "$1" | "$2"' _ "$payload" "$GUARD"
   [ "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = "deny" ]
-  [[ "$output" == *"$REPO_ROOT/scripts/lib/autonomy.sh $REPO "* ]]
+  [[ "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason')" == *"$REPO_ROOT/scripts/lib/autonomy.sh \"$REPO\" "* ]]
 
   record "$(date +%s)"
   run bash -c 'printf "%s" "$1" | "$2"' _ "$payload" "$GUARD"

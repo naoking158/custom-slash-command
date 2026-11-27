@@ -19,7 +19,8 @@
 # earlier record stands. Classic branch protection is not read.
 #
 # Sourced by scripts/hooks/outbound-guard.sh, which reads the record only.
-# Dependencies: bash, git, sed, date, grep; gh, mktemp, cut, sort, tr for the check.
+# Dependencies: bash, git, sed, date; gh, mktemp, tail, rm, mkdir, grep, cut,
+# sort, tr for the check.
 
 SHIP_READY_TTL=604800
 

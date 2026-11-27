@@ -3,7 +3,7 @@
 #
 # Contract under test:
 #   - A guard that cannot read its payload denies a call that looks outbound.
-#   - It stays out of the way of every other call.
+#   - It says nothing about a call that matches none of the outbound patterns.
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
@@ -66,14 +66,15 @@ run_with_path() {
 @test "outbound-guard without jq does not take a path with git in it, or the word in pushd, for a push" {
   REPO="$TMP/github.com/me/app"
   mkdir -p "$REPO"
-  for command in 'pushd src' 'grep -rn push .'; do
+  for command in 'pushd src' 'grep -rn push .' 'echo "high priority"' 'gh project list'; do
     run_with_path "$(bin_without jq)" "$GUARD" "$(bash_payload "$command")"
     [ -z "$output" ]
   done
 }
 
 @test "outbound-guard without jq denies a push after a newline, a tab, or git options" {
-  for command in $'cd /x\ngit push' $'git\tpush' 'git -C /x push' 'git -c user.name="a b" push'; do
+  for command in $'cd /x\ngit push' $'git\tpush' 'git -C /x push' 'git -c user.name="a b" push' \
+    '/usr/bin/git push origin main' $'gh\tpr merge 3' $'gh \\\npr merge 3'; do
     run_with_path "$(bin_without jq)" "$GUARD" "$(bash_payload "$command")"
     [ "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = "deny" ]
   done

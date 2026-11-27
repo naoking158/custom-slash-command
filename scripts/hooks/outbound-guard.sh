@@ -269,7 +269,7 @@ judge_pr() {
   [ "$(autonomy_mode "$repo")" = "strict" ] || return 0
   if ship_configured "$repo"; then
     case "$gh" in *" -R "*|*" --repo"*) dir="<$repo の checkout>" ;; esac
-    reason="${reason}（ship の設定はあるが、default branch の保護を確かめた記録がない。${lib_dir}/autonomy.sh ${dir} を実行する）"
+    reason="${reason}（ship の設定はあるが、default branch の保護を確かめた記録がない。${lib_dir}/autonomy.sh \"${dir}\" を実行する）"
   fi
   decide deny "$reason"
 }
