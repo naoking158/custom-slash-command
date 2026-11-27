@@ -58,8 +58,10 @@ count_matches() {
 # differences between BSD/GNU.
 apply() {
   local expr="$1" file="$2"
-  sed -E "$expr" "$file" > "$file.sed"
-  mv -- "$file.sed" "$file"
+  local tmp
+  tmp="$(mktemp -t redact.XXXXXX)"
+  sed -E "$expr" "$file" > "$tmp"
+  mv -- "$tmp" "$file"
 }
 
 # mask_file — Apply all redaction patterns to a staged file. A pattern that
