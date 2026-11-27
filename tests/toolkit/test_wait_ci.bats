@@ -19,7 +19,7 @@ setup() {
   # unless $GH_NO_COMMIT is set; each `run list` prints the next line of
   # $TMP/frames and repeats the last one.
   fake_bin "$TMP/bin/gh" <<'GH'
-#!/usr/bin/env bash
+#!/bin/bash
 dir="$(cd "$(dirname "$0")/.." && pwd)"
 echo "$*" >>"$dir/calls"
 case "$1 $2" in
@@ -105,7 +105,7 @@ run_of() {
 
 @test "a gh failure is not reported as a verdict" {
   fake_bin "$TMP/bin/gh" <<'GH'
-#!/usr/bin/env bash
+#!/bin/bash
 echo "gh: not logged in" >&2
 exit 4
 GH
