@@ -215,6 +215,18 @@ audit() {
   [ "$(field "$TMP/cdonly" BUCKET)" = "verify-recent-chat" ]
 }
 
+@test "a pushed branch and a branch ahead of origin show in REMOTE" {
+  git init -q --bare "$TMP/origin.git"
+  git -C "$REPO" remote add origin "$TMP/origin.git"
+  add_wt pushed
+  add_wt ahead
+  git -C "$REPO" push -q origin pushed ahead
+  git -C "$TMP/ahead" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m more
+  audit
+  [ "$(field "$TMP/pushed" REMOTE)" = "pushed" ]
+  [ "$(field "$TMP/ahead" REMOTE)" = "ahead1/behind0" ]
+}
+
 @test "detached head with commits not in the base is review" {
   add_wt detached
   git -C "$TMP/detached" checkout -q --detach
