@@ -21,12 +21,8 @@ setup() {
   LOG_DECISION="$REPO_ROOT/skills/autopilot/scripts/log-decision.sh"
   LOG_TASK="$REPO_ROOT/skills/autopilot/scripts/log-task.sh"
   PATCH_ID="$REPO_ROOT/scripts/lib/patch-id.sh"
-  TMP="$(mktemp -d -t autopilot-logs-test.XXXXXX)"
+  TMP="$BATS_TEST_TMPDIR"
   export GIT_CONFIG_GLOBAL=/dev/null
-}
-
-teardown() {
-  [ -n "${TMP:-}" ] && [ -d "$TMP" ] && rm -rf "$TMP"
 }
 
 # field <file> <line> <column> — one cell of a TSV file.

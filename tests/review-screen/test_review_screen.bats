@@ -10,11 +10,7 @@ setup() {
   SCRIPTS="$REPO_ROOT/skills/review/scripts"
   TEMPLATE="$REPO_ROOT/skills/review/assets/review-screen.html"
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
-  TMP="$(mktemp -d -t review-screen-test.XXXXXX)"
-}
-
-teardown() {
-  [ -n "${TMP:-}" ] && [ -d "$TMP" ] && rm -rf "$TMP"
+  TMP="$BATS_TEST_TMPDIR"
 }
 
 # payload_of — Extract the JSON payload block from a built HTML file.

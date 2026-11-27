@@ -5,11 +5,7 @@ setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   REDACT="$REPO_ROOT/skills/retro/scripts/redact.sh"
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
-  TMP="$(mktemp -d -t redact-test.XXXXXX)"
-}
-
-teardown() {
-  [ -n "${TMP:-}" ] && [ -d "$TMP" ] && rm -rf "$TMP"
+  TMP="$BATS_TEST_TMPDIR"
 }
 
 @test "clean input exits 0 and output is identical to input" {

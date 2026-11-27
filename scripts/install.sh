@@ -34,7 +34,8 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+case "${BASH_SOURCE[0]}" in */*) self_dir="${BASH_SOURCE[0]%/*}" ;; *) self_dir=. ;; esac
+SCRIPT_DIR="$(cd "$self_dir" && pwd -P)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 
 CLAUDE_DIR="$HOME/.claude"

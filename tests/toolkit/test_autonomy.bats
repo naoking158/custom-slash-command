@@ -18,7 +18,7 @@ setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   AUTONOMY="$REPO_ROOT/scripts/lib/autonomy.sh"
   GUARD="$REPO_ROOT/scripts/hooks/outbound-guard.sh"
-  TMP="$(mktemp -d -t autonomy-test.XXXXXX)"
+  TMP="$BATS_TEST_TMPDIR"
   REPO="$TMP/repo"
   git init -q -b main "$REPO"
   git -C "$REPO" remote add origin git@github.com:me/app.git
@@ -45,10 +45,6 @@ case "$2" in
 esac
 STUB
   PATH="$TMP/bin:$PATH"
-}
-
-teardown() {
-  [ -n "${TMP:-}" ] && [ -d "$TMP" ] && rm -rf "$TMP"
 }
 
 record() {
