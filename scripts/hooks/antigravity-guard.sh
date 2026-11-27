@@ -9,7 +9,9 @@
 # This script converts the payload to the Claude Code shape outbound-guard.sh
 # reads and converts its permissionDecision back. When the guard has no
 # objection, or the payload cannot be read, it answers "allow", which hands the
-# call to Antigravity's own permission policy. The guard's "ask" becomes
+# call to Antigravity's own permission policy. Without jq it cannot read the
+# payload at all: it then denies a call that looks outbound (see
+# scripts/lib/guard-deps.sh). The guard's "ask" becomes
 # "force_ask": Antigravity's "ask" is skipped when the user has set "Always Allow".
 # Dependencies: bash, jq, and those of outbound-guard.sh.
 set -u
@@ -19,7 +21,15 @@ allow() {
   exit 0
 }
 
+# shellcheck source=../lib/guard-deps.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/guard-deps.sh"
+
 payload="$(cat)" || allow
+if [ -n "$(missing_dep jq)" ]; then
+  looks_outbound "$payload" || allow
+  printf '{"decision":"deny","reason":"%s"}\n' "$(missing_dep_reason jq)"
+  exit 0
+fi
 claude_payload="$(printf '%s' "$payload" | jq -c '
   .toolCall as $t
   | (if $t.name == "run_command" then $t.args.CommandLine

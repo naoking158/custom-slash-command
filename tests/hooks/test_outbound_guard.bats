@@ -20,6 +20,9 @@ setup() {
   git -C "$REPO" -c user.email=t@example.com -c user.name=t commit -q -m docs
   git -C "$REPO" checkout -q -b feature/x
   export MY_AUTONOMY_CONF="$TMP/autonomy.conf"
+  export MY_TOOLKIT_DATA="$TMP/data"
+  mkdir -p "$MY_TOOLKIT_DATA/ship-ready"
+  date +%s >"$MY_TOOLKIT_DATA/ship-ready/me__app"
 }
 
 # ship_repo — opt REPO into ship mode as me/app.
