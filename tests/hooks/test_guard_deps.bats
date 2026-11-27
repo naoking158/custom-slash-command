@@ -30,7 +30,7 @@ teardown() {
 bin_without() {
   local dir="$TMP/bin-no-$1" tool
   mkdir -p "$dir"
-  for tool in bash cat grep dirname git sed sort perl jq; do
+  for tool in bash cat grep dirname git sed sort jq; do
     [ "$tool" = "$1" ] || ln -sf "$(command -v "$tool")" "$dir/$tool"
   done
   printf '%s' "$dir"
