@@ -24,7 +24,7 @@ setup() {
 decision_for() {
   local payload verdict
   payload="$(jq -cn --arg c "$1" --arg d "$REPO" '{tool_name:"Bash",cwd:$d,tool_input:{command:$c}}')"
-  verdict="$(printf '%s' "$payload" | "$GUARD")"
+  verdict="$(printf '%s' "$payload" | bash "$GUARD")"
   [ -n "$verdict" ] || { echo allow; return; }
   printf '%s' "$verdict" | jq -r '.hookSpecificOutput.permissionDecision'
 }

@@ -86,7 +86,7 @@ field() {
 slug() { printf '%s' "${1//[^A-Za-z0-9]/-}"; }
 
 audit() {
-  run "$AUDIT" -b main "$REPO"
+  run bash "$AUDIT" -b main "$REPO"
   [ "$status" -eq 0 ]
 }
 
@@ -294,12 +294,12 @@ audit() {
 }
 
 @test "bad option and non-repository exit 2, help exits 0" {
-  run "$AUDIT" --nope "$REPO"
+  run bash "$AUDIT" --nope "$REPO"
   [ "$status" -eq 2 ]
   mkdir "$TMP/plain-dir"
-  run "$AUDIT" "$TMP/plain-dir"
+  run bash "$AUDIT" "$TMP/plain-dir"
   [ "$status" -eq 2 ]
-  run "$AUDIT" --help
+  run bash "$AUDIT" --help
   [ "$status" -eq 0 ]
   [[ "$output" == *"Usage: worktree-audit.sh"* ]]
 }

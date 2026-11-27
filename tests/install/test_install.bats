@@ -49,44 +49,44 @@ assert_links_to_repo() {
 # ============================================================================
 
 @test "install: fresh HOME creates the plugin symlink" {
-  run "$INSTALL"
+  run bash "$INSTALL"
   [ "$status" -eq 0 ]
   assert_links_to_repo "$HOME/$PLUGIN_LINK"
 }
 
 @test "install: fresh HOME also links the repo as an Antigravity plugin" {
-  run "$INSTALL"
+  run bash "$INSTALL"
   [ "$status" -eq 0 ]
   assert_links_to_repo "$HOME/.gemini/config/plugins/my"
 }
 
 @test "check: a missing Antigravity plugin link fails the check" {
-  "$INSTALL" >/dev/null
+  bash "$INSTALL" >/dev/null
   rm "$HOME/.gemini/config/plugins/my"
-  run "$INSTALL" --check
+  run bash "$INSTALL" --check
   [ "$status" -ne 0 ]
   [[ "$output" == *"MISSING"*".gemini/config/plugins/my"* ]]
 }
 
 @test "uninstall: removes the Antigravity plugin link" {
-  "$INSTALL" >/dev/null
-  run "$INSTALL" --uninstall
+  bash "$INSTALL" >/dev/null
+  run bash "$INSTALL" --uninstall
   [ "$status" -eq 0 ]
   [ ! -e "$HOME/.gemini/config/plugins/my" ]
   [ ! -L "$HOME/.gemini/config/plugins/my" ]
 }
 
 @test "install: second run is idempotent and reports already linked" {
-  run "$INSTALL"
+  run bash "$INSTALL"
   [ "$status" -eq 0 ]
-  run "$INSTALL"
+  run bash "$INSTALL"
   [ "$status" -eq 0 ]
   [[ "$output" == *"already linked"* ]]
 }
 
 @test "install: creates ~/.claude/skills/ when missing" {
   [ ! -e "$HOME/.claude" ]
-  run "$INSTALL"
+  run bash "$INSTALL"
   [ "$status" -eq 0 ]
   [ -d "$HOME/.claude/skills" ]
 }
@@ -101,7 +101,7 @@ assert_links_to_repo() {
   ln -s "$REPO_ROOT/commands" "$HOME/.claude/commands"
   ln -s "$REPO_ROOT/agents"   "$HOME/.claude/agents"
 
-  run "$INSTALL"
+  run bash "$INSTALL"
   [ "$status" -eq 0 ]
   [ ! -e "$HOME/.prompts" ] && [ ! -L "$HOME/.prompts" ]
   [ ! -e "$HOME/.claude/commands" ] && [ ! -L "$HOME/.claude/commands" ]
@@ -114,17 +114,17 @@ assert_links_to_repo() {
   mkdir -p "$HOME/.claude/agents"
   echo "user file" > "$HOME/.claude/agents/keep.md"
 
-  run "$INSTALL"
+  run bash "$INSTALL"
   [ "$status" -eq 0 ]
   [ -L "$HOME/.claude/commands" ]
   [ -f "$HOME/.claude/agents/keep.md" ]
 }
 
 @test "check: legacy symlink into repo fails the check" {
-  "$INSTALL" >/dev/null
+  bash "$INSTALL" >/dev/null
   ln -s "$REPO_ROOT/prompts" "$HOME/.prompts"
 
-  run "$INSTALL" --check
+  run bash "$INSTALL" --check
   [ "$status" -ne 0 ]
   [[ "$output" == *"LEGACY"* ]]
 }
@@ -134,14 +134,14 @@ assert_links_to_repo() {
 # ============================================================================
 
 @test "check: empty HOME reports MISSING and exits non-zero" {
-  run "$INSTALL" --check
+  run bash "$INSTALL" --check
   [ "$status" -ne 0 ]
   [[ "$output" == *"MISSING"* ]]
 }
 
 @test "check: after install reports OK and exits zero" {
-  "$INSTALL" >/dev/null
-  run "$INSTALL" --check
+  bash "$INSTALL" >/dev/null
+  run bash "$INSTALL" --check
   [ "$status" -eq 0 ]
   [[ "$output" == *"All good"* ]]
 }
@@ -151,8 +151,8 @@ assert_links_to_repo() {
 # ============================================================================
 
 @test "uninstall: removes the plugin symlink" {
-  "$INSTALL" >/dev/null
-  run "$INSTALL" --uninstall
+  bash "$INSTALL" >/dev/null
+  run bash "$INSTALL" --uninstall
   [ "$status" -eq 0 ]
   [ ! -e "$HOME/$PLUGIN_LINK" ] && [ ! -L "$HOME/$PLUGIN_LINK" ]
 }
@@ -161,7 +161,7 @@ assert_links_to_repo() {
   mkdir -p "$HOME/$PLUGIN_LINK"
   echo "user file" > "$HOME/$PLUGIN_LINK/keep.md"
 
-  run "$INSTALL" --uninstall
+  run bash "$INSTALL" --uninstall
   [ "$status" -eq 0 ]
   [[ "$output" == *"SKIP"* ]]
   [ -f "$HOME/$PLUGIN_LINK/keep.md" ]
@@ -171,7 +171,7 @@ assert_links_to_repo() {
   mkdir -p "$HOME/.claude/skills" "$TMP/foreign"
   ln -s "$TMP/foreign" "$HOME/$PLUGIN_LINK"
 
-  run "$INSTALL" --uninstall
+  run bash "$INSTALL" --uninstall
   [ "$status" -eq 0 ]
   [[ "$output" == *"not ours"* ]]
   [ -L "$HOME/$PLUGIN_LINK" ]
@@ -188,7 +188,7 @@ assert_links_to_repo() {
   mkdir -p "$HOME/$PLUGIN_LINK"
   echo "user data" > "$HOME/$PLUGIN_LINK/notes.md"
 
-  run "$INSTALL"
+  run bash "$INSTALL"
   [ "$status" -ne 0 ]
   [[ "$output" == *"refusing to touch"* ]]
   [ -f "$HOME/$PLUGIN_LINK/notes.md" ]
@@ -199,7 +199,7 @@ assert_links_to_repo() {
   mkdir -p "$HOME/.claude/skills" "$TMP/elsewhere"
   ln -s "$TMP/elsewhere" "$HOME/$PLUGIN_LINK"
 
-  run "$INSTALL"
+  run bash "$INSTALL"
   [ "$status" -ne 0 ]
   # The link must be untouched.
   [ -L "$HOME/$PLUGIN_LINK" ]
@@ -212,7 +212,7 @@ assert_links_to_repo() {
   mkdir -p "$HOME/.claude/skills" "$TMP/elsewhere"
   ln -s "$TMP/elsewhere" "$HOME/$PLUGIN_LINK"
 
-  run "$INSTALL" --force
+  run bash "$INSTALL" --force
   [ "$status" -eq 0 ]
   assert_links_to_repo "$HOME/$PLUGIN_LINK"
 }
@@ -222,12 +222,12 @@ assert_links_to_repo() {
 # ============================================================================
 
 @test "cli: unknown flag exits 2" {
-  run "$INSTALL" --bogus
+  run bash "$INSTALL" --bogus
   [ "$status" -eq 2 ]
 }
 
 @test "cli: --help exits 0 with usage" {
-  run "$INSTALL" --help
+  run bash "$INSTALL" --help
   [ "$status" -eq 0 ]
   [[ "$output" == *"Usage:"* ]]
 }
@@ -237,14 +237,14 @@ assert_links_to_repo() {
 # ============================================================================
 
 @test "install: links each rules file into ~/.claude/rules" {
-  run "$INSTALL"
+  run bash "$INSTALL"
   [ "$status" -eq 0 ]
   [ -L "$HOME/.claude/rules/principles.md" ]
   [ "$(readlink "$HOME/.claude/rules/principles.md")" = "$REPO_ROOT/rules/principles.md" ]
 }
 
 @test "install: does not link the Antigravity-only rules for Claude Code" {
-  run "$INSTALL"
+  run bash "$INSTALL"
   [ "$status" -eq 0 ]
   [ ! -e "$HOME/.claude/rules/AGENTS.md" ]
   [ ! -e "$HOME/.claude/rules/antigravity.md" ]
@@ -253,15 +253,15 @@ assert_links_to_repo() {
 @test "install: refuses to overwrite a real rules file" {
   mkdir -p "$HOME/.claude/rules"
   echo mine > "$HOME/.claude/rules/principles.md"
-  run "$INSTALL"
+  run bash "$INSTALL"
   [ "$status" -ne 0 ]
   [ "$(cat "$HOME/.claude/rules/principles.md")" = "mine" ]
 }
 
 @test "uninstall: removes rules links and keeps other rules files" {
-  run "$INSTALL"
+  run bash "$INSTALL"
   echo mine > "$HOME/.claude/rules/other.md"
-  run "$INSTALL" --uninstall
+  run bash "$INSTALL" --uninstall
   [ "$status" -eq 0 ]
   [ ! -e "$HOME/.claude/rules/principles.md" ]
   [ -f "$HOME/.claude/rules/other.md" ]
@@ -272,10 +272,10 @@ assert_links_to_repo() {
 # ============================================================================
 
 @test "orca absent: install and check say nothing about Orca" {
-  run "$INSTALL"
+  run bash "$INSTALL"
   [ "$status" -eq 0 ]
   [[ "$output" != *"doctor"* ]]
-  run "$INSTALL" --check
+  run bash "$INSTALL" --check
   [ "$status" -eq 0 ]
   [[ "$output" != *"doctor"* ]]
 }
@@ -289,10 +289,10 @@ select_profile() {
 @test "orca present: install and check point at orca/bin/doctor" {
   fake_orca
   select_profile work
-  run "$INSTALL"
+  run bash "$INSTALL"
   [ "$status" -eq 0 ]
   [[ "$output" == *"run $REPO_ROOT/orca/bin/doctor from an Orca terminal"* ]]
-  run "$INSTALL" --check
+  run bash "$INSTALL" --check
   [ "$status" -eq 0 ]
   [[ "$output" == *"orca/bin/doctor"* ]]
   [[ "$output" == *"Orca profile: work"* ]]
@@ -300,10 +300,10 @@ select_profile() {
 
 @test "orca present without a profile: install and check fail and say how to select one" {
   fake_orca
-  run "$INSTALL"
+  run bash "$INSTALL"
   [ "$status" -ne 0 ]
   [[ "$output" == *"ERROR"*"Orca profile not selected"*".claude/my-toolkit/orca.conf"*"private"* ]]
-  run "$INSTALL" --check
+  run bash "$INSTALL" --check
   [ "$status" -ne 0 ]
   [[ "$output" == *"MISSING"*"Orca profile not selected"* ]]
 }
@@ -311,8 +311,8 @@ select_profile() {
 @test "orca present: MY_ORCA_PROFILE selects the profile" {
   fake_orca
   export MY_ORCA_PROFILE=private
-  "$INSTALL" >/dev/null
-  run "$INSTALL" --check
+  bash "$INSTALL" >/dev/null
+  run bash "$INSTALL" --check
   [ "$status" -eq 0 ]
   [[ "$output" == *"Orca profile: private"* ]]
 }
@@ -321,7 +321,7 @@ select_profile() {
   fake_orca
   select_profile nope
   MY_ORCA_PROFILE=work "$INSTALL" >/dev/null
-  run "$INSTALL" --check
+  run bash "$INSTALL" --check
   [ "$status" -ne 0 ]
   [[ "$output" == *"MISSING"*"'nope'"* ]]
 }
@@ -341,8 +341,8 @@ select_profile() {
 @test "orca present: uninstall leaves the Orca layer alone" {
   fake_orca
   select_profile work
-  "$INSTALL" >/dev/null
-  run "$INSTALL" --uninstall
+  bash "$INSTALL" >/dev/null
+  run bash "$INSTALL" --uninstall
   [ "$status" -eq 0 ]
   [[ "$output" != *"doctor"* ]]
 }

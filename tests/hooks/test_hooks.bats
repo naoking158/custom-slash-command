@@ -35,8 +35,8 @@ payload() {
 }
 
 @test "session-end: two sessions append two lines" {
-  printf '%s' "$(payload '""')" | "$SESSION_END"
-  printf '%s' "$(payload '""')" | "$SESSION_END"
+  printf '%s' "$(payload '""')" | bash "$SESSION_END"
+  printf '%s' "$(payload '""')" | bash "$SESSION_END"
   [ "$(wc -l < "$MY_TOOLKIT_DATA/sessions.jsonl" | tr -d ' ')" = "2" ]
 }
 
@@ -93,7 +93,7 @@ payload() {
 }
 
 @test "prompt-capture: stdout stays empty (never injects context)" {
-  out="$(printf '%s' "$(payload '"違う、やり直して"')" | "$PROMPT_CAPTURE")"
+  out="$(printf '%s' "$(payload '"違う、やり直して"')" | bash "$PROMPT_CAPTURE")"
   [ -z "$out" ]
 }
 
