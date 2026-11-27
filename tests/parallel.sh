@@ -135,32 +135,32 @@ __stop_test_groups() {
 
 # run_file FILE OUTDIR — run the tests of FILE and write its TAP to OUTDIR/tap.
 run_file() {
-  local file="$1" out="$2" src n i t0
+  local __file="$1" __out="$2" __src __n __i __t0
   set +u
-  BATS_TEST_DIRNAME="$(cd "$(dirname "$file")" && pwd)"
-  BATS_TEST_FILENAME="$BATS_TEST_DIRNAME/$(basename "$file")"
-  BATS_FILE_TMPDIR="$out/file.tmp"
+  BATS_TEST_DIRNAME="$(cd "$(dirname "$__file")" && pwd)"
+  BATS_TEST_FILENAME="$BATS_TEST_DIRNAME/$(basename "$__file")"
+  BATS_FILE_TMPDIR="$__out/file.tmp"
   mkdir -p "$BATS_FILE_TMPDIR"
   export BATS_TEST_DIRNAME BATS_TEST_FILENAME BATS_FILE_TMPDIR
-  src="$out/src.sh"
-  awk -v names="$out/names" '
+  __src="$__out/src.sh"
+  awk -v names="$__out/names" '
     /^@test "/ {
       n++; name = $0
       sub(/^@test "/, "", name); sub(/" *\{ *$/, "", name)
       gsub(/\\\$/, "$", name); gsub(/\\"/, "\"", name)
       print name > names; print "__t_" n "() {"; next
     }
-    { print }' "$file" >"$src"
-  : >>"$out/names"
-  n=$(wc -l <"$out/names" | tr -d ' ')
+    { print }' "$__file" >"$__src"
+  : >>"$__out/names"
+  __n=$(wc -l <"$__out/names" | tr -d ' ')
   # shellcheck source=/dev/null
-  . "$src"
+  . "$__src"
   if declare -F setup_file >/dev/null; then
     # Runs in this process so that its exports reach the tests, as in bats.
     # A failing command ends the process through the EXIT trap.
-    trap '{ echo "not ok 1 setup_file failed"; sed "s/^/# /" "$out/setup_file.log"; } >"$out/tap"' EXIT
+    trap '{ echo "not ok 1 setup_file failed"; sed "s/^/# /" "$__out/setup_file.log"; } >"$__out/tap"' EXIT
     set -eE
-    setup_file >"$out/setup_file.log" 2>&1
+    setup_file >"$__out/setup_file.log" 2>&1
     set +eE
     trap - EXIT
   fi
@@ -168,47 +168,47 @@ run_file() {
   # commands it started as well.
   set -m
   trap __stop_test_groups INT TERM
-  i=1
-  while [ "$i" -le "$n" ]; do
+  __i=1
+  while [ "$__i" -le "$__n" ]; do
     read -r -n 1 _ <&3
     (
-      BATS_TEST_NUMBER=$i
-      BATS_TEST_TMPDIR="$out/t$i.tmp"
-      __skip_file="$out/t$i.skip"
+      BATS_TEST_NUMBER=$__i
+      BATS_TEST_TMPDIR="$__out/t$__i.tmp"
+      __skip_file="$__out/t$__i.skip"
       mkdir "$BATS_TEST_TMPDIR"
       export BATS_TEST_NUMBER BATS_TEST_TMPDIR
-      [ -z "${TIMING:-}" ] || t0=$(__now_ms)
-      (__test "$i") >"$out/t$i.log" 2>&1 </dev/null 3>&-
-      echo $? >"$out/t$i.rc"
-      [ -z "${t0:-}" ] || echo $(($(__now_ms) - t0)) >"$out/t$i.ms"
+      [ -z "${TIMING:-}" ] || __t0=$(__now_ms)
+      (__test "$__i") >"$__out/t$__i.log" 2>&1 </dev/null 3>&-
+      echo $? >"$__out/t$__i.rc"
+      [ -z "${__t0:-}" ] || echo $(($(__now_ms) - __t0)) >"$__out/t$__i.ms"
       printf x >&3
-    ) &
-    i=$((i + 1))
+    ) 2>/dev/null &
+    __i=$((__i + 1))
   done
   wait
   set +m
-  if declare -F teardown_file >/dev/null && ! (set -eE; teardown_file) >"$out/teardown_file.log" 2>&1; then
-    : >"$out/teardown_file.failed"
+  if declare -F teardown_file >/dev/null && ! (set -eE; teardown_file) >"$__out/teardown_file.log" 2>&1; then
+    : >"$__out/teardown_file.failed"
   fi
-  local fail=0 name rc msg ms
-  i=1
-  while IFS= read -r name; do
-    rc=missing msg="" ms=""
-    [ ! -f "$out/t$i.rc" ] || read -r rc <"$out/t$i.rc"
-    if [ -s "$out/t$i.skip" ]; then
-      read -r msg <"$out/t$i.skip"
-      echo "ok $i $name # skip $msg"
-    elif [ "$rc" = 0 ]; then
-      [ ! -f "$out/t$i.ms" ] || read -r ms <"$out/t$i.ms"
-      echo "ok $i $name${ms:+ # ${ms}ms}"
+  local __fail=0 __name __rc __msg __ms
+  __i=1
+  while IFS= read -r __name; do
+    __rc=missing __msg="" __ms=""
+    [ ! -f "$__out/t$__i.rc" ] || read -r __rc <"$__out/t$__i.rc"
+    if [ -s "$__out/t$__i.skip" ]; then
+      read -r __msg <"$__out/t$__i.skip"
+      echo "ok $__i $__name # skip $__msg"
+    elif [ "$__rc" = 0 ]; then
+      [ ! -f "$__out/t$__i.ms" ] || read -r __ms <"$__out/t$__i.ms"
+      echo "ok $__i $__name${__ms:+ # ${__ms}ms}"
     else
-      echo "not ok $i $name"
-      sed 's/^/# /' "$out/t$i.log"
-      fail=1
+      echo "not ok $__i $__name"
+      sed 's/^/# /' "$__out/t$__i.log"
+      __fail=1
     fi
-    i=$((i + 1))
-  done <"$out/names" >"$out/tap"
-  return $fail
+    __i=$((__i + 1))
+  done <"$__out/names" >"$__out/tap"
+  return $__fail
 }
 
 trap 'kill $(jobs -p) 2>/dev/null; exit 130' INT TERM
