@@ -152,6 +152,11 @@ run_file() {
     }
     { print }' "$__file" >"$__src"
   : >>"$__out/names"
+  local __line __declared=0
+  while IFS= read -r __line || [ -n "$__line" ]; do
+    case "$__line" in '@test '*) __declared=$((__declared + 1)) ;; esac
+  done <"$__file"
+  echo "$__declared" >"$__out/declared"
   __n=0
   local __dirs=("$BATS_FILE_TMPDIR") __name
   while IFS= read -r __name; do
@@ -214,11 +219,6 @@ run_file() {
     __i=$((__i + 1))
   done <"$__out/names" >"$__out/tap"
   rm -rf "$BATS_FILE_TMPDIR" "$__out"/t*.tmp
-  local __line __declared=0
-  while IFS= read -r __line || [ -n "$__line" ]; do
-    case "$__line" in '@test '*) __declared=$((__declared + 1)) ;; esac
-  done <"$__file"
-  echo "$__declared" >"$__out/declared"
   return $__fail
 }
 
