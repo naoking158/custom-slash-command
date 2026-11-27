@@ -1,0 +1,65 @@
+# Fixture for tests/parallel/test_parallel.bats. Named so that `bats -r`
+# does not pick it up: some tests here fail on purpose.
+
+bats_require_minimum_version 1.5.0
+
+setup_file() {
+  export FROM_SETUP_FILE=shared
+  echo one >"$BATS_FILE_TMPDIR/made-once"
+}
+
+setup() {
+  FROM_SETUP=yes
+}
+
+@test "passes" {
+  [ "$FROM_SETUP" = yes ]
+}
+
+@test "a failing test in the middle fails" {
+  [ 1 -eq 2 ]
+  true
+}
+
+@test "a failing last command fails" {
+  false
+}
+
+@test "run -0 with a non-zero status fails" {
+  run -0 false
+}
+
+@test "run -1 with status 1 passes" {
+  run -1 false
+}
+
+@test "lines drops empty lines and does not expand globs" {
+  run printf 'a\n\n*\nb [x]\n'
+  [ "${#lines[@]}" -eq 3 ]
+  [ "${lines[1]}" = "*" ]
+  [ "${lines[2]}" = "b [x]" ]
+}
+
+@test "separate-stderr keeps the streams apart" {
+  run --separate-stderr sh -c 'echo out; echo err >&2; exit 3'
+  [ "$status" -eq 3 ]
+  [ "$output" = out ]
+  [ "$stderr" = err ]
+}
+
+@test "skip ends the test as ok" {
+  skip "not here"
+  false
+}
+
+@test "setup_file exports and files reach every test" {
+  [ "$FROM_SETUP_FILE" = shared ]
+  [ "$(cat "$BATS_FILE_TMPDIR/made-once")" = one ]
+}
+
+@test "each test gets its own tmpdir" {
+  [ -d "$BATS_TEST_TMPDIR" ]
+  [ ! -e "$BATS_TEST_TMPDIR/mark" ]
+  touch "$BATS_TEST_TMPDIR/mark"
+}
+
