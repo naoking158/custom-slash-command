@@ -74,9 +74,11 @@ case "$1 $2" in
     if [ -f "$FAKE/start.json" ]; then cat "$FAKE/start.json"; exit "$(cat "$FAKE/start.rc" 2>/dev/null || echo 0)"; fi
     echo '{"ok":true,"result":{"dispatchId":"ctx_fake","state":"ready"}}' ;;
   "orchestration worker-show")
-    line="$(head -n 1 "$FAKE/states")"
-    if [ "$(wc -l <"$FAKE/states")" -gt 1 ]; then
-      tail -n +2 "$FAKE/states" >"$FAKE/states.next" && mv "$FAKE/states.next" "$FAKE/states"
+    states=()
+    while IFS= read -r l; do states+=("$l"); done <"$FAKE/states"
+    line="${states[0]:-}"
+    if [ "${#states[@]}" -gt 1 ]; then
+      printf '%s\n' "${states[@]:1}" >"$FAKE/states"
     fi
     set -- $line
     [ "$1" = fail ] && exit 1
