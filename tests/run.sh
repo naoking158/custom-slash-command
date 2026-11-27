@@ -6,7 +6,7 @@
 #
 # Exits non-zero when either run fails or bats is missing.
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 2
 command -v bats >/dev/null || { echo "run.sh: bats not found" >&2; exit 127; }
 status=0
 echo "# bash on PATH: $(bash -c 'echo $BASH_VERSION')"

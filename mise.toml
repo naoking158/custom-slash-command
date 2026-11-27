@@ -1,0 +1,11 @@
+[tools]
+bats = "1.14.0"
+shellcheck = "0.11.0"
+
+[tasks.test]
+description = "Run every bats suite with the bash on PATH, then with /bin/bash"
+run = "tests/run.sh"
+
+[tasks.lint]
+description = "shellcheck every tracked shell script"
+run = "git ls-files -z '*.sh' 'orca/bin/*' | xargs -0 shellcheck -S warning"
