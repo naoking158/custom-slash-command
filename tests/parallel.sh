@@ -253,9 +253,13 @@ for f in "${files[@]}"; do
   while IFS= read -r line; do
     case "$line" in *"child setpgid"*) ;; *) printf '%s\n' "$line" >&2 ;; esac
   done <"$BATS_SUITE_TMPDIR/f$k/stderr"
-  declared=0
-  [ ! -f "$BATS_SUITE_TMPDIR/f$k/declared" ] || read -r declared <"$BATS_SUITE_TMPDIR/f$k/declared"
-  expected=$((expected + declared))
+  if [ -f "$BATS_SUITE_TMPDIR/f$k/declared" ]; then
+    read -r declared <"$BATS_SUITE_TMPDIR/f$k/declared"
+    expected=$((expected + declared))
+  else
+    echo "# $f: its process ended before counting its tests"
+    failed=$((failed + 1))
+  fi
   if [ -f "$BATS_SUITE_TMPDIR/f$k/teardown_file.failed" ]; then
     echo "# teardown_file of $f failed:"
     sed 's/^/# /' "$BATS_SUITE_TMPDIR/f$k/teardown_file.log"
