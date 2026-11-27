@@ -218,7 +218,7 @@ run_file() {
     fi
     __i=$((__i + 1))
   done <"$__out/names" >"$__out/tap"
-  rm -rf "$BATS_FILE_TMPDIR" "$__out"/t*.tmp
+  rm -rf "${__dirs[@]}"
   return $__fail
 }
 
