@@ -22,8 +22,7 @@ setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
   METRICS="$REPO_ROOT/skills/retro/scripts/autopilot-metrics.sh"
   LOG_TASK="$REPO_ROOT/skills/autopilot/scripts/log-task.sh"
-  TMP="$(mktemp -d -t autopilot-metrics-test.XXXXXX)"
-  TMP="$(cd "$TMP" && pwd -P)"
+  TMP="$(cd "$BATS_TEST_TMPDIR" && pwd -P)"
   mkdir -p "$TMP/bin" "$TMP/home"
   export PATH="$TMP/bin:$PATH"
   export HOME="$TMP/home"
@@ -48,10 +47,6 @@ setup_file() {
   make_prs
   fake_gh
   export OLD8 C1 MANUAL
-}
-
-teardown() {
-  [ -n "${TMP:-}" ] && [ -d "$TMP" ] && rm -rf "$TMP"
 }
 
 # goal <slug> <started or -> — writes $STATE/o-r/<slug>/goal.md; progress.md comes from stdin.

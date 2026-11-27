@@ -140,7 +140,6 @@ run_file() {
   BATS_TEST_DIRNAME="$(cd "$(dirname "$__file")" && pwd)"
   BATS_TEST_FILENAME="$BATS_TEST_DIRNAME/$(basename "$__file")"
   BATS_FILE_TMPDIR="$__out/file.tmp"
-  mkdir -p "$BATS_FILE_TMPDIR"
   export BATS_TEST_DIRNAME BATS_TEST_FILENAME BATS_FILE_TMPDIR
   __src="$__out/src.sh"
   awk -v names="$__out/names" '
@@ -152,7 +151,13 @@ run_file() {
     }
     { print }' "$__file" >"$__src"
   : >>"$__out/names"
-  __n=$(wc -l <"$__out/names" | tr -d ' ')
+  __n=0
+  local __dirs=("$BATS_FILE_TMPDIR") __name
+  while IFS= read -r __name; do
+    __n=$((__n + 1))
+    __dirs+=("$__out/t$__n.tmp")
+  done <"$__out/names"
+  mkdir "${__dirs[@]}"
   # shellcheck source=/dev/null
   . "$__src"
   if declare -F setup_file >/dev/null; then
@@ -175,14 +180,13 @@ run_file() {
       BATS_TEST_NUMBER=$__i
       BATS_TEST_TMPDIR="$__out/t$__i.tmp"
       __skip_file="$__out/t$__i.skip"
-      mkdir "$BATS_TEST_TMPDIR"
       export BATS_TEST_NUMBER BATS_TEST_TMPDIR
       [ -z "${TIMING:-}" ] || __t0=$(__now_ms)
       (__test "$__i") >"$__out/t$__i.log" 2>&1 </dev/null 3>&-
       echo $? >"$__out/t$__i.rc"
       [ -z "${__t0:-}" ] || echo $(($(__now_ms) - __t0)) >"$__out/t$__i.ms"
       printf x >&3
-    ) 2>/dev/null &
+    ) &
     __i=$((__i + 1))
   done
   wait
@@ -190,7 +194,7 @@ run_file() {
   if declare -F teardown_file >/dev/null && ! (set -eE; teardown_file) >"$__out/teardown_file.log" 2>&1; then
     : >"$__out/teardown_file.failed"
   fi
-  local __fail=0 __name __rc __msg __ms
+  local __fail=0 __rc __msg __ms
   __i=1
   while IFS= read -r __name; do
     __rc=missing __msg="" __ms=""
@@ -212,10 +216,18 @@ run_file() {
 }
 
 trap 'kill $(jobs -p) 2>/dev/null; exit 130' INT TERM
+outs=()
+k=0
+while [ "$k" -lt ${#files[@]} ]; do
+  outs+=("$BATS_SUITE_TMPDIR/f$k")
+  k=$((k + 1))
+done
+mkdir "${outs[@]}"
 k=0
 for f in "${files[@]}"; do
-  mkdir -p "$BATS_SUITE_TMPDIR/f$k"
-  (run_file "$f" "$BATS_SUITE_TMPDIR/f$k") &
+  # bash reports a failed setpgid of a test's process group on stderr; the
+  # file's other errors are shown after the run.
+  (run_file "$f" "$BATS_SUITE_TMPDIR/f$k") 2>"$BATS_SUITE_TMPDIR/f$k/stderr" &
   k=$((k + 1))
 done
 wait
@@ -231,6 +243,9 @@ for f in "${files[@]}"; do
       "not ok "*) total=$((total + 1)) failed=$((failed + 1)) ;;
     esac
   done <"$BATS_SUITE_TMPDIR/f$k/tap"
+  while IFS= read -r line; do
+    case "$line" in *"child setpgid"*) ;; *) printf '%s\n' "$line" >&2 ;; esac
+  done <"$BATS_SUITE_TMPDIR/f$k/stderr"
   expected=$((expected + $(grep -c '^@test ' "$f")))
   if [ -f "$BATS_SUITE_TMPDIR/f$k/teardown_file.failed" ]; then
     echo "# teardown_file of $f failed:"

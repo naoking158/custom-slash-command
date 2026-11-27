@@ -46,7 +46,8 @@ case "$outcome" in
   *) invalid "outcome must be merged, draft, stopped or skipped: '$outcome'" ;;
 esac
 
-. "$(cd "$(dirname "$0")" && pwd)/tsv.sh"
+case "$0" in */*) self_dir="${0%/*}" ;; *) self_dir=. ;; esac
+. "$(cd "$self_dir" && pwd)/tsv.sh"
 
 tsv_append "$logfile" $'ts\ttask_id\tbranch\tpr\treview_rounds\tverify\tci\toutcome' \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$task_id" "$branch" "$pr" "$rounds" "$verify" "$ci" "$outcome"

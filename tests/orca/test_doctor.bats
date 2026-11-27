@@ -13,7 +13,7 @@ load ../fake_bin
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
   DOCTOR="$REPO_ROOT/orca/bin/doctor"
-  TMP="$(mktemp -d -t orca-doctor-test.XXXXXX)"
+  TMP="$BATS_TEST_TMPDIR"
   FAKE_BIN="$TMP/bin"
   mkdir -p "$FAKE_BIN"
   export PATH="$FAKE_BIN:$(path_without_orca)"
@@ -30,10 +30,6 @@ path_without_orca() {
     out="${out:+$out:}$dir"
   done
   printf '%s' "$out"
-}
-
-teardown() {
-  [ -n "${TMP:-}" ] && [ -d "$TMP" ] && rm -rf "$TMP"
 }
 
 # fake_orca STATUS_JSON [EXIT] — an orca whose `status --json` prints STATUS_JSON.

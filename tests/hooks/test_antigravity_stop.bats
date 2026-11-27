@@ -11,12 +11,8 @@
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   HOOK="$REPO_ROOT/scripts/hooks/antigravity-stop.sh"
-  TMP="$(mktemp -d -t ag-stop-test.XXXXXX)"
+  TMP="$BATS_TEST_TMPDIR"
   export MY_TOOLKIT_DATA="$TMP/my-toolkit"
-}
-
-teardown() {
-  [ -n "${TMP:-}" ] && [ -d "$TMP" ] && rm -rf "$TMP"
 }
 
 # stop_payload INPUT — the Stop payload agy 1.5.17 sends, trimmed.

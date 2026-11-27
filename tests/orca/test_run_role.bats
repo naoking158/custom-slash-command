@@ -18,8 +18,7 @@ setup() {
   export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
   RUN_ROLE="$REPO_ROOT/orca/bin/run-role"
-  TMP="$(mktemp -d -t orca-run-role-test.XXXXXX)"
-  TMP="$(cd "$TMP" && pwd -P)"
+  TMP="$(cd "$BATS_TEST_TMPDIR" && pwd -P)"
   FAKE_BIN="$TMP/bin"
   mkdir -p "$FAKE_BIN" "$TMP/home" "$TMP/in"
   export PATH="$FAKE_BIN:$(path_without_orca)"
@@ -38,10 +37,6 @@ setup() {
   printf '# security\n' >"$TMP/in/security.md"
   printf 'plan: secret intent\n' >"$TMP/in/plan.md"
   fake_orca
-}
-
-teardown() {
-  [ -n "${TMP:-}" ] && [ -d "$TMP" ] && rm -rf "$TMP"
 }
 
 # path_without_orca — $PATH minus every directory holding an orca executable.

@@ -5,7 +5,8 @@
 # ~/.claude/my-toolkit/orca.conf. Sourced by orca/bin/run-role and
 # scripts/install.sh.
 
-ORCA_PROFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../profiles" && pwd -P)"
+case "${BASH_SOURCE[0]}" in */*) profile_lib_dir="${BASH_SOURCE[0]%/*}" ;; *) profile_lib_dir=. ;; esac
+ORCA_PROFILES_DIR="$(cd "$profile_lib_dir/../profiles" && pwd -P)"
 ORCA_CONF="$HOME/.claude/my-toolkit/orca.conf"
 
 # orca_profile_name — print the selected profile name, empty when none.

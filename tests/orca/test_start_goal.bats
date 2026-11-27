@@ -28,8 +28,7 @@ setup() {
   export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
   START_GOAL="$REPO_ROOT/orca/bin/start-goal"
-  TMP="$(mktemp -d -t orca-start-goal-test.XXXXXX)"
-  TMP="$(cd "$TMP" && pwd -P)"
+  TMP="$(cd "$BATS_TEST_TMPDIR" && pwd -P)"
   FAKE_BIN="$TMP/bin"
   mkdir -p "$FAKE_BIN" "$TMP/home" "$TMP/wt"
   export PATH="$FAKE_BIN:$(path_without_orca)"
@@ -41,10 +40,6 @@ setup() {
   unset ORCA_TERMINAL_HANDLE
   make_repo
   fake_orca
-}
-
-teardown() {
-  [ -n "${TMP:-}" ] && [ -d "$TMP" ] && rm -rf "$TMP"
 }
 
 # path_without_orca — $PATH minus every directory holding an orca executable.

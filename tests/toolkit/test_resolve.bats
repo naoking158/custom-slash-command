@@ -10,7 +10,7 @@ setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   TOOLKIT_LIB="$REPO_ROOT/scripts/lib/toolkit.sh"
 
-  TMP="$(mktemp -d -t resolve-test.XXXXXX)"
+  TMP="$BATS_TEST_TMPDIR"
   export HOME="$TMP"
   mkdir -p "$HOME/.claude/skills"
 
@@ -20,10 +20,6 @@ setup() {
   echo '{"name":"my"}' > "$FAKE_REPO/.claude-plugin/plugin.json"
 
   unset CLAUDE_TOOLKIT_REPO CLAUDE_PLUGIN_ROOT CLAUDE_SKILL_DIR || true
-}
-
-teardown() {
-  [ -n "${TMP:-}" ] && [ -d "$TMP" ] && rm -rf "$TMP"
 }
 
 resolved() { bash "$TOOLKIT_LIB"; }

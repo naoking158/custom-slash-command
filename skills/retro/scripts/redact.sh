@@ -17,7 +17,8 @@
 set -euo pipefail
 
 # Locate the deny-list. Allow override via REDACT_DENYLIST for tests.
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+case "$0" in */*) self_dir="${0%/*}" ;; *) self_dir=. ;; esac
+SCRIPT_DIR="$(cd "$self_dir" && pwd)"
 DENYLIST="${REDACT_DENYLIST:-${SCRIPT_DIR}/redact.denylist}"
 
 # Per-pattern match counts (token-level, NOT "did the pattern fire" flags).
