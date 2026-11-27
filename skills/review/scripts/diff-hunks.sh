@@ -53,7 +53,7 @@ fi
 
 # BSD awk fails on bytes that are not UTF-8; GNU awk and mawk parse them. Check
 # the encoding here so that every platform rejects such a patch the same way.
-if ! perl -ne 'utf8::decode($_) or exit 1' "$PATCH_FILE"; then
+if ! perl -ne 'utf8::decode($_) or exit 1' < "$PATCH_FILE"; then
   echo "diff-hunks.sh: cannot parse $PATCH_FILE (non-UTF-8 patch)" >&2
   exit 1
 fi
