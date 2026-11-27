@@ -132,11 +132,16 @@ git worktree list --porcelain | awk '
 
 # Commit time of every worktree head, and the commit of every origin branch,
 # each read once.
-heads=()
-while IFS=$'\t' read -r _ h _; do [ -z "$h" ] || heads+=("$h"); done < <(tail -n +2 "$tmp/worktrees.tsv")
+heads=() branches=()
+while IFS=$'\t' read -r _ h _ b; do
+  [ -z "$h" ] || heads+=("$h")
+  [ -z "$b" ] || branches+=("refs/remotes/origin/$b")
+done < <(tail -n +2 "$tmp/worktrees.tsv")
 : >"$tmp/head_ts"
 [ ${#heads[@]} -eq 0 ] || git log --no-walk=unsorted --format='%H %ct' "${heads[@]}" >"$tmp/head_ts" 2>/dev/null
-git for-each-ref --format='%(refname:strip=3)%09%(objectname)' refs/remotes/origin/ >"$tmp/remotes.tsv" 2>/dev/null
+: >"$tmp/remotes.tsv"
+[ ${#branches[@]} -eq 0 ] \
+  || git for-each-ref --format='%(refname:strip=3)%09%(objectname)' "${branches[@]}" >"$tmp/remotes.tsv" 2>/dev/null
 
 # commit_time HEAD — the commit time of HEAD, empty when it cannot be read.
 commit_time() {
@@ -160,7 +165,8 @@ origin_branch() {
 git_dir() {
   local line
   if [ -d "$1/.git" ]; then printf '%s' "$1/.git"; return 0; fi
-  [ -f "$1/.git" ] && IFS= read -r line <"$1/.git" || return 1
+  [ -f "$1/.git" ] || return 1
+  { IFS= read -r line || [ -n "$line" ]; } <"$1/.git" || return 1
   case "$line" in gitdir:\ /*) printf '%s' "${line#gitdir: }" ;; gitdir:\ *) printf '%s/%s' "$1" "${line#gitdir: }" ;; *) return 1 ;; esac
 }
 

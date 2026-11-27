@@ -212,7 +212,7 @@ spec="$WORK/spec.md"
   printf -- '- Do not ask questions. Make each judgment call yourself and state it in the result.\n'
 } > "$spec"
 
-[ ! -e "$OUT" ] && [ ! -L "$OUT" ] || rm -f "$OUT"
+if [ -e "$OUT" ] || [ -L "$OUT" ]; then rm -f "$OUT"; fi
 worktree="current"
 [ -z "$cwd" ] || worktree="path:$cwd"
 from_args=()
