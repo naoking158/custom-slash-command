@@ -31,7 +31,7 @@ setup() {
   export GH_RULES="deletion pull_request required_status_checks"
   mkdir -p "$TMP/bin"
   fake_bin "$TMP/bin/gh" <<'STUB'
-#!/usr/bin/env bash
+#!/bin/bash
 echo "$*" >>"$GH_LOG"
 case "${GH_FAIL:-}" in
   "") ;;
@@ -119,11 +119,11 @@ record() {
 
 @test "guard: a configured repository without a record cannot merge, and the reason says how to check" {
   payload="$(jq -cn --arg d "$REPO" '{tool_name:"Bash",cwd:$d,tool_input:{command:"gh pr merge 3 --squash"}}')"
-  run bash -c 'printf "%s" "$1" | "$2"' _ "$payload" "$GUARD"
+  run bash "$GUARD" < <(printf '%s' "$payload")
   [ "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = "deny" ]
   [[ "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason')" == *"$REPO_ROOT/scripts/lib/autonomy.sh \"$REPO\" "* ]]
 
   record "$(date +%s)"
-  run bash -c 'printf "%s" "$1" | "$2"' _ "$payload" "$GUARD"
+  run bash "$GUARD" < <(printf '%s' "$payload")
   [ -z "$output" ]
 }
