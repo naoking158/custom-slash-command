@@ -14,7 +14,7 @@ setup() {
   export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   HOOK="$REPO_ROOT/scripts/hooks/antigravity-guard.sh"
-  TMP="$(mktemp -d -t ag-guard-test.XXXXXX)"
+  TMP="$BATS_TEST_TMPDIR"
   REPO="$TMP/repo"
   git init -q -b main "$REPO"
   git -C "$REPO" -c user.email=t@example.com -c user.name=t commit -q --allow-empty -m init
@@ -23,10 +23,6 @@ setup() {
   export MY_TOOLKIT_DATA="$TMP/data"
   mkdir -p "$MY_TOOLKIT_DATA/ship-ready"
   date +%s >"$MY_TOOLKIT_DATA/ship-ready/me__app"
-}
-
-teardown() {
-  [ -n "${TMP:-}" ] && [ -d "$TMP" ] && rm -rf "$TMP"
 }
 
 # run_command_payload CMD — the PreToolUse payload Antigravity documents.

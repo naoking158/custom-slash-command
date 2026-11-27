@@ -13,7 +13,7 @@ load ../fake_bin
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   WAIT_CI="$REPO_ROOT/scripts/lib/wait-ci.sh"
-  TMP="$(mktemp -d -t wait-ci-test.XXXXXX)"
+  TMP="$BATS_TEST_TMPDIR"
   mkdir -p "$TMP/bin"
   # Stub gh: `workflow list` prints $GH_WORKFLOWS; `api` finds the commit
   # unless $GH_NO_COMMIT is set; each `run list` prints the next line of
@@ -38,10 +38,6 @@ GH
   export PATH="$TMP/bin:$PATH"
   export WAIT_CI_INTERVAL=0
   SHA=0123456789abcdef0123456789abcdef01234567
-}
-
-teardown() {
-  [ -n "${TMP:-}" ] && [ -d "$TMP" ] && rm -rf "$TMP"
 }
 
 run_of() {

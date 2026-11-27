@@ -20,7 +20,7 @@ setup() {
   export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
   AUDIT="$REPO_ROOT/scripts/lib/worktree-audit.sh"
-  TMP="$(cd "$(mktemp -d -t worktree-audit-test.XXXXXX)" && pwd -P)"
+  TMP="$(cd "$BATS_TEST_TMPDIR" && pwd -P)"
   mkdir -p "$TMP/bin" "$TMP/home"
   export HOME="$TMP/home"
   export PATH="$TMP/bin:$(path_without_orca)"
@@ -36,10 +36,6 @@ SH
   REPO="$TMP/repo"
   git init -q -b main "$REPO"
   git -C "$REPO" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
-}
-
-teardown() {
-  [ -n "${TMP:-}" ] && [ -d "$TMP" ] && rm -rf "$TMP"
 }
 
 # path_without_orca — $PATH minus every directory holding an orca executable.

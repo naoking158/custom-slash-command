@@ -12,7 +12,7 @@ setup() {
   INSTALL="$REPO_ROOT/scripts/install.sh"
   PLUGIN_LINK=".claude/skills/my"
 
-  TMP="$(mktemp -d -t install-test.XXXXXX)"
+  TMP="$BATS_TEST_TMPDIR"
   export HOME="$TMP"
   unset MY_ORCA_PROFILE
   FAKE_BIN="$TMP/bin"
@@ -34,10 +34,6 @@ path_without_orca() {
 # fake_orca — put an orca on PATH that fails if install.sh ever runs it.
 fake_orca() {
   printf '#!/bin/bash\nexit 99\n' | fake_bin "$FAKE_BIN/orca"
-}
-
-teardown() {
-  [ -n "${TMP:-}" ] && [ -d "$TMP" ] && rm -rf "$TMP"
 }
 
 assert_links_to_repo() {

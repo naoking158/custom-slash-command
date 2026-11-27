@@ -12,12 +12,8 @@ setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   SESSION_END="$REPO_ROOT/scripts/hooks/session-end.sh"
   PROMPT_CAPTURE="$REPO_ROOT/scripts/hooks/prompt-capture.sh"
-  TMP="$(mktemp -d -t hooks-test.XXXXXX)"
+  TMP="$BATS_TEST_TMPDIR"
   export MY_TOOLKIT_DATA="$TMP/my-toolkit"
-}
-
-teardown() {
-  [ -n "${TMP:-}" ] && [ -d "$TMP" ] && rm -rf "$TMP"
 }
 
 payload() {

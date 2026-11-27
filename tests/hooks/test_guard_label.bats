@@ -12,17 +12,13 @@ setup() {
   export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   GUARD="$REPO_ROOT/scripts/hooks/outbound-guard.sh"
-  TMP="$(mktemp -d -t guard-label.XXXXXX)"
+  TMP="$BATS_TEST_TMPDIR"
   REPO="$TMP/repo"
   git init -q -b main "$REPO"
   git -C "$REPO" remote add origin git@github.com:me/app.git
   git -C "$REPO" -c user.email=t@example.com -c user.name=t commit -q --allow-empty -m init
   git -C "$REPO" checkout -q -b feature/x
   export MY_AUTONOMY_CONF="$TMP/autonomy.conf"
-}
-
-teardown() {
-  [ -n "${TMP:-}" ] && [ -d "$TMP" ] && rm -rf "$TMP"
 }
 
 decision_for() {
