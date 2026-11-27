@@ -15,7 +15,7 @@ setup() {
   echo "$output" > "$TMP/out.txt"
   # bats run drops the final newline from $output; recreate by comparing payloads
   # via diff on a piped stdin so we are robust to that.
-  diff <("$REDACT" "$FIXTURES/clean.txt" 2>/dev/null) "$FIXTURES/clean.txt"
+  diff <(bash "$REDACT" "$FIXTURES/clean.txt" 2>/dev/null) "$FIXTURES/clean.txt"
 }
 
 @test "sk- API key is masked and exit code is 2" {

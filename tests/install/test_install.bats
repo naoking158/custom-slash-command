@@ -320,7 +320,7 @@ select_profile() {
 @test "orca present with an unknown profile: check fails" {
   fake_orca
   select_profile nope
-  MY_ORCA_PROFILE=work "$INSTALL" >/dev/null
+  MY_ORCA_PROFILE=work bash "$INSTALL" >/dev/null
   run bash "$INSTALL" --check
   [ "$status" -ne 0 ]
   [[ "$output" == *"MISSING"*"'nope'"* ]]
