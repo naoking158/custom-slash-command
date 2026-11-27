@@ -186,16 +186,20 @@ printf '%s\n' "$*" >>"$FAKE/gh.calls"
 [ -f "$FAKE/gh-fail" ] && { echo "gh: not logged in" >&2; exit 1; }
 arg() { local want="$1"; shift; while [ $# -gt 0 ]; do [ "$1" = "$want" ] && { printf '%s' "$2"; return; }; shift; done; }
 q="$(arg -q "$@")"
-out() { if [ -n "$q" ]; then jq -r "$q"; else cat; fi; }
+# answer FILTER [JQ ARGS] — prs.json through FILTER, then through -q when given.
+answer() {
+  local filter="$1"; shift
+  if [ -n "$q" ]; then jq -r "$@" "$filter | $q" "$FAKE/prs.json"; else jq "$@" "$filter" "$FAKE/prs.json"; fi
+}
 case "$1 $2" in
   "pr list")
     search="$(arg --search "$@")"
     case "$search" in
-      created:*) jq 'map(del(.rest_comments, .rest_reviews))' "$FAKE/prs.json" | out ;;
-      *) jq --arg s "$search" 'map(select((.mergeCommit.oid // "") | startswith($s)))' "$FAKE/prs.json" | out ;;
+      created:*) answer 'map(del(.rest_comments, .rest_reviews))' ;;
+      *) answer 'map(select((.mergeCommit.oid // "") | startswith($s)))' --arg s "$search" ;;
     esac ;;
   "pr view")
-    jq --argjson n "$3" '.[] | select(.number == $n)' "$FAKE/prs.json" | out ;;
+    answer '.[] | select(.number == $n)' --argjson n "$3" ;;
   "api --paginate")
     IFS=/ read -r _ _ _ _ n _ <<<"$3"
     case "$3" in
