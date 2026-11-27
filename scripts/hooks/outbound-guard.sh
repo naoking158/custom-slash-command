@@ -5,6 +5,8 @@
 #   - `gh pr create` must open a draft (--draft / -d). Draft PRs skip the
 #     reviewer auto-assignment, so the author can self-review first.
 #   - `gh pr ready` and API calls that mark a PR ready for review are denied.
+#   - Adding the label `human-approved` through gh is denied in every mode: it
+#     records a person's approval of a guardrail change.
 #   - `git push` is denied for force / delete / mirror / --all pushes and for
 #     pushes whose destination is the default branch (main, master, origin/HEAD).
 #   - Outbound text (commit messages, PR / issue bodies and comments) must not
@@ -300,6 +302,15 @@ judge_push() {
   done
   return 0
 }
+
+# --- approval label ------------------------------------------------------------
+# `human-approved` on a pull request is a person's approval of a guardrail
+# change (scripts/ci/guardrail.sh). Only a person adds it, in the GitHub UI.
+if printf '%s' "$cmd" | tr '\n' ' ' | grep -qE \
+  -e '(^|[^[:alnum:]_.-])gh[[:space:]].*(--add-label|--label|-l)[[:space:]=]+["\x27]?([^[:space:]"\x27,]+,)*human-approved' \
+  -e '(^|[^[:alnum:]_.-])gh[[:space:]]+api[[:space:]].*(labels.*human-approved|human-approved.*labels)'; then
+  decide deny "label human-approved は人の承認を表す。agent は付けず、人が GitHub の画面で付ける"
+fi
 
 text_dir=""
 api_dir=""
