@@ -68,8 +68,8 @@ payload_of() {
 }
 
 @test "diff-hunks: a non-UTF-8 patch exits 1, not 2" {
-  # awk exits 2 on a multibyte conversion failure, which would otherwise be
-  # indistinguishable from "no hunks" and get reported as an empty diff.
+  # Exit 2 means "no hunks" and is reported as an empty diff; a patch that is
+  # not UTF-8 must not look like one.
   {
     printf 'diff --git a/bin/data b/bin/data\nindex 111..222 100644\n'
     printf -- '--- a/bin/data\n+++ b/bin/data\n@@ -1,1 +1,1 @@\n-old\n+'
@@ -85,6 +85,21 @@ payload_of() {
     --out "$TMP/x.html" --template "$FIXTURES/template-min.html"
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"non-UTF-8"* ]]
+}
+
+@test "diff-hunks: a multibyte character across the 1024-byte boundary is accepted" {
+  # macOS iconv rejects this valid patch when its output goes to /dev/null.
+  header='diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,1 +1,1 @@\n-old\n+'
+  pad=$((1022 - $(printf "$header" | wc -c)))
+  {
+    printf "$header"
+    head -c "$pad" /dev/zero | tr '\0' 'a'
+    printf '\xe3\x81\x82\n'
+  } > "$TMP/straddle.patch"
+
+  run "$SCRIPTS/diff-hunks.sh" --diff "$TMP/straddle.patch" --out "$TMP/out"
+  [ "$status" -eq 0 ]
+  [ "$(wc -l < "$TMP/out/hunks.tsv" | tr -d ' ')" -eq 1 ]
 }
 
 @test "diff-hunks: 1200 hunks widen the id to 4 digits" {
