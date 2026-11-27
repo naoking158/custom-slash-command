@@ -45,14 +45,12 @@ read_input_to_file() {
 }
 
 # count_matches — Count tokens matching an ERE pattern in a file.
-# Uses grep -oE | wc -l so multiple matches per line are counted (not boolean).
-# Returns "0" if grep finds nothing (suppresses grep's exit=1 to avoid
-# tripping `set -e` / `pipefail` in the caller).
+# Counts the lines grep -oE prints, so multiple matches per line are counted
+# (not boolean). Prints "0" if grep finds nothing.
 count_matches() {
-  local pattern="$1" file="$2"
-  local n
-  n="$( { grep -oE "$pattern" "$file" 2>/dev/null || true; } | wc -l | tr -d ' ')"
-  printf '%s' "${n:-0}"
+  local pattern="$1" file="$2" n=0 _
+  while IFS= read -r _; do n=$((n + 1)); done < <(grep -oE "$pattern" "$file" 2>/dev/null)
+  printf '%s' "$n"
 }
 
 # apply — Rewrite a file in-place using a sed expression, via a temp file
@@ -60,35 +58,34 @@ count_matches() {
 # differences between BSD/GNU.
 apply() {
   local expr="$1" file="$2"
-  local tmp
-  tmp="$(mktemp -t redact.XXXXXX)"
-  sed -E "$expr" "$file" > "$tmp"
-  mv -- "$tmp" "$file"
+  sed -E "$expr" "$file" > "$file.sed"
+  mv -- "$file.sed" "$file"
 }
 
-# mask_file — Apply all redaction patterns to a staged file.
+# mask_file — Apply all redaction patterns to a staged file. A pattern that
+# matches nothing leaves the file as it is, so its sed is skipped.
 mask_file() {
   local f="$1"
 
   # 1. Anthropic-style API keys: sk-XXXXXXXXXXXXXXXXXXXX (20+ alnum)
   N_SK=$(count_matches 'sk-[A-Za-z0-9]{20,}' "$f")
-  apply 's/sk-[A-Za-z0-9]{20,}/[REDACTED:sk-key]/g' "$f"
+  [ "$N_SK" -eq 0 ] || apply 's/sk-[A-Za-z0-9]{20,}/[REDACTED:sk-key]/g' "$f"
 
   # 2. GitHub personal-access tokens: ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX (30+)
   N_GHP=$(count_matches 'ghp_[A-Za-z0-9]{30,}' "$f")
-  apply 's/ghp_[A-Za-z0-9]{30,}/[REDACTED:ghp-token]/g' "$f"
+  [ "$N_GHP" -eq 0 ] || apply 's/ghp_[A-Za-z0-9]{30,}/[REDACTED:ghp-token]/g' "$f"
 
   # 3. AWS access key IDs: AKIA + 16 uppercase alnum
   N_AWS=$(count_matches 'AKIA[A-Z0-9]{16}' "$f")
-  apply 's/AKIA[A-Z0-9]{16}/[REDACTED:aws-key]/g' "$f"
+  [ "$N_AWS" -eq 0 ] || apply 's/AKIA[A-Z0-9]{16}/[REDACTED:aws-key]/g' "$f"
 
   # 4. Absolute home paths: /Users/<name>/  →  $HOME/
   N_HOME=$(count_matches '/Users/[^/[:space:]]+/' "$f")
-  apply 's|/Users/[^/[:space:]]+/|$HOME/|g' "$f"
+  [ "$N_HOME" -eq 0 ] || apply 's|/Users/[^/[:space:]]+/|$HOME/|g' "$f"
 
   # 5. .env style RHS: FOO_TOKEN=..., FOO_SECRET=..., FOO_KEY=...
   N_ENV=$(count_matches '^[A-Z0-9_]+_(TOKEN|SECRET|KEY)=.*$' "$f")
-  apply 's/^([A-Z0-9_]+_(TOKEN|SECRET|KEY))=.*$/\1=[REDACTED]/g' "$f"
+  [ "$N_ENV" -eq 0 ] || apply 's/^([A-Z0-9_]+_(TOKEN|SECRET|KEY))=.*$/\1=[REDACTED]/g' "$f"
 
   # 6. Deny-list — user-configured tokens. Each non-comment, non-empty line
   # is matched literally (grep -F) and substituted via sed; metacharacters
