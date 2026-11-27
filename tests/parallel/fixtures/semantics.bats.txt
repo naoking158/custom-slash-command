@@ -41,6 +41,10 @@ setup() {
   run ! false
 }
 
+@test "an unset variable expands to nothing, as under bats" {
+  [ -z "$NOT_SET_ANYWHERE" ]
+}
+
 @test "lines drops empty lines and does not expand globs" {
   run printf 'a\n\n*\nb [x]\n'
   [ "${#lines[@]}" -eq 3 ]

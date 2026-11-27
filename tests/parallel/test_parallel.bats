@@ -30,7 +30,7 @@ verdicts() {
 
 @test "the summary counts every test and the exit status reports a failure" {
   run -1 "$RUNNER" -j 2 "$FIXTURE"
-  [ "${lines[${#lines[@]}-1]}" = "# 12 tests, 4 failed" ]
+  [ "${lines[${#lines[@]}-1]}" = "# 13 tests, 4 failed" ]
 }
 
 @test "bad -j exits 2" {

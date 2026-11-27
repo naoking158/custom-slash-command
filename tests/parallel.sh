@@ -126,9 +126,17 @@ __now_ms() {
   echo $((t / 1000))
 }
 
+# __stop_test_groups — stop the process group of every running test and exit.
+__stop_test_groups() {
+  local pid
+  for pid in $(jobs -p); do kill -TERM -- "-$pid" 2>/dev/null; done
+  exit 130
+}
+
 # run_file FILE OUTDIR — run the tests of FILE and write its TAP to OUTDIR/tap.
 run_file() {
   local file="$1" out="$2" src n i t0
+  set +u
   BATS_TEST_DIRNAME="$(cd "$(dirname "$file")" && pwd)"
   BATS_TEST_FILENAME="$BATS_TEST_DIRNAME/$(basename "$file")"
   BATS_FILE_TMPDIR="$out/file.tmp"
@@ -156,7 +164,10 @@ run_file() {
     set +eE
     trap - EXIT
   fi
-  trap 'kill $(jobs -p) 2>/dev/null; exit 130' INT TERM
+  # Each test runs in its own process group, so that an interrupt stops the
+  # commands it started as well.
+  set -m
+  trap __stop_test_groups INT TERM
   i=1
   while [ "$i" -le "$n" ]; do
     read -r -n 1 _ <&3
@@ -175,7 +186,10 @@ run_file() {
     i=$((i + 1))
   done
   wait
-  if declare -F teardown_file >/dev/null; then teardown_file >/dev/null 2>&1 || true; fi
+  set +m
+  if declare -F teardown_file >/dev/null && ! (set -eE; teardown_file) >"$out/teardown_file.log" 2>&1; then
+    : >"$out/teardown_file.failed"
+  fi
   local fail=0 name rc msg ms
   i=1
   while IFS= read -r name; do
@@ -218,6 +232,11 @@ for f in "${files[@]}"; do
     esac
   done <"$BATS_SUITE_TMPDIR/f$k/tap"
   expected=$((expected + $(grep -c '^@test ' "$f")))
+  if [ -f "$BATS_SUITE_TMPDIR/f$k/teardown_file.failed" ]; then
+    echo "# teardown_file of $f failed:"
+    sed 's/^/# /' "$BATS_SUITE_TMPDIR/f$k/teardown_file.log"
+    failed=$((failed + 1))
+  fi
   k=$((k + 1))
 done
 echo "# $total tests, $failed failed"
