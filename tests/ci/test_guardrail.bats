@@ -22,7 +22,7 @@ setup() {
   # The stub answers with GitHub's JSON and applies the --jq filter itself, so
   # the filters in guardrail.sh are part of what is tested.
   fake_bin "$TMP/bin/gh" <<'STUB'
-#!/usr/bin/env bash
+#!/bin/bash
 echo "$*" >>"$GH_LOG"
 filter="." path=""
 while [ $# -gt 0 ]; do
@@ -61,7 +61,7 @@ labeled_at() {
 }
 
 @test "paths: prints the guardrails and exits 1" {
-  run bash -c 'printf "%s\n" README.md scripts/hooks/outbound-guard.sh .github/workflows/ci.yml skills/autopilot/SKILL.md skills/autopilot/goal-template.md | "$1" paths' _ "$GUARDRAIL"
+  run bash "$GUARDRAIL" paths < <(printf "%s\n" README.md scripts/hooks/outbound-guard.sh .github/workflows/ci.yml skills/autopilot/SKILL.md skills/autopilot/goal-template.md)
   [ "$status" -eq 1 ]
   [ "$output" = "scripts/hooks/outbound-guard.sh
 .github/workflows/ci.yml
@@ -69,7 +69,7 @@ skills/autopilot/SKILL.md" ]
 }
 
 @test "paths: exits 0 and prints nothing when no guardrail is named" {
-  run bash -c 'printf "%s\n" README.md skills/review/SKILL.md scripts/lib/toolkit.sh | "$1" paths' _ "$GUARDRAIL"
+  run bash "$GUARDRAIL" paths < <(printf "%s\n" README.md skills/review/SKILL.md scripts/lib/toolkit.sh)
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
@@ -77,7 +77,7 @@ skills/autopilot/SKILL.md" ]
 @test "paths: the check script, the CI definition and what applies the deny rules are guardrails" {
   for name in scripts/ci/guardrail.sh mise.toml tests/run.sh orca/settings/goal.deny.json orca/bin/start-goal \
     hooks.json scripts/lib/autonomy.sh scripts/lib/wait-ci.sh .claude/settings.json; do
-    run bash -c 'echo "$2" | "$1" paths' _ "$GUARDRAIL" "$name"
+    run bash "$GUARDRAIL" paths < <(echo "$name")
     [ "$status" -eq 1 ]
   done
 }

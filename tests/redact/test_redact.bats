@@ -77,13 +77,13 @@ setup() {
 }
 
 @test "stdin input (no args) is supported" {
-  run bash -c 'echo "sk-abcdefghijklmnopqrstuvwxyz0123" | "$0"' "$REDACT"
+  run bash "$REDACT" < <(echo "sk-abcdefghijklmnopqrstuvwxyz0123")
   [ "$status" -eq 2 ]
   [[ "$output" == *"[REDACTED:sk-key]"* ]]
 }
 
 @test "stdin input via explicit '-' is supported" {
-  run bash -c 'echo "sk-abcdefghijklmnopqrstuvwxyz0123" | "$0" -' "$REDACT"
+  run bash "$REDACT" - < <(echo "sk-abcdefghijklmnopqrstuvwxyz0123")
   [ "$status" -eq 2 ]
   [[ "$output" == *"[REDACTED:sk-key]"* ]]
 }

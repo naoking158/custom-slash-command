@@ -23,7 +23,7 @@ payload() {
 # --- session-end.sh -----------------------------------------------------------
 
 @test "session-end: appends one index line with the payload fields" {
-  run bash -c "printf '%s' '$(payload '""')' | \"$SESSION_END\""
+  run bash "$SESSION_END" < <(printf '%s' "$(payload '""')")
   [ "$status" -eq 0 ]
   [ -f "$MY_TOOLKIT_DATA/sessions.jsonl" ]
   line="$(cat "$MY_TOOLKIT_DATA/sessions.jsonl")"
@@ -41,53 +41,53 @@ payload() {
 }
 
 @test "session-end: malformed stdin still exits 0 and writes nothing" {
-  run bash -c "printf 'not json at all' | \"$SESSION_END\""
+  run bash "$SESSION_END" < <(printf 'not json at all')
   [ "$status" -eq 0 ]
   [ ! -s "$MY_TOOLKIT_DATA/sessions.jsonl" ]
 }
 
 @test "session-end: empty stdin exits 0" {
-  run bash -c ": | \"$SESSION_END\""
+  run bash "$SESSION_END" </dev/null
   [ "$status" -eq 0 ]
 }
 
 # --- prompt-capture.sh --------------------------------------------------------
 
 @test "prompt-capture: Japanese correction marker is captured" {
-  run bash -c "printf '%s' '$(payload '"違う、テストを先に書いて"')' | \"$PROMPT_CAPTURE\""
+  run bash "$PROMPT_CAPTURE" < <(printf '%s' "$(payload '"違う、テストを先に書いて"')")
   [ "$status" -eq 0 ]
   [ -f "$MY_TOOLKIT_DATA/corrections.jsonl" ]
   [ "$(jq -r '.prompt' "$MY_TOOLKIT_DATA/corrections.jsonl")" = "違う、テストを先に書いて" ]
 }
 
 @test "prompt-capture: English correction marker is captured" {
-  run bash -c "printf '%s' '$(payload '"no, use pnpm instead of npm"')' | \"$PROMPT_CAPTURE\""
+  run bash "$PROMPT_CAPTURE" < <(printf '%s' "$(payload '"no, use pnpm instead of npm"')")
   [ "$status" -eq 0 ]
   [ -f "$MY_TOOLKIT_DATA/corrections.jsonl" ]
 }
 
 @test "prompt-capture: ordinary prompt is NOT captured" {
-  run bash -c "printf '%s' '$(payload '"please add a login page"')' | \"$PROMPT_CAPTURE\""
+  run bash "$PROMPT_CAPTURE" < <(printf '%s' "$(payload '"please add a login page"')")
   [ "$status" -eq 0 ]
   [ ! -e "$MY_TOOLKIT_DATA/corrections.jsonl" ]
 }
 
 @test "prompt-capture: slash commands are NOT captured" {
-  run bash -c "printf '%s' '$(payload '"/my:retro --since 14d"')' | \"$PROMPT_CAPTURE\""
+  run bash "$PROMPT_CAPTURE" < <(printf '%s' "$(payload '"/my:retro --since 14d"')")
   [ "$status" -eq 0 ]
   [ ! -e "$MY_TOOLKIT_DATA/corrections.jsonl" ]
 }
 
 @test "prompt-capture: prompt is truncated to 500 chars" {
   long="$(printf 'x%.0s' $(seq 1 600))"
-  run bash -c "printf '%s' '$(payload "\"違う $long\"")' | \"$PROMPT_CAPTURE\""
+  run bash "$PROMPT_CAPTURE" < <(printf '%s' "$(payload "\"違う $long\"")")
   [ "$status" -eq 0 ]
   n="$(jq -r '.prompt | length' "$MY_TOOLKIT_DATA/corrections.jsonl")"
   [ "$n" -le 500 ]
 }
 
 @test "prompt-capture: malformed stdin still exits 0" {
-  run bash -c "printf '{broken' | \"$PROMPT_CAPTURE\""
+  run bash "$PROMPT_CAPTURE" < <(printf '{broken')
   [ "$status" -eq 0 ]
   [ ! -e "$MY_TOOLKIT_DATA/corrections.jsonl" ]
 }
@@ -98,25 +98,25 @@ payload() {
 }
 
 @test "prompt-capture: system-injected <task-notification> is NOT captured" {
-  run bash -c "printf '%s' '$(payload '"<task-notification>\n<summary>Agent finished</summary>\nUse Monitor instead of sleep.\n</task-notification>"')' | \"$PROMPT_CAPTURE\""
+  run bash "$PROMPT_CAPTURE" < <(printf '%s' "$(payload '"<task-notification>\n<summary>Agent finished</summary>\nUse Monitor instead of sleep.\n</task-notification>"')")
   [ "$status" -eq 0 ]
   [ ! -e "$MY_TOOLKIT_DATA/corrections.jsonl" ]
 }
 
 @test "prompt-capture: system-injected <scheduled-task ...> is NOT captured" {
-  run bash -c "printf '%s' '$(payload '"<scheduled-task name=\"nightly\">\n自動実行です。質問はしないで進めてください。\n</scheduled-task>"')' | \"$PROMPT_CAPTURE\""
+  run bash "$PROMPT_CAPTURE" < <(printf '%s' "$(payload '"<scheduled-task name=\"nightly\">\n自動実行です。質問はしないで進めてください。\n</scheduled-task>"')")
   [ "$status" -eq 0 ]
   [ ! -e "$MY_TOOLKIT_DATA/corrections.jsonl" ]
 }
 
 @test "prompt-capture: pasted review-screen feedback is NOT captured" {
-  run bash -c "printf '%s' '$(payload '"# レビューフィードバック: pr:641 のレビュー\n\n## 採用された指摘\n\n- A ではなく B を使う"')' | \"$PROMPT_CAPTURE\""
+  run bash "$PROMPT_CAPTURE" < <(printf '%s' "$(payload '"# レビューフィードバック: pr:641 のレビュー\n\n## 採用された指摘\n\n- A ではなく B を使う"')")
   [ "$status" -eq 0 ]
   [ ! -e "$MY_TOOLKIT_DATA/corrections.jsonl" ]
 }
 
 @test "prompt-capture: a correction that merely contains a tag IS captured" {
-  run bash -c "printf '%s' '$(payload '"違う、<div> ではなく <span> を使って"')' | \"$PROMPT_CAPTURE\""
+  run bash "$PROMPT_CAPTURE" < <(printf '%s' "$(payload '"違う、<div> ではなく <span> を使って"')")
   [ "$status" -eq 0 ]
   [ -f "$MY_TOOLKIT_DATA/corrections.jsonl" ]
 }

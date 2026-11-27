@@ -24,7 +24,7 @@ stop_payload() {
 }
 
 run_hook() {
-  run bash -c 'printf "%s" "$1" | "$2"' _ "$1" "$HOOK"
+  run bash "$HOOK" < <(printf '%s' "$1")
   [ "$status" -eq 0 ]
   [ "$output" = '{"decision":""}' ]
 }
