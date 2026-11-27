@@ -19,7 +19,7 @@ Run without asking the user anything until a stop condition below is reached. De
    "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/my}/scripts/lib/autonomy.sh" <repo>
    ```
 
-   It prints `ship <owner/name>` or `strict <owner/name>`. Strict runs the **stack** loop; ship runs the **ship** loop. A repository the config opts into ship still prints `strict`, with the reason on stderr, when no ruleset on its default branch requires a pull request and status checks: run the stack loop, and list the missing rule under "Waiting on a human" in the final report. The outbound-guard hook enforces the same split, so a denied command means you picked the wrong loop, not that you should work around it.
+   It prints `ship <owner/name>` or `strict <owner/name>`. Strict runs the **stack** loop; ship runs the **ship** loop. A repository the config opts into ship still prints `strict`, with the reason on stderr, unless GitHub confirms that rulesets on its default branch require a pull request and status checks: run the stack loop, and put that reason under "Waiting on a human" in the final report. The outbound-guard hook enforces the same split, so a denied command means you picked the wrong loop, not that you should work around it.
 
 2. State lives outside the repository in `R=~/.local/state/autopilot/<owner>-<name>/`, one directory per goal in `S=$R/<goal-slug>/`:
    - `goal.md` from [`goal-template.md`](goal-template.md). Fill purpose, done criteria (observable), scope, out of scope and the budget. Derive what the user did not say and mark it `(derived)`. With `resume <goal-slug>`, read the existing files instead and continue from `progress.md`, `decisions.tsv` and `tasks.tsv`.

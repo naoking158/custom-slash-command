@@ -3,8 +3,11 @@
 #
 # Contract under test:
 #   - ship needs both the config line and a ruleset check that passed.
-#   - A failing check removes the record and names the missing rule on stderr.
-#   - When gh cannot answer, an earlier record stands; a stale one does not count.
+#   - A ruleset the token can bypass does not count.
+#   - A failing check, and a repository GitHub will not show, removes the record
+#     and says why on stderr.
+#   - When GitHub gives no answer, an earlier record stands; a stale or future
+#     one does not count.
 #   - The guard denies a merge in a configured repository that has no record.
 
 bats_require_minimum_version 1.5.0
@@ -28,9 +31,14 @@ setup() {
   cat >"$TMP/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 echo "$*" >>"$GH_LOG"
-[ -z "${GH_FAIL:-}" ] || exit 1
+case "${GH_FAIL:-}" in
+  "") ;;
+  404) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+  *) echo "gh: connection refused" >&2; exit 1 ;;
+esac
 case "$2" in
-  repos/*/rules/branches/main) for rule in $GH_RULES; do echo "$rule"; done ;;
+  repos/*/rules/branches/main) for rule in $GH_RULES; do echo "$rule 7"; done ;;
+  repos/*/rulesets/7) echo "${GH_BYPASS:-never}" ;;
   repos/*) echo main ;;
 esac
 STUB
@@ -76,18 +84,38 @@ record() {
   [ ! -e "$GH_LOG" ]
 }
 
-@test "when gh fails, an earlier record stands and no record means strict" {
+@test "a ruleset this token can bypass does not count" {
+  GH_BYPASS=always run --separate-stderr "$AUTONOMY" "$REPO"
+  [ "$output" = "strict me/app" ]
+  [[ "$stderr" == *"cannot bypass"* ]]
+  [ ! -e "$RECORD" ]
+}
+
+@test "when GitHub gives no answer, an earlier record stands and no record means strict" {
   GH_FAIL=1 run --separate-stderr "$AUTONOMY" "$REPO"
   [ "$output" = "strict me/app" ]
+  [[ "$stderr" == *"connection refused"*"no record"* ]]
 
   record "$(date +%s)"
   GH_FAIL=1 run --separate-stderr "$AUTONOMY" "$REPO"
   [ "$output" = "ship me/app" ]
-  [[ "$stderr" == *"gh could not read"* ]]
+  [[ "$stderr" == *"earlier record stands"* ]]
 }
 
-@test "a record older than 7 days does not count" {
+@test "a repository GitHub will not show loses its record" {
+  record "$(date +%s)"
+  GH_FAIL=404 run --separate-stderr "$AUTONOMY" "$REPO"
+  [ "$output" = "strict me/app" ]
+  [[ "$stderr" == *"HTTP 404"* ]]
+  [ ! -e "$RECORD" ]
+}
+
+@test "a record older than 7 days, or from the future, does not count" {
   record "$(( $(date +%s) - 700000 ))"
+  GH_FAIL=1 run --separate-stderr "$AUTONOMY" "$REPO"
+  [ "$output" = "strict me/app" ]
+
+  record "$(( $(date +%s) + 700000 ))"
   GH_FAIL=1 run --separate-stderr "$AUTONOMY" "$REPO"
   [ "$output" = "strict me/app" ]
 }
@@ -96,7 +124,7 @@ record() {
   payload="$(jq -cn --arg d "$REPO" '{tool_name:"Bash",cwd:$d,tool_input:{command:"gh pr merge 3 --squash"}}')"
   run bash -c 'printf "%s" "$1" | "$2"' _ "$payload" "$GUARD"
   [ "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = "deny" ]
-  [[ "$output" == *"autonomy.sh"* ]]
+  [[ "$output" == *"$REPO_ROOT/scripts/lib/autonomy.sh $REPO "* ]]
 
   record "$(date +%s)"
   run bash -c 'printf "%s" "$1" | "$2"' _ "$payload" "$GUARD"

@@ -4,7 +4,7 @@
 # Sourced by scripts/hooks/outbound-guard.sh and antigravity-guard.sh. Without
 # jq or perl a hook cannot read its payload; allowing everything then would
 # switch the guard off without a word. A hook in that state denies the calls
-# that look outbound and lets the rest through.
+# that look outbound and stays out of the way of the rest.
 # Dependencies: bash, grep.
 
 # missing_dep NAME... — print the first NAME that is not on PATH.
@@ -15,10 +15,16 @@ missing_dep() {
   done
 }
 
-# looks_outbound PAYLOAD — succeed when the raw hook payload mentions a push, a
-# gh command that writes, or a Notion write.
+# looks_outbound PAYLOAD — succeed when the raw hook payload holds a `git push`,
+# a gh pr / api / issue / release call (reads included: they cannot be told
+# apart here), or a Notion write. The payload is JSON, so a newline or a tab
+# in the command arrives as the two characters \n or \t; both count as a word
+# boundary.
 looks_outbound() {
-  printf '%s' "$1" | grep -qE 'git.*push|gh[[:space:]]+(pr|api|issue|release)|notion-(create|update)-'
+  printf '%s' "$1" | grep -qE \
+    -e '(^|[^[:alnum:]_./-]|\\[nrt])git([[:space:]]|\\[nrt]|\\\\)(.*([^[:alnum:]_-]|\\[nrt]))?push([^[:alnum:]_-]|$)' \
+    -e 'gh[[:space:]]+(pr|api|issue|release)' \
+    -e 'notion-(create|update)-'
 }
 
 # missing_dep_reason NAME — the reason shown for a call denied for lack of NAME.

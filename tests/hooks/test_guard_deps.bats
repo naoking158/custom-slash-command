@@ -63,6 +63,22 @@ run_with_path() {
   [ -z "$output" ]
 }
 
+@test "outbound-guard without jq does not take a path with git in it, or the word in pushd, for a push" {
+  REPO="$TMP/github.com/me/app"
+  mkdir -p "$REPO"
+  for command in 'pushd src' 'grep -rn push .'; do
+    run_with_path "$(bin_without jq)" "$GUARD" "$(bash_payload "$command")"
+    [ -z "$output" ]
+  done
+}
+
+@test "outbound-guard without jq denies a push after a newline, a tab, or git options" {
+  for command in $'cd /x\ngit push' $'git\tpush' 'git -C /x push' 'git -c user.name="a b" push'; do
+    run_with_path "$(bin_without jq)" "$GUARD" "$(bash_payload "$command")"
+    [ "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = "deny" ]
+  done
+}
+
 @test "antigravity-guard without jq denies a push and allows the rest" {
   run_with_path "$(bin_without jq)" "$AGY_GUARD" "$(agy_payload 'git push origin main')"
   [ "$(printf '%s' "$output" | jq -r '.decision')" = "deny" ]

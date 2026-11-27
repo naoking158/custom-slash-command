@@ -12,12 +12,14 @@
 # The check asks GitHub, so it runs only when this file is executed:
 #   scripts/lib/autonomy.sh [<dir>]    # prints "<mode> <owner/name>"
 # A passing check is recorded under $MY_TOOLKIT_DATA/ship-ready/ (default
-# ~/.claude/my-toolkit) and counts for 7 days; a failing one removes the
-# record and says on stderr which rule is missing. When gh cannot answer, an
+# ~/.claude/my-toolkit) and counts for 7 days. A ruleset this token can bypass
+# does not count. A failing check, and a repository GitHub will not show
+# (missing, or rulesets unavailable on its plan), removes the record and says
+# why on stderr. When GitHub gives no answer (network, login, rate limit), an
 # earlier record stands. Classic branch protection is not read.
 #
 # Sourced by scripts/hooks/outbound-guard.sh, which reads the record only.
-# Dependencies: bash, git, sed, date; gh for the check.
+# Dependencies: bash, git, sed, date, grep; gh, mktemp, cut, sort, tr for the check.
 
 SHIP_READY_TTL=604800
 
@@ -52,7 +54,8 @@ ship_ready_recorded() {
   file="$(ship_ready_file "$1")" && [ -f "$file" ] || return 1
   read -r at < "$file" || return 1
   case "$at" in ''|*[!0-9]*) return 1 ;; esac
-  [ $(( $(date +%s) - at )) -le "$SHIP_READY_TTL" ]
+  at=$(( $(date +%s) - at ))
+  [ "$at" -ge 0 ] && [ "$at" -le "$SHIP_READY_TTL" ]
 }
 
 # autonomy_mode SLUG — `ship` when the config opts SLUG in and its protection
@@ -61,26 +64,63 @@ autonomy_mode() {
   if ship_configured "$1" && ship_ready_recorded "$1"; then echo ship; else echo strict; fi
 }
 
-# ship_ready_check SLUG — ask GitHub whether rulesets on SLUG's default branch
-# require a pull request and status checks, and record the answer.
-# Returns 0 ready, 1 not ready, 2 gh could not answer.
+# ship_gh ENDPOINT JQ — print GitHub's answer. On failure print gh's message
+# and return 1 when GitHub refused for good (not found, or rulesets are not
+# available to this repository's plan), 2 when a retry may pass.
+ship_gh() {
+  local out err rc message
+  err="$(mktemp)" || return 2
+  out="$(gh api "$1" --jq "$2" 2>"$err")"
+  rc=$?
+  message="$(tail -n 1 "$err")"
+  rm -f "$err"
+  if [ "$rc" -eq 0 ]; then printf '%s' "$out"; return 0; fi
+  printf '%s' "${message:-gh failed}"
+  case "$message" in *"(HTTP 404)"*|*"Upgrade to GitHub"*"(HTTP 403)"*) return 1 ;; esac
+  return 2
+}
+
+# ship_ready_ask SLUG — ask GitHub whether rulesets that this token cannot
+# bypass require a pull request and status checks on SLUG's default branch.
+# Prints why not. Returns 0 ready, 1 not ready, 2 GitHub gave no answer.
+ship_ready_ask() {
+  local slug="$1" branch rules id bypass rc types=" " missing=""
+  branch="$(ship_gh "repos/$slug" .default_branch)" || { rc=$?; printf '%s' "$branch"; return "$rc"; }
+  rules="$(ship_gh "repos/$slug/rules/branches/$branch" \
+    '.[] | select(.type == "pull_request" or .type == "required_status_checks") | "\(.type) \(.ruleset_id)"')" \
+    || { rc=$?; printf '%s' "$rules"; return "$rc"; }
+  for id in $(printf '%s\n' "$rules" | cut -d' ' -f2 | sort -u); do
+    bypass="$(ship_gh "repos/$slug/rulesets/$id" .current_user_can_bypass)" \
+      || { rc=$?; printf '%s' "$bypass"; return "$rc"; }
+    [ "$bypass" = never ] || continue
+    types="$types$(printf '%s\n' "$rules" | grep " $id\$" | cut -d' ' -f1 | tr '\n' ' ')"
+  done
+  case "$types" in *" pull_request "*) ;; *) missing="pull_request" ;; esac
+  case "$types" in *" required_status_checks "*) ;; *) missing="${missing:+$missing and }required_status_checks" ;; esac
+  [ -n "$missing" ] || return 0
+  printf 'no ruleset on %s that this token cannot bypass has a %s rule' "$branch" "$missing"
+  return 1
+}
+
+# ship_ready_check SLUG — run ship_ready_ask and keep the record in step: a
+# pass writes it, a refusal removes it, no answer leaves it as it was. The
+# reason goes to stderr. Returns what ship_ready_ask returned.
 ship_ready_check() {
-  local slug="$1" file branch types missing=""
+  local slug="$1" file why rc
   file="$(ship_ready_file "$slug")" || return 1
-  if ! branch="$(gh api "repos/$slug" --jq .default_branch 2>/dev/null)" || [ -z "$branch" ] \
-    || ! types="$(gh api "repos/$slug/rules/branches/$branch" --jq '.[].type' 2>/dev/null)"; then
-    echo "autonomy: gh could not read the rules of $slug; an earlier record stands" >&2
-    return 2
-  fi
-  printf '%s\n' "$types" | grep -qx pull_request || missing="pull_request"
-  printf '%s\n' "$types" | grep -qx required_status_checks \
-    || missing="${missing:+$missing and }required_status_checks"
-  if [ -n "$missing" ]; then
-    rm -f "$file"
-    echo "autonomy: $slug stays strict: no ruleset on $branch has a $missing rule" >&2
-    return 1
-  fi
-  mkdir -p "${file%/*}" && date +%s > "$file"
+  why="$(ship_ready_ask "$slug")"
+  rc=$?
+  case "$rc" in
+    0) mkdir -p "${file%/*}" && date +%s > "$file" ;;
+    1) rm -f "$file"
+       echo "autonomy: $slug stays strict: $why" >&2 ;;
+    *) if ship_ready_recorded "$slug"; then
+         echo "autonomy: GitHub gave no answer for $slug ($why); the earlier record stands" >&2
+       else
+         echo "autonomy: GitHub gave no answer for $slug ($why); with no record it stays strict" >&2
+       fi ;;
+  esac
+  return "$rc"
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
