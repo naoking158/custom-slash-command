@@ -22,19 +22,19 @@ frontmatter() {
 
 @test "every SKILL.md has a name matching its folder" {
   local f want
-  for f in "$REPO_ROOT"/skills/*/SKILL.md; do
+  while IFS= read -r f; do
     want="$(basename "$(dirname "$f")")"
     frontmatter "$f" | grep -qx "name: $want" || { echo "missing name: $f"; return 1; }
-  done
+  done < <(printf '%s\n' "$REPO_ROOT"/skills/*/SKILL.md)
 }
 
 @test "every agent is hidden from Antigravity" {
   local f
-  for f in "$REPO_ROOT"/agents/*.md; do
+  while IFS= read -r f; do
     frontmatter "$f" | grep -qx 'mainAgent: false' || { echo "mainAgent: $f"; return 1; }
     frontmatter "$f" | grep -qx 'subagent: false' || { echo "subagent: $f"; return 1; }
     ! frontmatter "$f" | grep -qE '^tools: .+' || { echo "tools must be a YAML list: $f"; return 1; }
-  done
+  done < <(printf '%s\n' "$REPO_ROOT"/agents/*.md)
 }
 
 @test "rules/AGENTS.md is the principles file and the principles have no frontmatter" {
