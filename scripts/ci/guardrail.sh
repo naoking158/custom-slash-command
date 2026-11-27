@@ -3,7 +3,8 @@
 # request that changes one until a person approves it.
 #
 # A guardrail is a file that decides what an agent may send out or merge: the
-# hooks, the permission settings, the autonomy mode, the deny rules of a goal
+# hooks (with the Go source and the built binaries of outbound-guard), the
+# permission settings, the autonomy mode, the deny rules of a goal
 # session and the script that applies them, the autopilot procedure, and the
 # definition of CI with the script that reads its verdict. An agent that could change one
 # and merge the change itself would be setting its own limits.
@@ -36,6 +37,7 @@ is_guardrail() {
     mise.toml|tests/run.sh|tests/setup_suite.bash) return 0 ;;
     scripts/lib/autonomy.sh|scripts/lib/guard-deps.sh|scripts/lib/wait-ci.sh) return 0 ;;
     hooks/hooks.json|hooks.json|orca/bin/start-goal|skills/autopilot/SKILL.md) return 0 ;;
+    bin/*|cmd/*|internal/outboundguard/*|go.mod|go.sum|scripts/build-bin.sh) return 0 ;;
   esac
   return 1
 }

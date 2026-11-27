@@ -2,7 +2,8 @@
 # guard-deps.sh — What a guard hook answers when a command it needs is missing.
 #
 # Sourced by scripts/hooks/outbound-guard.sh and antigravity-guard.sh. Without
-# jq or perl a hook cannot read its payload; allowing everything then would
+# what reads its payload (the binary for outbound-guard, jq for
+# antigravity-guard) a hook cannot judge a call; allowing everything then would
 # switch the guard off without a word. A hook in that state denies the calls
 # that look outbound and stays out of the way of the rest.
 # Dependencies: bash, grep.
