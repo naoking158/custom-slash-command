@@ -20,7 +20,7 @@ setup() {
   RUN_ROLE="$REPO_ROOT/orca/bin/run-role"
   TMP="$(cd "$BATS_TEST_TMPDIR" && pwd -P)"
   FAKE_BIN="$TMP/bin"
-  mkdir -p "$FAKE_BIN" "$TMP/home" "$TMP/in"
+  mkdir -p "$FAKE_BIN" "$TMP/home" "$TMP/in" "$TMP/out"
   export PATH="$FAKE_BIN:$(path_without_orca)"
   if command -v orca >/dev/null; then return 1; fi
   export HOME="$TMP/home"
@@ -30,7 +30,6 @@ setup() {
   export MY_ORCA_POLL_SECONDS="0.1"
   export FAKE="$TMP"
   OUT="$TMP/out/result"
-  mkdir -p "$TMP/out"
   printf 'diff --git a/x b/x\n' >"$TMP/in/diff.patch"
   printf 'h001\tx\t@@ -1 +1 @@\t1\t1\n' >"$TMP/in/hunks.tsv"
   printf '# be\n' >"$TMP/in/be.md"
@@ -68,7 +67,7 @@ case "$1 $2" in
     : >"$FAKE/start.args"
     while [ $# -gt 0 ]; do
       printf '%s\n' "$1" >>"$FAKE/start.args"
-      [ "$1" = "--spec-file" ] && cp "$2" "$FAKE/spec.txt"
+      if [ "$1" = "--spec-file" ]; then spec=""; IFS= read -r -d '' spec <"$2"; printf '%s' "$spec" >"$FAKE/spec.txt"; fi
       shift
     done
     if [ -f "$FAKE/start.json" ]; then cat "$FAKE/start.json"; exit "$(cat "$FAKE/start.rc" 2>/dev/null || echo 0)"; fi
