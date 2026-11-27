@@ -9,6 +9,7 @@
 #   - A label the command line does not show (a variable) is denied.
 
 setup() {
+  export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   GUARD="$REPO_ROOT/scripts/hooks/outbound-guard.sh"
   TMP="$(mktemp -d -t guard-label.XXXXXX)"

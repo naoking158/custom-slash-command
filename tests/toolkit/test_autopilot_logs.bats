@@ -16,6 +16,7 @@
 bats_require_minimum_version 1.5.0
 
 setup() {
+  export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
   LOG_DECISION="$REPO_ROOT/skills/autopilot/scripts/log-decision.sh"
   LOG_TASK="$REPO_ROOT/skills/autopilot/scripts/log-task.sh"

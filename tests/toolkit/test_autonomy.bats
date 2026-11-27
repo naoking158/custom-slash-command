@@ -12,6 +12,8 @@
 
 bats_require_minimum_version 1.5.0
 
+load ../fake_bin
+
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   AUTONOMY="$REPO_ROOT/scripts/lib/autonomy.sh"
@@ -28,7 +30,7 @@ setup() {
   export GH_LOG="$TMP/gh.log"
   export GH_RULES="deletion pull_request required_status_checks"
   mkdir -p "$TMP/bin"
-  cat >"$TMP/bin/gh" <<'STUB'
+  fake_bin "$TMP/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 echo "$*" >>"$GH_LOG"
 case "${GH_FAIL:-}" in
@@ -42,7 +44,6 @@ case "$2" in
   repos/*) echo main ;;
 esac
 STUB
-  chmod +x "$TMP/bin/gh"
   PATH="$TMP/bin:$PATH"
 }
 

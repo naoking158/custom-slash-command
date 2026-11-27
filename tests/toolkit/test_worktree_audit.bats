@@ -14,7 +14,10 @@
 #   - The audit changes no worktree, file or ref.
 #   - Bad options and non-repositories exit 2.
 
+load ../fake_bin
+
 setup() {
+  export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
   AUDIT="$REPO_ROOT/scripts/lib/worktree-audit.sh"
   TMP="$(cd "$(mktemp -d -t worktree-audit-test.XXXXXX)" && pwd -P)"
@@ -23,12 +26,12 @@ setup() {
   export PATH="$TMP/bin:$(path_without_orca)"
   if command -v orca >/dev/null; then return 1; fi
   echo '[]' >"$TMP/prs.json"
-  cat >"$TMP/bin/gh" <<SH
+  export FAKE="$TMP"
+  fake_bin "$TMP/bin/gh" <<'SH'
 #!/bin/bash
-[ "\$1 \$2" = "pr list" ] || exit 64
-cat "$TMP/prs.json"
+[ "$1 $2" = "pr list" ] || exit 64
+cat "$FAKE/prs.json"
 SH
-  chmod +x "$TMP/bin/gh"
 
   REPO="$TMP/repo"
   git init -q -b main "$REPO"
@@ -58,15 +61,14 @@ add_wt() {
 # fake_orca WORKTREES_JSON [TRUNCATED] — a reachable orca listing WORKTREES_JSON.
 fake_orca() {
   printf '{"ok":true,"result":{"truncated":%s,"worktrees":%s}}' "${2:-false}" "$1" >"$TMP/ps.json"
-  cat >"$TMP/bin/orca" <<SH
+  fake_bin "$TMP/bin/orca" <<'SH'
 #!/bin/bash
-case "\$*" in
+case "$*" in
   "status --json") echo '{"ok":true,"result":{"runtime":{"reachable":true}}}' ;;
-  "worktree ps --limit 500 --json") cat "$TMP/ps.json" ;;
+  "worktree ps --limit 500 --json") cat "$FAKE/ps.json" ;;
   *) exit 64 ;;
 esac
 SH
-  chmod +x "$TMP/bin/orca"
 }
 
 # field WORKTREE COLUMN — one column of the row for WORKTREE in $output.
@@ -219,8 +221,7 @@ audit() {
 @test "an installed orca that does not answer puts every worktree in review" {
   add_wt quiet
   git -C "$REPO" merge -q --ff-only quiet
-  printf '#!/bin/bash\necho '"'"'{"ok":true,"result":{"runtime":{"reachable":false}}}'"'"'\n' >"$TMP/bin/orca"
-  chmod +x "$TMP/bin/orca"
+  printf '#!/bin/bash\necho '"'"'{"ok":true,"result":{"runtime":{"reachable":false}}}'"'"'\n' | fake_bin "$TMP/bin/orca"
   audit
   [[ "$output" == *"unavailable"* ]]
   [ "$(field "$TMP/quiet" ORCA)" = "?" ]

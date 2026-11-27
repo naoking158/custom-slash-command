@@ -7,6 +7,8 @@
 #   - `gate` passes a pull request that changes no guardrail and holds one
 #     that does until it carries the label, added after the last push.
 
+load ../fake_bin
+
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   GUARDRAIL="$REPO_ROOT/scripts/ci/guardrail.sh"
@@ -19,7 +21,7 @@ setup() {
   mkdir -p "$TMP/bin"
   # The stub answers with GitHub's JSON and applies the --jq filter itself, so
   # the filters in guardrail.sh are part of what is tested.
-  cat >"$TMP/bin/gh" <<'STUB'
+  fake_bin "$TMP/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 echo "$*" >>"$GH_LOG"
 filter="." path=""
@@ -40,7 +42,6 @@ case "$path" in
 esac
 printf '%s' "$json" | jq -r "$filter"
 STUB
-  chmod +x "$TMP/bin/gh"
   PATH="$TMP/bin:$PATH"
   GUARDED='[{"filename":"README.md"},{"filename":"hooks.json"}]'
   LABELED='[{"name":"bug"},{"name":"human-approved"}]'

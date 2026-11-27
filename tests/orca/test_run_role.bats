@@ -12,7 +12,10 @@
 
 bats_require_minimum_version 1.5.0
 
+load ../fake_bin
+
 setup() {
+  export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
   RUN_ROLE="$REPO_ROOT/orca/bin/run-role"
   TMP="$(mktemp -d -t orca-run-role-test.XXXXXX)"
@@ -58,7 +61,7 @@ path_without_orca() {
 # settled state it copies $FAKE/result.src (if any) to the --out path.
 fake_orca() {
   printf 'succeeded working\n' >"$TMP/states"
-  cat >"$FAKE_BIN/orca" <<'SH'
+  fake_bin "$FAKE_BIN/orca" <<'SH'
 #!/bin/bash
 printf '%s\n' "$*" >>"$FAKE/calls"
 case "$1 $2" in
@@ -93,7 +96,6 @@ case "$1 $2" in
   *) exit 64 ;;
 esac
 SH
-  chmod +x "$FAKE_BIN/orca"
 }
 
 # worker_writes CONTENT [DEST] — the fake worker writes CONTENT to DEST (default $OUT).

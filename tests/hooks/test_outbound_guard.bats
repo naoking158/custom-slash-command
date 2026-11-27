@@ -7,18 +7,25 @@
 #   - Outbound text never cites review IDs, local absolute paths, or untracked docs/.
 #   - Allowed commands produce no output; the hook never exits non-zero.
 
-setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
-  GUARD="$REPO_ROOT/scripts/hooks/outbound-guard.sh"
-  TMP="$(mktemp -d -t guard-test.XXXXXX)"
-  REPO="$TMP/repo"
-  git init -q -b main "$REPO"
+setup_file() {
+  local REPO="$BATS_FILE_TMPDIR/repo"
+  export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
+  git init -q --template= -b main "$REPO"
   git -C "$REPO" -c user.email=t@example.com -c user.name=t commit -q --allow-empty -m init
   mkdir -p "$REPO/docs/log"
   echo x >"$REPO/docs/log/tracked.md"
   git -C "$REPO" add docs/log/tracked.md
   git -C "$REPO" -c user.email=t@example.com -c user.name=t commit -q -m docs
   git -C "$REPO" checkout -q -b feature/x
+}
+
+setup() {
+  export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
+  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+  GUARD="$REPO_ROOT/scripts/hooks/outbound-guard.sh"
+  TMP="$(mktemp -d -t guard-test.XXXXXX)"
+  REPO="$TMP/repo"
+  cp -R "$BATS_FILE_TMPDIR/repo" "$REPO"
   export MY_AUTONOMY_CONF="$TMP/autonomy.conf"
   export MY_TOOLKIT_DATA="$TMP/data"
   mkdir -p "$MY_TOOLKIT_DATA/ship-ready"
