@@ -33,6 +33,14 @@ setup() {
   run -1 false
 }
 
+@test "run ! with status 0 fails" {
+  run ! true
+}
+
+@test "run ! with a non-zero status passes" {
+  run ! false
+}
+
 @test "lines drops empty lines and does not expand globs" {
   run printf 'a\n\n*\nb [x]\n'
   [ "${#lines[@]}" -eq 3 ]

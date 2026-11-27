@@ -23,16 +23,17 @@ verdicts() {
   run bats --tap "$FIXTURE"
   local want
   want="$(verdicts)"
-  [ "$(printf '%s\n' "$want" | grep -c '^not ok ')" -eq 3 ]
+  [ "$(printf '%s\n' "$want" | grep -c '^not ok ')" -eq 4 ]
   run -1 "$RUNNER" -j 4 "$FIXTURE"
   [ "$(verdicts)" = "$want" ]
 }
 
 @test "the summary counts every test and the exit status reports a failure" {
   run -1 "$RUNNER" -j 2 "$FIXTURE"
-  [ "${lines[${#lines[@]}-1]}" = "# 10 tests, 3 failed" ]
+  [ "${lines[${#lines[@]}-1]}" = "# 12 tests, 4 failed" ]
 }
 
 @test "bad -j exits 2" {
   run -2 "$RUNNER" -j 0 "$FIXTURE"
+  run -2 "$RUNNER" -j
 }

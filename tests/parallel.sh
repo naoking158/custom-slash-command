@@ -8,7 +8,7 @@
 #   tests/parallel.sh [-j N] [FILE.bats|DIR]...    (default: tests/, N: CPUs)
 #
 # Supports the part of bats this repository uses: setup/teardown,
-# setup_file/teardown_file, run [-N|-!] [--separate-stderr] with $status
+# setup_file/teardown_file, run [-N|!] [--separate-stderr] with $status
 # $output $lines $stderr $stderr_lines, skip, load, bats_require_minimum_version,
 # BATS_TEST_DIRNAME, BATS_TEST_FILENAME, BATS_TEST_TMPDIR, BATS_FILE_TMPDIR,
 # BATS_SUITE_TMPDIR, and TEST_BASH (as tests/setup_suite.bash does).
@@ -19,7 +19,7 @@ set -u
 jobs=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    -j) jobs="${2:-}"; shift 2 ;;
+    -j) [ $# -ge 2 ] || { echo "parallel.sh: -j needs a value" >&2; exit 2; }; jobs="$2"; shift 2 ;;
     -j*) jobs="${1#-j}"; shift ;;
     -*) echo "usage: parallel.sh [-j N] [FILE.bats|DIR]..." >&2; exit 2 ;;
     *) break ;;
@@ -81,9 +81,9 @@ run() {
   while :; do
     case "${1:-}" in
       -[0-9]*) expect="${1#-}"; shift ;;
-      -!) expect='!'; shift ;;
+      !) expect='!'; shift ;;
       --separate-stderr) sep=1; shift ;;
-      --keep-empty-lines) shift ;;
+      --keep-empty-lines) echo "run: --keep-empty-lines is not supported by tests/parallel.sh" >&2; return 1 ;;
       --) shift; break ;;
       *) break ;;
     esac
@@ -104,7 +104,7 @@ run() {
   __split lines "$output"
   case "$expect" in
     "") ;;
-    '!') [ "$status" -ne 0 ] || { echo "run -!: expected a non-zero status, got 0" >&2; return 1; } ;;
+    '!') [ "$status" -ne 0 ] || { echo "run !: expected a non-zero status, got 0" >&2; return 1; } ;;
     *) [ "$status" -eq "$expect" ] || { echo "run -$expect: got status $status, output: $output" >&2; return 1; } ;;
   esac
   return 0
@@ -156,6 +156,7 @@ run_file() {
     set +eE
     trap - EXIT
   fi
+  trap 'kill $(jobs -p) 2>/dev/null; exit 130' INT TERM
   i=1
   while [ "$i" -le "$n" ]; do
     read -r -n 1 _ <&3
@@ -196,6 +197,7 @@ run_file() {
   return $fail
 }
 
+trap 'kill $(jobs -p) 2>/dev/null; exit 130' INT TERM
 k=0
 for f in "${files[@]}"; do
   mkdir -p "$BATS_SUITE_TMPDIR/f$k"
