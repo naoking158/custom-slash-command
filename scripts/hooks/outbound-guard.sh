@@ -33,7 +33,8 @@
 #
 # Autonomy modes. A repository is in `strict` mode unless the machine-local
 # config ($MY_AUTONOMY_CONF, default ~/.claude/my-toolkit/autonomy.conf) has a
-# line `ship <owner/name glob>` matching it. The repository is the one a gh
+# line `ship <owner/name glob>` matching it and scripts/lib/autonomy.sh has
+# recorded that GitHub protects its default branch. The repository is the one a gh
 # command names with -R / --repo, else the origin of the directory it runs in.
 #   strict: the PR rules above apply and `gh pr merge` (or a merge through the
 #           API) is denied; PRs stay drafts for a human to land.
@@ -41,11 +42,22 @@
 #           to the default branch, force pushes and the leak checks still apply.
 #
 # Emits a PreToolUse permissionDecision JSON on stdout when it objects;
-# stays silent (allow by default) otherwise. Never exits non-zero.
-# Dependencies: bash, jq, grep, sed, git.
+# stays silent (allow by default) otherwise. Never exits non-zero. Without jq
+# or perl it cannot read the command: it then denies a call that looks
+# outbound (see scripts/lib/guard-deps.sh) and stays silent for the rest.
+# Dependencies: bash, jq, perl, grep, sed, git.
 set -uf
 
+# shellcheck source=../lib/guard-deps.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/guard-deps.sh"
+
 payload="$(cat)" || exit 0
+dep="$(missing_dep jq perl)"
+if [ -n "$dep" ]; then
+  looks_outbound "$payload" \
+    && printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$(missing_dep_reason "$dep")"
+  exit 0
+fi
 tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)" || exit 0
 cwd="$(printf '%s' "$payload" | jq -r '.cwd // empty' 2>/dev/null)"
 
@@ -96,8 +108,9 @@ fi
 cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
 
+lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
 # shellcheck source=../lib/autonomy.sh
-. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/autonomy.sh"
+. "$lib_dir/autonomy.sh"
 
 # The commands on the line that send something out, one per line:
 #   push <TAB> dir <TAB> its arguments, quotes removed and assignments expanded
@@ -253,8 +266,12 @@ judge_pr() {
       repo="$(repo_slug "$dir")" ;;
     *\"*|*\'*) repo="" ;;
   esac
-  [ "$(autonomy_mode "$repo")" = "strict" ] && decide deny "$reason"
-  return 0
+  [ "$(autonomy_mode "$repo")" = "strict" ] || return 0
+  if ship_configured "$repo"; then
+    case "$gh" in *" -R "*|*" --repo"*) dir="<$repo の checkout>" ;; esac
+    reason="${reason}（ship の設定はあるが、default branch の保護を確かめた記録がない。${lib_dir}/autonomy.sh \"${dir}\" を実行する）"
+  fi
+  decide deny "$reason"
 }
 
 # --- git push ------------------------------------------------------------------
