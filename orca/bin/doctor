@@ -54,16 +54,17 @@ check_orca() {
   fi
   ok "orca command: $(command -v orca)"
 
-  local out version
+  local out reachable="" version=""
   if ! out="$(orca status --json 2>/dev/null)"; then
     ng 4 "orca status --json failed; start Orca (orca open) and retry"
     return
   fi
-  if [ "$(printf '%s' "$out" | jq -r '(.ok == true) and (.result.runtime.reachable == true)' 2>/dev/null)" != "true" ]; then
+  IFS=$'\x1f' read -r reachable version < <(printf '%s' "$out" | jq -r \
+    '"\((.ok == true) and (.result.runtime.reachable == true))\u001f\(.result.runtime.appVersion // "unknown")"' 2>/dev/null)
+  if [ "$reachable" != "true" ]; then
     ng 4 "orca status: runtime not reachable"
     return
   fi
-  version="$(printf '%s' "$out" | jq -r '.result.runtime.appVersion // "unknown"')"
   ok "orca status: runtime reachable (Orca $version)"
 }
 
