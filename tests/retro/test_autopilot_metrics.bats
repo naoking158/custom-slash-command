@@ -197,7 +197,7 @@ case "$1 $2" in
   "pr view")
     jq --argjson n "$3" '.[] | select(.number == $n)' "$FAKE/prs.json" | out ;;
   "api --paginate")
-    n="$(printf '%s' "$3" | cut -d/ -f5)"
+    IFS=/ read -r _ _ _ _ n _ <<<"$3"
     case "$3" in
       */comments) jq --argjson n "$n" '.[] | select(.number == $n) | .rest_comments' "$FAKE/prs.json" ;;
       */reviews) jq --argjson n "$n" '.[] | select(.number == $n) | .rest_reviews' "$FAKE/prs.json" ;;
