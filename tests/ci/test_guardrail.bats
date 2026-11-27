@@ -84,14 +84,14 @@ skills/autopilot/SKILL.md" ]
 }
 
 @test "gate: a pull request that changes no guardrail passes without reading labels" {
-  run "$GUARDRAIL" gate me/app 7
+  run bash "$GUARDRAIL" gate me/app 7
   [ "$status" -eq 0 ]
   run grep -c labels "$GH_LOG"
   [ "$output" = 0 ]
 }
 
 @test "gate: a guardrail change without the label fails and names the files" {
-  GH_FILES="$GUARDED" GH_LABELS='[{"name":"bug"}]' run "$GUARDRAIL" gate me/app 7
+  GH_FILES="$GUARDED" GH_LABELS='[{"name":"bug"}]' run bash "$GUARDRAIL" gate me/app 7
   [ "$status" -eq 1 ]
   [[ "$output" == *"  hooks.json"* ]]
   [[ "$output" != *"  README.md"* ]]
@@ -100,44 +100,44 @@ skills/autopilot/SKILL.md" ]
 
 @test "gate: a guardrail file renamed away still counts under its old name" {
   GH_FILES='[{"filename":"docs/moved.sh","previous_filename":"scripts/hooks/outbound-guard.sh"}]' \
-    run "$GUARDRAIL" gate me/app 7
+    run bash "$GUARDRAIL" gate me/app 7
   [ "$status" -eq 1 ]
   [[ "$output" == *"  scripts/hooks/outbound-guard.sh"* ]]
 }
 
 @test "gate: the label added after the last push passes" {
   GH_FILES="$GUARDED" GH_LABELS="$LABELED" GH_EVENTS="$(labeled_at 2026-01-03T00:00:00Z)" \
-    run "$GUARDRAIL" gate me/app 7
+    run bash "$GUARDRAIL" gate me/app 7
   [ "$status" -eq 0 ]
   grep -q "repos/me/fork/activity -f ref=refs/heads/feature/x" "$GH_LOG"
 }
 
 @test "gate: a push after the label makes the approval stale" {
   GH_FILES="$GUARDED" GH_LABELS="$LABELED" GH_EVENTS="$(labeled_at 2026-01-01T00:00:00Z)" \
-    run "$GUARDRAIL" gate me/app 7
+    run bash "$GUARDRAIL" gate me/app 7
   [ "$status" -eq 1 ]
   [[ "$output" == *"remove the label and add it again"* ]]
 }
 
 @test "gate: the newest of several label events is the one compared" {
   GH_FILES="$GUARDED" GH_LABELS="$LABELED" \
-    GH_EVENTS="$(labeled_at 2026-01-03T00:00:00Z 2026-01-01T00:00:00Z)" run "$GUARDRAIL" gate me/app 7
+    GH_EVENTS="$(labeled_at 2026-01-03T00:00:00Z 2026-01-01T00:00:00Z)" run bash "$GUARDRAIL" gate me/app 7
   [ "$status" -eq 0 ]
 }
 
 @test "gate: the label in another case counts as the label" {
   GH_FILES="$GUARDED" GH_LABELS='[{"name":"Human-Approved"}]' \
     GH_EVENTS='[{"event":"labeled","label":{"name":"Human-Approved"},"created_at":"2026-01-03T00:00:00Z"}]' \
-    run "$GUARDRAIL" gate me/app 7
+    run bash "$GUARDRAIL" gate me/app 7
   [ "$status" -eq 0 ]
 }
 
 @test "gate: when the push time cannot be read the check does not pass" {
   GH_FILES="$GUARDED" GH_LABELS="$LABELED" GH_EVENTS="$(labeled_at 2026-01-03T00:00:00Z)" GH_ACTIVITY_FAILS=1 \
-    run "$GUARDRAIL" gate me/app 7
+    run bash "$GUARDRAIL" gate me/app 7
   [ "$status" -eq 2 ]
 
   GH_FILES="$GUARDED" GH_LABELS="$LABELED" GH_EVENTS="$(labeled_at 2026-01-03T00:00:00Z)" GH_ACTIVITY='[]' \
-    run "$GUARDRAIL" gate me/app 7
+    run bash "$GUARDRAIL" gate me/app 7
   [ "$status" -eq 2 ]
 }

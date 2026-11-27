@@ -53,7 +53,7 @@ record() {
 }
 
 @test "a configured repository whose rulesets require a PR and status checks is ship" {
-  run --separate-stderr "$AUTONOMY" "$REPO"
+  run --separate-stderr bash "$AUTONOMY" "$REPO"
   [ "$status" -eq 0 ]
   [ "$output" = "ship me/app" ]
   [ -f "$RECORD" ]
@@ -61,7 +61,7 @@ record() {
 
 @test "without a required_status_checks rule the repository is strict and the record is removed" {
   record "$(date +%s)"
-  GH_RULES="deletion pull_request" run --separate-stderr "$AUTONOMY" "$REPO"
+  GH_RULES="deletion pull_request" run --separate-stderr bash "$AUTONOMY" "$REPO"
   [ "$output" = "strict me/app" ]
   [[ "$stderr" == *"required_status_checks"* ]]
   [[ "$stderr" != *"pull_request and"* ]]
@@ -69,39 +69,39 @@ record() {
 }
 
 @test "a repository with no ruleset at all names both missing rules" {
-  GH_RULES="" run --separate-stderr "$AUTONOMY" "$REPO"
+  GH_RULES="" run --separate-stderr bash "$AUTONOMY" "$REPO"
   [ "$output" = "strict me/app" ]
   [[ "$stderr" == *"pull_request and required_status_checks"* ]]
 }
 
 @test "a repository the config does not name is strict without asking GitHub" {
   echo 'ship other/*' >"$MY_AUTONOMY_CONF"
-  run --separate-stderr "$AUTONOMY" "$REPO"
+  run --separate-stderr bash "$AUTONOMY" "$REPO"
   [ "$output" = "strict me/app" ]
   [ ! -e "$GH_LOG" ]
 }
 
 @test "a ruleset this token can bypass does not count" {
-  GH_BYPASS=always run --separate-stderr "$AUTONOMY" "$REPO"
+  GH_BYPASS=always run --separate-stderr bash "$AUTONOMY" "$REPO"
   [ "$output" = "strict me/app" ]
   [[ "$stderr" == *"cannot bypass"* ]]
   [ ! -e "$RECORD" ]
 }
 
 @test "when GitHub gives no answer, an earlier record stands and no record means strict" {
-  GH_FAIL=1 run --separate-stderr "$AUTONOMY" "$REPO"
+  GH_FAIL=1 run --separate-stderr bash "$AUTONOMY" "$REPO"
   [ "$output" = "strict me/app" ]
   [[ "$stderr" == *"connection refused"*"no record"* ]]
 
   record "$(date +%s)"
-  GH_FAIL=1 run --separate-stderr "$AUTONOMY" "$REPO"
+  GH_FAIL=1 run --separate-stderr bash "$AUTONOMY" "$REPO"
   [ "$output" = "ship me/app" ]
   [[ "$stderr" == *"earlier record stands"* ]]
 }
 
 @test "a repository GitHub will not show loses its record" {
   record "$(date +%s)"
-  GH_FAIL=404 run --separate-stderr "$AUTONOMY" "$REPO"
+  GH_FAIL=404 run --separate-stderr bash "$AUTONOMY" "$REPO"
   [ "$output" = "strict me/app" ]
   [[ "$stderr" == *"HTTP 404"* ]]
   [ ! -e "$RECORD" ]
@@ -109,11 +109,11 @@ record() {
 
 @test "a record older than 7 days, or from the future, does not count" {
   record "$(( $(date +%s) - 700000 ))"
-  GH_FAIL=1 run --separate-stderr "$AUTONOMY" "$REPO"
+  GH_FAIL=1 run --separate-stderr bash "$AUTONOMY" "$REPO"
   [ "$output" = "strict me/app" ]
 
   record "$(( $(date +%s) + 700000 ))"
-  GH_FAIL=1 run --separate-stderr "$AUTONOMY" "$REPO"
+  GH_FAIL=1 run --separate-stderr bash "$AUTONOMY" "$REPO"
   [ "$output" = "strict me/app" ]
 }
 

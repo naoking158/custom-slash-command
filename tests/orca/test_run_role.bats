@@ -104,7 +104,7 @@ worker_writes() {
 pass1='{"schema_version":1,"findings":[]}'
 
 run_diff_reviewer() {
-  run --separate-stderr "$RUN_ROLE" diff-reviewer --out "$OUT" "$@" -- \
+  run --separate-stderr bash "$RUN_ROLE" diff-reviewer --out "$OUT" "$@" -- \
     --patch "$TMP/in/diff.patch" --hunks "$TMP/in/hunks.tsv" --checklist "$TMP/in/be.md"
 }
 
@@ -144,7 +144,7 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
 
 @test "verifier whose result starts with PASS: exit 0" {
   worker_writes $'PASS\n- criterion 1: met\n'
-  run --separate-stderr "$RUN_ROLE" verifier --out "$OUT" -- "checkout: /repo" "criteria: page shows X"
+  run --separate-stderr bash "$RUN_ROLE" verifier --out "$OUT" -- "checkout: /repo" "criteria: page shows X"
   [ "$status" -eq 0 ]
   [ "$(last_line)" = "[run-role] verifier exit=0 $OUT" ]
 }
@@ -152,14 +152,14 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
 @test "reviewer with a report path and an assessment: exit 0" {
   mkdir -p "$TMP/ws/docs/reviews" && : >"$TMP/ws/docs/reviews/r.md"
   worker_writes $'output_path: docs/reviews/r.md\nassessment: NEEDS_REVISION\n'
-  run --separate-stderr "$RUN_ROLE" reviewer --out "$OUT" -- "pr:12 --no-screen"
+  run --separate-stderr bash "$RUN_ROLE" reviewer --out "$OUT" -- "pr:12 --no-screen"
   [ "$status" -eq 0 ]
 }
 
 @test "relative --out is reported as an absolute path" {
   worker_writes "$pass1" "$TMP/out/pass1.json"
   cd "$TMP/out"
-  run --separate-stderr "$RUN_ROLE" diff-reviewer --out ./pass1.json -- \
+  run --separate-stderr bash "$RUN_ROLE" diff-reviewer --out ./pass1.json -- \
     --patch ../in/diff.patch --hunks ../in/hunks.tsv --checklist ../in/be.md
   [ "$status" -eq 0 ]
   [ "$(last_line)" = "[run-role] diff-reviewer exit=0 $TMP/out/pass1.json" ]
@@ -271,27 +271,27 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
 
 @test "verifier result that does not start with a verdict: exit 1" {
   worker_writes $'Looks good to me.\nPASS\n'
-  run --separate-stderr "$RUN_ROLE" verifier --out "$OUT"
+  run --separate-stderr bash "$RUN_ROLE" verifier --out "$OUT"
   [ "$status" -eq 1 ]
 }
 
 @test "reviewer report path starting with ~/ is read from \$HOME" {
   mkdir -p "$HOME/rev" && : >"$HOME/rev/r.md"
   worker_writes $'output_path: ~/rev/r.md\nassessment: PASS\n'
-  run --separate-stderr "$RUN_ROLE" reviewer --out "$OUT"
+  run --separate-stderr bash "$RUN_ROLE" reviewer --out "$OUT"
   [ "$status" -eq 0 ]
 }
 
 @test "reviewer result naming a report the worker did not write: exit 1" {
   worker_writes $'output_path: docs/reviews/r.md\nassessment: PASS\n'
-  run --separate-stderr "$RUN_ROLE" reviewer --out "$OUT"
+  run --separate-stderr bash "$RUN_ROLE" reviewer --out "$OUT"
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"$TMP/ws/docs/reviews/r.md"* ]]
 }
 
 @test "reviewer result without an assessment: exit 1" {
   worker_writes $'output_path: docs/reviews/r.md\n'
-  run --separate-stderr "$RUN_ROLE" reviewer --out "$OUT"
+  run --separate-stderr bash "$RUN_ROLE" reviewer --out "$OUT"
   [ "$status" -eq 1 ]
 }
 
@@ -336,19 +336,19 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
 }
 
 @test "unknown agent: exit 2" {
-  run --separate-stderr "$RUN_ROLE" planner --out "$OUT"
+  run --separate-stderr bash "$RUN_ROLE" planner --out "$OUT"
   [ "$status" -eq 2 ]
   [ "$(last_line)" = "[run-role] planner exit=2 $OUT" ]
 }
 
 @test "missing --out: exit 2" {
-  run --separate-stderr "$RUN_ROLE" verifier
+  run --separate-stderr bash "$RUN_ROLE" verifier
   [ "$status" -eq 2 ]
   [ "$(last_line)" = "[run-role] verifier exit=2 -" ]
 }
 
 @test "diff-reviewer given a plan path: exit 2, no worker started" {
-  run --separate-stderr "$RUN_ROLE" diff-reviewer --out "$OUT" -- \
+  run --separate-stderr bash "$RUN_ROLE" diff-reviewer --out "$OUT" -- \
     --patch "$TMP/in/diff.patch" --hunks "$TMP/in/hunks.tsv" --checklist "$TMP/in/be.md" \
     --plan "$TMP/in/plan.md"
   [ "$status" -eq 2 ]
@@ -356,13 +356,13 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
 }
 
 @test "diff-reviewer without a checklist: exit 2" {
-  run --separate-stderr "$RUN_ROLE" diff-reviewer --out "$OUT" -- \
+  run --separate-stderr bash "$RUN_ROLE" diff-reviewer --out "$OUT" -- \
     --patch "$TMP/in/diff.patch" --hunks "$TMP/in/hunks.tsv"
   [ "$status" -eq 2 ]
 }
 
 @test "diff-reviewer with a missing patch file: exit 2" {
-  run --separate-stderr "$RUN_ROLE" diff-reviewer --out "$OUT" -- \
+  run --separate-stderr bash "$RUN_ROLE" diff-reviewer --out "$OUT" -- \
     --patch "$TMP/in/none.patch" --hunks "$TMP/in/hunks.tsv" --checklist "$TMP/in/be.md"
   [ "$status" -eq 2 ]
 }
@@ -425,7 +425,7 @@ profile_value() { awk -v r="$2" '$1 == r { print $'"$3"' }' "$REPO_ROOT/orca/pro
 
 @test "diff-reviewer task is the agent body, the four inputs and the three rules only" {
   worker_writes "$pass1"
-  run --separate-stderr "$RUN_ROLE" diff-reviewer --out "$OUT" -- \
+  run --separate-stderr bash "$RUN_ROLE" diff-reviewer --out "$OUT" -- \
     --patch "$TMP/in/diff.patch" --hunks "$TMP/in/hunks.tsv" \
     --checklist "$TMP/in/be.md" --checklist "$TMP/in/security.md"
   [ "$status" -eq 0 ]
@@ -479,7 +479,7 @@ EOF
 
 @test "verifier uses the profile's verify line" {
   worker_writes $'BLOCKED (launch)\n'
-  run --separate-stderr "$RUN_ROLE" verifier --out "$OUT"
+  run --separate-stderr bash "$RUN_ROLE" verifier --out "$OUT"
   [ "$status" -eq 0 ]
   [ "$(start_arg --model)" = "$(profile_value work verify 3)" ]
 }
@@ -498,7 +498,7 @@ bare_profile() {
 
 @test "adversary with FINDINGS 0 or FINDINGS 2: exit 0 on the profile's adversary line" {
   worker_writes $'FINDINGS 0\nDropped: 1 (did not reproduce)\n'
-  run --separate-stderr "$RUN_ROLE" adversary --out "$OUT" -- "worktree: /tmp/x"
+  run --separate-stderr bash "$RUN_ROLE" adversary --out "$OUT" -- "worktree: /tmp/x"
   [ "$status" -eq 0 ]
   [ "$(last_line)" = "[run-role] adversary exit=0 $OUT" ]
   [ "$(start_arg --model)" = "$(profile_value work adversary 3)" ]
@@ -506,23 +506,23 @@ bare_profile() {
 
   rm -f "$TMP/result.done"
   worker_writes $'FINDINGS 2\n### a\n### b\nDropped: 0 ()\n'
-  run --separate-stderr "$RUN_ROLE" adversary --out "$OUT"
+  run --separate-stderr bash "$RUN_ROLE" adversary --out "$OUT"
   [ "$status" -eq 0 ]
 }
 
 @test "adversary whose first line is not FINDINGS <n>: exit 1" {
   worker_writes $'Found 2 bugs\nFINDINGS 2\n'
-  run --separate-stderr "$RUN_ROLE" adversary --out "$OUT"
+  run --separate-stderr bash "$RUN_ROLE" adversary --out "$OUT"
   [ "$status" -eq 1 ]
   rm -f "$TMP/result.done"
   worker_writes $'FINDINGS two\n'
-  run --separate-stderr "$RUN_ROLE" adversary --out "$OUT"
+  run --separate-stderr bash "$RUN_ROLE" adversary --out "$OUT"
   [ "$status" -eq 1 ]
 }
 
 @test "trail-auditor with an Attention section: exit 0 on the profile's audit line" {
   worker_writes $'reviewed by opus\n\n## Attention\n\nNo flags\n'
-  run --separate-stderr "$RUN_ROLE" trail-auditor --out "$OUT" -- "state: /tmp/s"
+  run --separate-stderr bash "$RUN_ROLE" trail-auditor --out "$OUT" -- "state: /tmp/s"
   [ "$status" -eq 0 ]
   [ "$(start_arg --model)" = "$(profile_value work audit 3)" ]
   [ "$(start_arg --agent)" = "$(profile_value work audit 2)" ]
@@ -530,7 +530,7 @@ bare_profile() {
 
 @test "trail-auditor without an Attention section: exit 1" {
   worker_writes $'reviewed by opus\n\nNo flags\n'
-  run --separate-stderr "$RUN_ROLE" trail-auditor --out "$OUT"
+  run --separate-stderr bash "$RUN_ROLE" trail-auditor --out "$OUT"
   [ "$status" -eq 1 ]
 }
 
@@ -557,7 +557,7 @@ bare_profile() {
 
 @test "adversary that ran nothing returns BLOCKED, passed on for the caller: exit 0" {
   worker_writes $'BLOCKED: no worktree to run in\n'
-  run --separate-stderr "$RUN_ROLE" adversary --out "$OUT"
+  run --separate-stderr bash "$RUN_ROLE" adversary --out "$OUT"
   [ "$status" -eq 0 ]
   [ "$(head -n 1 "$OUT")" = "BLOCKED: no worktree to run in" ]
 }

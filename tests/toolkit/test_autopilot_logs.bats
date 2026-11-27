@@ -32,8 +32,8 @@ field() {
 
 @test "log-decision writes the header once and appends a row per call" {
   log="$TMP/new/dir/decisions.tsv"
-  run -0 "$LOG_DECISION" "$log" start "resume" "new run" "progress.md" ok
-  run -0 "$LOG_DECISION" "$log" task1 "split PR" "too large" "#3" done
+  run -0 bash "$LOG_DECISION" "$log" start "resume" "new run" "progress.md" ok
+  run -0 bash "$LOG_DECISION" "$log" task1 "split PR" "too large" "#3" done
   [ "$(sed -n 1p "$log")" = "$(printf 'ts\tphase\tdecision\twhy\tevidence\tresult')" ]
   [ "$(wc -l <"$log" | tr -d ' ')" -eq 3 ]
   [ "$(grep -c '^ts' "$log")" -eq 1 ]
@@ -44,7 +44,7 @@ field() {
 
 @test "log-decision flattens tabs and newlines and quotes formula-like cells" {
   log="$TMP/decisions.tsv"
-  run -0 "$LOG_DECISION" "$log" "$(printf 'a\tb')" "$(printf 'c\nd')" "$(printf 'e\rf')" "=SUM(A1)" "+1"
+  run -0 bash "$LOG_DECISION" "$log" "$(printf 'a\tb')" "$(printf 'c\nd')" "$(printf 'e\rf')" "=SUM(A1)" "+1"
   [ "$(wc -l <"$log" | tr -d ' ')" -eq 2 ]
   [ "$(sed -n 2p "$log" | awk -F'\t' '{print NF}')" -eq 6 ]
   [ "$(field "$log" 2 2)" = "a b" ]
@@ -52,14 +52,14 @@ field() {
   [ "$(field "$log" 2 4)" = "e f" ]
   [ "$(field "$log" 2 5)" = "'=SUM(A1)" ]
   [ "$(field "$log" 2 6)" = "'+1" ]
-  run -0 "$LOG_DECISION" "$log" "-x" "@here" "mid=dle" "" ""
+  run -0 bash "$LOG_DECISION" "$log" "-x" "@here" "mid=dle" "" ""
   [ "$(field "$log" 3 2)" = "'-x" ]
   [ "$(field "$log" 3 3)" = "'@here" ]
   [ "$(field "$log" 3 4)" = "mid=dle" ]
 }
 
 @test "log-decision with a wrong argument count exits 2 and writes nothing" {
-  run -2 "$LOG_DECISION" "$TMP/decisions.tsv" start decision why evidence
+  run -2 bash "$LOG_DECISION" "$TMP/decisions.tsv" start decision why evidence
   [[ "$output" == usage:* ]]
   [ ! -e "$TMP/decisions.tsv" ]
 }
@@ -67,13 +67,13 @@ field() {
 @test "log-task appends a row for every valid value" {
   log="$TMP/tasks.tsv"
   for v in pass pass_after_fix fail blocked unverified; do
-    run -0 "$LOG_TASK" "$log" "v-$v" auto/x/01 "#1" 0 "$v" none merged
+    run -0 bash "$LOG_TASK" "$log" "v-$v" auto/x/01 "#1" 0 "$v" none merged
   done
   for c in green red none skipped pending; do
-    run -0 "$LOG_TASK" "$log" "c-$c" auto/x/01 "#1" 1 pass "$c" draft
+    run -0 bash "$LOG_TASK" "$log" "c-$c" auto/x/01 "#1" 1 pass "$c" draft
   done
   for o in merged draft stopped skipped; do
-    run -0 "$LOG_TASK" "$log" "o-$o" auto/x/01 "-" 12 pass green "$o"
+    run -0 bash "$LOG_TASK" "$log" "o-$o" auto/x/01 "-" 12 pass green "$o"
   done
   [ "$(sed -n 1p "$log")" = "$(printf 'ts\ttask_id\tbranch\tpr\treview_rounds\tverify\tci\toutcome')" ]
   [ "$(wc -l <"$log" | tr -d ' ')" -eq 15 ]
@@ -86,14 +86,14 @@ field() {
 
 @test "log-task rejects invalid values with exit 2 and writes nothing" {
   log="$TMP/tasks.tsv"
-  run -2 "$LOG_TASK" "$log" t1 b "#1" two pass none merged
-  run -2 "$LOG_TASK" "$log" t1 b "#1" -1 pass none merged
-  run -2 "$LOG_TASK" "$log" t1 b "#1" 1 PASS none merged
-  run -2 "$LOG_TASK" "$log" t1 b "#1" 1 pass yellow merged
-  run -2 "$LOG_TASK" "$log" t1 b "#1" 1 pass none closed
-  run -2 "$LOG_TASK" "$log" "" b "#1" 1 pass none merged
-  run -2 "$LOG_TASK" "$log" "$(printf 't\t1')" b "#1" 1 pass none merged
-  run -2 "$LOG_TASK" "$log" t1 b "#1" 1 pass none
+  run -2 bash "$LOG_TASK" "$log" t1 b "#1" two pass none merged
+  run -2 bash "$LOG_TASK" "$log" t1 b "#1" -1 pass none merged
+  run -2 bash "$LOG_TASK" "$log" t1 b "#1" 1 PASS none merged
+  run -2 bash "$LOG_TASK" "$log" t1 b "#1" 1 pass yellow merged
+  run -2 bash "$LOG_TASK" "$log" t1 b "#1" 1 pass none closed
+  run -2 bash "$LOG_TASK" "$log" "" b "#1" 1 pass none merged
+  run -2 bash "$LOG_TASK" "$log" "$(printf 't\t1')" b "#1" 1 pass none merged
+  run -2 bash "$LOG_TASK" "$log" t1 b "#1" 1 pass none
   [[ "$output" == usage:* ]]
   [ ! -e "$log" ]
 }
@@ -131,12 +131,12 @@ make_repo() {
 
 @test "patch-id is the same for the same change on different bases" {
   make_repo
-  run -0 "$PATCH_ID" b0 on-b0 "$R"
+  run -0 bash "$PATCH_ID" b0 on-b0 "$R"
   first="$output"
   [[ "$first" =~ ^[0-9a-f]{40}$ ]]
-  run -0 "$PATCH_ID" b1 on-b1 "$R"
+  run -0 bash "$PATCH_ID" b1 on-b1 "$R"
   [ "$output" = "$first" ]
-  run -0 "$PATCH_ID" b0 different "$R"
+  run -0 bash "$PATCH_ID" b0 different "$R"
   [[ "$output" =~ ^[0-9a-f]{40}$ ]]
   [ "$output" != "$first" ]
 }
@@ -149,26 +149,26 @@ make_repo() {
   git_in "$R" checkout -q -b indent1 b0
   printf 'one\n two\nthree\n' >"$R/a.txt"
   git_in "$R" commit -q -am indent1
-  run -0 "$PATCH_ID" b0 indent4 "$R"
+  run -0 bash "$PATCH_ID" b0 indent4 "$R"
   four="$output"
-  run -0 "$PATCH_ID" b0 indent1 "$R"
+  run -0 bash "$PATCH_ID" b0 indent1 "$R"
   [ "$output" != "$four" ]
 }
 
 @test "patch-id prints empty for no change and defaults to the current directory" {
   make_repo
   cd "$R"
-  run -0 "$PATCH_ID" b0 b0
+  run -0 bash "$PATCH_ID" b0 b0
   [ "$output" = "empty" ]
 }
 
 @test "patch-id exits 2 on an invalid ref, outside a repository, or a wrong argument count" {
   make_repo
-  run -2 "$PATCH_ID" b0 no-such-ref "$R"
+  run -2 bash "$PATCH_ID" b0 no-such-ref "$R"
   [[ "$output" == *no-such-ref* ]]
   mkdir "$TMP/plain"
-  run -2 "$PATCH_ID" HEAD HEAD "$TMP/plain"
-  run -2 "$PATCH_ID" b0
+  run -2 bash "$PATCH_ID" HEAD HEAD "$TMP/plain"
+  run -2 bash "$PATCH_ID" b0
   [[ "$output" == usage:* ]]
-  run -2 "$PATCH_ID" b0 b1 "$R" extra
+  run -2 bash "$PATCH_ID" b0 b1 "$R" extra
 }

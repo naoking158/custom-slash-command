@@ -98,7 +98,7 @@ SH
 }
 
 run_start_goal() {
-  run --separate-stderr "$START_GOAL" "$@"
+  run --separate-stderr bash "$START_GOAL" "$@"
 }
 
 last_line() { printf '%s\n' "$output" | tail -n 1; }

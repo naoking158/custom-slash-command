@@ -63,7 +63,7 @@ deny_antigravity="echo '{\"decision\":\"deny\"}'"
 
 @test "all checks pass: exit 0" {
   fake_orca "$reachable"
-  run "$DOCTOR"
+  run bash "$DOCTOR"
   [ "$status" -eq 0 ]
   [[ "$output" == *"Orca 1.4.277"* ]]
   [[ "$output" == *"outbound-guard denies"* ]]
@@ -72,7 +72,7 @@ deny_antigravity="echo '{\"decision\":\"deny\"}'"
 }
 
 @test "no orca command: exit 3, guards still checked" {
-  run "$DOCTOR"
+  run bash "$DOCTOR"
   [ "$status" -eq 3 ]
   [[ "$output" == *"orca command not found"* ]]
   [[ "$output" == *"outbound-guard denies"* ]]
@@ -80,19 +80,19 @@ deny_antigravity="echo '{\"decision\":\"deny\"}'"
 
 @test "orca status fails: exit 4" {
   fake_orca '' 1
-  run "$DOCTOR"
+  run bash "$DOCTOR"
   [ "$status" -eq 4 ]
 }
 
 @test "orca status prints non-JSON: exit 4" {
   fake_orca 'Orca is not running'
-  run "$DOCTOR"
+  run bash "$DOCTOR"
   [ "$status" -eq 4 ]
 }
 
 @test "runtime not reachable: exit 4" {
   fake_orca '{"ok":true,"result":{"runtime":{"state":"starting","reachable":false}}}'
-  run "$DOCTOR"
+  run bash "$DOCTOR"
   [ "$status" -eq 4 ]
   [[ "$output" == *"not reachable"* ]]
 }
@@ -100,7 +100,7 @@ deny_antigravity="echo '{\"decision\":\"deny\"}'"
 @test "outside an Orca terminal: exit 5" {
   fake_orca "$reachable"
   unset ORCA_TERMINAL_HANDLE
-  run "$DOCTOR"
+  run bash "$DOCTOR"
   [ "$status" -eq 5 ]
   [[ "$output" == *"ORCA_TERMINAL_HANDLE"* ]]
 }
@@ -139,6 +139,6 @@ deny_antigravity="echo '{\"decision\":\"deny\"}'"
 }
 
 @test "unknown argument: exit 2" {
-  run "$DOCTOR" --bogus
+  run bash "$DOCTOR" --bogus
   [ "$status" -eq 2 ]
 }
