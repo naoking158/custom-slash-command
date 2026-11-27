@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # tsv.sh — Append-only TSV rows for the autopilot logs. Sourced by log-*.sh.
 #
 # Adapted from pstack `show-me-your-work/scripts/log.sh` (github.com/cursor/plugins, MIT).
