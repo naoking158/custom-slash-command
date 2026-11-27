@@ -33,6 +33,12 @@ verdicts() {
   [ "${lines[${#lines[@]}-1]}" = "# 13 tests, 4 failed" ]
 }
 
+@test "a file that ends before its tests run fails the run" {
+  cp "$BATS_TEST_DIRNAME/fixtures/exits-early.bats.txt" "$BATS_TEST_TMPDIR/exits-early.bats"
+  run -1 "$RUNNER" "$BATS_TEST_TMPDIR/exits-early.bats"
+  [[ "$output" == *"hold 2 tests but 0 reported"* ]]
+}
+
 @test "bad -j exits 2" {
   run -2 "$RUNNER" -j 0 "$FIXTURE"
   run -2 "$RUNNER" -j

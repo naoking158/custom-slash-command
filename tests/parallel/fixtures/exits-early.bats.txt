@@ -1,0 +1,12 @@
+# Fixture for tests/parallel/test_parallel.bats: the file ends before its
+# tests run.
+
+exit 0
+
+@test "a" {
+  true
+}
+
+@test "b" {
+  true
+}
