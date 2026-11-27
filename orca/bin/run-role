@@ -82,6 +82,20 @@ die() {
   finish "$code"
 }
 
+# strip_front_matter FILE — FILE without a leading --- ... --- block.
+strip_front_matter() {
+  local line n=0 fm=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1))
+    if [ "$n" -eq 1 ] && [ "$line" = "---" ]; then fm=1; continue; fi
+    if [ "$fm" -eq 1 ]; then
+      [ "$line" != "---" ] || fm=0
+      continue
+    fi
+    printf '%s\n' "$line"
+  done <"$1"
+}
+
 abspath() {
   case "$1" in
     /*) printf '%s' "$1" ;;
@@ -190,7 +204,7 @@ status_json="$(orca status --json 2>/dev/null)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/run-role.XXXXXX")" || die 2 "mktemp failed"
 spec="$WORK/spec.md"
 {
-  awk 'NR == 1 && $0 == "---" { fm = 1; next } fm && $0 == "---" { fm = 0; next } !fm' "$agent_file"
+  strip_front_matter "$agent_file"
   printf '\n## Inputs\n\n%s\n' "$INPUTS"
   printf '## Reporting\n\n'
   printf -- '- Write your result to %s. That file is the only result anyone reads.\n' "$OUT"
@@ -198,7 +212,7 @@ spec="$WORK/spec.md"
   printf -- '- Do not ask questions. Make each judgment call yourself and state it in the result.\n'
 } > "$spec"
 
-rm -f "$OUT"
+[ ! -e "$OUT" ] && [ ! -L "$OUT" ] || rm -f "$OUT"
 worktree="current"
 [ -z "$cwd" ] || worktree="path:$cwd"
 from_args=()
