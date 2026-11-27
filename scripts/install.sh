@@ -104,13 +104,22 @@ done
 
 # --- helpers -----------------------------------------------------------------
 
+# parent_dir PATH — PATH without its last component, as dirname prints it for
+# a path that does not end in /.
+parent_dir() {
+  case "$1" in
+    */*) local p="${1%/*}"; printf '%s' "${p:-/}" ;;
+    *) printf '.' ;;
+  esac
+}
+
 # Resolve a possibly-relative symlink target to an absolute path.
 abs_target() {
   local link="$1" target
   target="$(readlink "$link")"
   case "$target" in
     /*) printf '%s' "$target" ;;
-    *)  printf '%s/%s' "$(cd "$(dirname "$link")" && pwd -P)" "$target" ;;
+    *)  printf '%s/%s' "$(cd "$(parent_dir "$link")" && pwd -P)" "$target" ;;
   esac
 }
 
@@ -146,7 +155,7 @@ install_plugin_link() {
       printf '  OK     already linked: %s\n' "$target"
       ;;
     absent)
-      mkdir -p "$(dirname "$target")"
+      mkdir -p "$(parent_dir "$target")"
       ln -s "$want" "$target"
       printf '  OK     created:        %s -> %s\n' "$target" "$want"
       ;;
@@ -233,7 +242,7 @@ rule_link() {
   case "$mode:$state" in
     install:ok)        printf '  OK     already linked: %s\n' "$target" ;;
     install:absent)
-      mkdir -p "$(dirname "$target")"
+      mkdir -p "$(parent_dir "$target")"
       ln -s "$want" "$target"
       printf '  OK     created:        %s -> %s\n' "$target" "$want" ;;
     install:wrong-symlink:*)
@@ -262,8 +271,8 @@ for_each_rule() {
   local mode="$1" src rc=0
   for src in "$REPO_ROOT"/rules/*.md; do
     [ -e "$src" ] || continue
-    case "$(basename "$src")" in AGENTS.md|antigravity.md) continue ;; esac
-    rule_link "$mode" "$RULES_DIR/$(basename "$src")" "$src" || rc=1
+    case "${src##*/}" in AGENTS.md|antigravity.md) continue ;; esac
+    rule_link "$mode" "$RULES_DIR/${src##*/}" "$src" || rc=1
   done
   return "$rc"
 }
