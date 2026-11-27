@@ -218,13 +218,7 @@ run_file() {
     fi
     __i=$((__i + 1))
   done <"$__out/names" >"$__out/tap"
-  local __tmps=("$BATS_FILE_TMPDIR")
-  __i=1
-  while [ "$__i" -le "$__n" ]; do
-    __tmps+=("$__out/t$__i.tmp")
-    __i=$((__i + 1))
-  done
-  rm -rf "${__tmps[@]}"
+  rm -rf "${__dirs[@]}"
   return $__fail
 }
 
