@@ -69,10 +69,21 @@ SH
 
 # field WORKTREE COLUMN — one column of the row for WORKTREE in $output.
 field() {
-  printf '%s\n' "$output" | awk -F'\t' -v w="$1" -v c="$2" '
-    $NF == "WORKTREE" { for (i = 1; i <= NF; i++) if ($i == c) n = i }
-    $NF == w { print $n }'
+  local line n="" i
+  local -a cells
+  while IFS= read -r line; do
+    IFS=$'\t' read -r -a cells <<<"$line"
+    [ ${#cells[@]} -gt 0 ] || continue
+    if [ "${cells[${#cells[@]} - 1]}" = WORKTREE ]; then
+      for ((i = 0; i < ${#cells[@]}; i++)); do [ "${cells[i]}" != "$2" ] || n=$i; done
+    elif [ "${cells[${#cells[@]} - 1]}" = "$1" ] && [ -n "$n" ]; then
+      printf '%s\n' "${cells[n]}"
+    fi
+  done <<<"$output"
 }
+
+# slug PATH — the Claude Code projects directory name for PATH.
+slug() { printf '%s' "${1//[^A-Za-z0-9]/-}"; }
 
 audit() {
   run "$AUDIT" -b main "$REPO"
@@ -131,7 +142,7 @@ audit() {
 @test "session in the main checkout naming the worktree makes verify-recent-chat" {
   add_wt chat
   git -C "$REPO" merge -q --ff-only chat
-  local d="$HOME/.claude/projects/$(printf '%s' "$REPO" | sed 's/[^A-Za-z0-9]/-/g')"
+  local d="$HOME/.claude/projects/$(slug "$REPO")"
   mkdir -p "$d"
   printf '{"cwd":"%s"}\n' "$TMP/chat" >"$d/session.jsonl"
   audit
@@ -141,7 +152,7 @@ audit() {
 @test "session started in the worktree makes verify-recent-chat" {
   add_wt own
   git -C "$REPO" merge -q --ff-only own
-  local d="$HOME/.claude/projects/$(printf '%s' "$TMP/own" | sed 's/[^A-Za-z0-9]/-/g')"
+  local d="$HOME/.claude/projects/$(slug "$TMP/own")"
   mkdir -p "$d"
   echo '{}' >"$d/session.jsonl"
   audit
@@ -151,7 +162,7 @@ audit() {
 @test "a sibling path with the same prefix is not a mention" {
   add_wt sib
   git -C "$REPO" merge -q --ff-only sib
-  local d="$HOME/.claude/projects/$(printf '%s' "$REPO" | sed 's/[^A-Za-z0-9]/-/g')"
+  local d="$HOME/.claude/projects/$(slug "$REPO")"
   mkdir -p "$d"
   printf '{"cwd":"%s"}\n' "$TMP/sib-2" >"$d/session.jsonl"
   audit
@@ -187,7 +198,7 @@ audit() {
   add_wt target
   git -C "$REPO" merge -q --ff-only target
   add_wt coordinator
-  local d="$HOME/.claude/projects/$(printf '%s' "$TMP/coordinator" | sed 's/[^A-Za-z0-9]/-/g')"
+  local d="$HOME/.claude/projects/$(slug "$TMP/coordinator")"
   mkdir -p "$d"
   printf '{"cwd":"%s"}\n' "$TMP/target" >"$d/session.jsonl"
   audit
@@ -197,7 +208,7 @@ audit() {
 @test "a session that only cds into the worktree makes verify-recent-chat" {
   add_wt cdonly
   git -C "$REPO" merge -q --ff-only cdonly
-  local d="$HOME/.claude/projects/$(printf '%s' "$REPO" | sed 's/[^A-Za-z0-9]/-/g')"
+  local d="$HOME/.claude/projects/$(slug "$REPO")"
   mkdir -p "$d"
   printf '{"command":"cd %s && ls"}\n' "$TMP/cdonly" >"$d/session.jsonl"
   audit
@@ -227,7 +238,7 @@ audit() {
 @test "a session that only listed the worktree path does not count" {
   add_wt listed
   git -C "$REPO" merge -q --ff-only listed
-  local d="$HOME/.claude/projects/$(printf '%s' "$REPO" | sed 's/[^A-Za-z0-9]/-/g')"
+  local d="$HOME/.claude/projects/$(slug "$REPO")"
   mkdir -p "$d"
   printf '{"content":"2M\\tYES\\tsafe\\t%s\\n%s  abc1234 [listed]\\n"}\n' "$TMP/listed" "$TMP/listed" >"$d/session.jsonl"
   audit
