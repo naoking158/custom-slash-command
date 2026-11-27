@@ -213,6 +213,12 @@ run_file() {
     fi
     __i=$((__i + 1))
   done <"$__out/names" >"$__out/tap"
+  rm -rf "$BATS_FILE_TMPDIR" "$__out"/t*.tmp
+  local __line __declared=0
+  while IFS= read -r __line || [ -n "$__line" ]; do
+    case "$__line" in '@test '*) __declared=$((__declared + 1)) ;; esac
+  done <"$__file"
+  echo "$__declared" >"$__out/declared"
   return $__fail
 }
 
@@ -247,7 +253,9 @@ for f in "${files[@]}"; do
   while IFS= read -r line; do
     case "$line" in *"child setpgid"*) ;; *) printf '%s\n' "$line" >&2 ;; esac
   done <"$BATS_SUITE_TMPDIR/f$k/stderr"
-  expected=$((expected + $(grep -c '^@test ' "$f")))
+  declared=0
+  [ ! -f "$BATS_SUITE_TMPDIR/f$k/declared" ] || read -r declared <"$BATS_SUITE_TMPDIR/f$k/declared"
+  expected=$((expected + declared))
   if [ -f "$BATS_SUITE_TMPDIR/f$k/teardown_file.failed" ]; then
     echo "# teardown_file of $f failed:"
     sed 's/^/# /' "$BATS_SUITE_TMPDIR/f$k/teardown_file.log"
