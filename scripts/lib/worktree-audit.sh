@@ -60,10 +60,20 @@ fi
 canon() { if [ -d "$1" ]; then (cd "$1" && pwd -P); else printf '%s\n' "$1"; fi; }
 
 # slug PATH — the Claude Code projects directory name for a working directory.
-slug() { printf '%s' "$1" | sed 's/[^A-Za-z0-9]/-/g'; }
+slug() { printf '%s' "${1//[^A-Za-z0-9]/-}"; }
 
 # regex_quote TEXT — TEXT with ERE metacharacters escaped.
-regex_quote() { printf '%s' "$1" | sed 's/[][\.*^$+?(){}|]/\\&/g'; }
+regex_quote() {
+  local s="$1" out="" c i
+  for ((i = 0; i < ${#s}; i++)); do
+    c="${s:i:1}"
+    case "$c" in
+      '[' | ']' | '\' | '.' | '*' | '^' | '$' | '+' | '?' | '(' | ')' | '{' | '}' | '|') out="$out\\$c" ;;
+      *) out="$out$c" ;;
+    esac
+  done
+  printf '%s' "$out"
+}
 
 # newest_ts FILE... on stdin — the largest mtime among the listed files, or 0.
 newest_ts() {
@@ -87,6 +97,8 @@ if command -v gh >/dev/null 2>&1 \
   printf '%s' "$raw" | jq '[.[] | {number, head: .headRefName, oid: .headRefOid,
     state: (if .isDraft == true and .state == "OPEN" then "draft" else (.state | ascii_downcase) end)}]' >"$tmp/prs.json"
 fi
+# One row per PR: head branch, #number/state, head oid.
+jq -r '.[] | [.head, "#\(.number)/\(.state)", (.oid // "")] | @tsv' "$tmp/prs.json" >"$tmp/prs.tsv"
 
 # Orca state by canonical path, fetched once. Without orca the column is -;
 # with an orca that does not answer, every worktree's Orca state is unknown.
@@ -147,8 +159,14 @@ tail -n +2 "$tmp/worktrees.tsv" | while IFS=$'\t' read -r wt head lock branch; d
   elif ! porcelain=$(git -C "$wt" status --porcelain 2>/dev/null); then
     dirty=unknown
   else
-    tracked=$(printf '%s\n' "$porcelain" | grep -v '^??' | grep -c . )
-    untracked=$(printf '%s\n' "$porcelain" | grep -c '^??')
+    tracked=0 untracked=0
+    while IFS= read -r line; do
+      case "$line" in
+        '??'*) untracked=$((untracked + 1)) ;;
+        '') ;;
+        *) tracked=$((tracked + 1)) ;;
+      esac
+    done <<<"$porcelain"
     if [ "$tracked" -gt 0 ]; then dirty="wip:$tracked"
     elif [ "$untracked" -gt 0 ]; then dirty="scratch:$untracked"
     else dirty=clean; fi
@@ -168,14 +186,18 @@ tail -n +2 "$tmp/worktrees.tsv" | while IFS=$'\t' read -r wt head lock branch; d
   # The PR state speaks for the worktree only when the PR's head contains it.
   pr="-"; pr_covers=no
   if [ -n "$branch" ]; then
-    row=$(jq -r --arg b "$branch" '[.[] | select(.head == $b)] | first | if . then "#\(.number)/\(.state)\t\(.oid // "")" else "-\t" end' "$tmp/prs.json")
-    pr=${row%%$'\t'*}
-    pr_oid=${row#*$'\t'}
+    pr_oid=""
+    while IFS=$'\t' read -r pr_head pr_state pr_head_oid; do
+      if [ "$pr_head" = "$branch" ]; then pr=$pr_state pr_oid=$pr_head_oid; break; fi
+    done <"$tmp/prs.tsv"
     [ -n "$pr_oid" ] && git merge-base --is-ancestor "$head" "$pr_oid" 2>/dev/null && pr_covers=yes
   fi
 
   cwt=$(canon "$wt")
-  orca=$(awk -F'\t' -v p="$cwt" '$1 == p { print $2; exit }' "$tmp/orca.tsv")
+  orca=""
+  while IFS=$'\t' read -r orca_path orca_state; do
+    if [ "$orca_path" = "$cwt" ]; then orca=$orca_state; break; fi
+  done <"$tmp/orca.tsv"
   if [ -z "$orca" ]; then
     if [ "$orca_unknown" = yes ]; then orca="?"; else orca="-"; fi
   fi
