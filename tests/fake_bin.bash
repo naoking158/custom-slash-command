@@ -2,7 +2,7 @@
 
 # fake_bin PATH — install the script read from stdin as executable PATH.
 # PATH is a symlink to a copy of the script in a cache shared by every test
-# and every run ($TMPDIR/my-toolkit-test-fakes.<uid>, mode 700): on macOS the
+# and every run ($TMPDIR/my-toolkit-test-fakes.<uid>, created with mode 700): on macOS the
 # first exec of every newly written executable costs about 350ms and these
 # checks run one at a time across the machine, while an exec through a
 # symlink to a file already checked does not pay it. A copy is found by
