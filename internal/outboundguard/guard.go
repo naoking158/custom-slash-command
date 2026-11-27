@@ -54,15 +54,16 @@ type decided struct{ d decision }
 func decide(kind, reason string) { panic(decided{decision{kind, reason}}) }
 
 // Run judges one hook payload and returns what the hook prints: a
-// permissionDecision JSON line, or nothing to allow.
+// permissionDecision JSON line, or nothing to allow. Any other panic is
+// passed on, so that the process fails and the launcher denies instead.
 func Run(payload []byte, env Env) (out string) {
 	defer func() {
 		if r := recover(); r != nil {
-			if d, ok := r.(decided); ok {
-				out = decisionJSON(d.d)
-				return
+			d, ok := r.(decided)
+			if !ok {
+				panic(r)
 			}
-			out = ""
+			out = decisionJSON(d.d)
 		}
 	}()
 	(&guard{env: env}).run(payload)
@@ -112,9 +113,13 @@ type guard struct {
 	pendingAsk string
 }
 
-// jqRaw renders a JSON value as `jq -r` prints it, with trailing newlines
-// dropped as a shell command substitution does.
+// jqRaw renders a JSON value as `jq -r` prints it, with NULs and trailing
+// newlines dropped as a shell command substitution does.
 func jqRaw(v any) string {
+	return strings.ReplaceAll(jqRaw1(v), "\x00", "")
+}
+
+func jqRaw1(v any) string {
 	switch t := v.(type) {
 	case nil:
 		return ""
@@ -157,7 +162,7 @@ func (g *guard) run(payload []byte) {
 	input, _ := p["tool_input"].(map[string]any)
 	if tool != "Bash" {
 		if notionWrite.MatchString(tool) {
-			text := strings.TrimRight(jqString(p["tool_input"]), "\n")
+			text := strings.TrimRight(strings.ReplaceAll(jqString(p["tool_input"]), "\x00", ""), "\n")
 			if r := g.leakReason(text, ""); r != "" {
 				decide("deny", r)
 			}
@@ -693,7 +698,7 @@ func jsonStrings(f string) string {
 		}
 		walk(v)
 	}
-	return strings.TrimRight(strings.Join(out, "\n"), "\n")
+	return strings.TrimRight(strings.ReplaceAll(strings.Join(out, "\n"), "\x00", ""), "\n")
 }
 
 // globMatch matches s against a shell pattern (* ? [..] [!..]); * also

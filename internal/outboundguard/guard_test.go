@@ -732,6 +732,21 @@ var guardTests = []struct {
 	}},
 }
 
+func TestNULInCommandIsDropped(t *testing.T) {
+	f := newFx(t)
+	done := make(chan struct{})
+	go func() {
+		f.guard("gh pr comment 1 --body \"\x000\x00\"")
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the guard did not return for a command holding NULs")
+	}
+	f.allow()
+}
+
 func TestGuard(t *testing.T) {
 	seen := map[string]bool{}
 	for _, tc := range guardTests {

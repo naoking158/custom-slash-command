@@ -365,7 +365,7 @@ func gitSub(s, sub string, from int) (start int, opts string, end int, ok bool) 
 	}
 }
 
-// ghCommand matches `gh <first> <one of second>` (second empty: first alone)
+// ghWords matches `gh <first> <one of second>` (second empty: first alone)
 // with gh not inside a longer word and the last word not followed by a word
 // byte or -. It returns the start and end of the match.
 func ghWords(s string, i int, alts [][2][]string) (int, bool) {
