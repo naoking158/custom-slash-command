@@ -17,7 +17,7 @@
 #   1 = bad arguments / patch file unreadable
 #   2 = patch contains no hunks (empty or binary-only diff)
 #
-# Dependencies: bash, awk, jq (NFR-001: no python/node).
+# Dependencies: bash, awk, iconv, jq (NFR-001: no python/node).
 set -euo pipefail
 
 usage() {
@@ -48,6 +48,13 @@ fi
 
 if [[ ! -f "$PATCH_FILE" || ! -r "$PATCH_FILE" ]]; then
   echo "diff-hunks.sh: cannot read $PATCH_FILE" >&2
+  exit 1
+fi
+
+# BSD awk fails on bytes that are not UTF-8; GNU awk and mawk parse them. Check
+# the encoding here so that every platform rejects such a patch the same way.
+if ! iconv -f UTF-8 -t UTF-8 "$PATCH_FILE" >/dev/null 2>&1; then
+  echo "diff-hunks.sh: cannot parse $PATCH_FILE (non-UTF-8 patch)" >&2
   exit 1
 fi
 
