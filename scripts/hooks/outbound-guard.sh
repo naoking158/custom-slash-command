@@ -5,6 +5,10 @@
 #   - `gh pr create` must open a draft (--draft / -d). Draft PRs skip the
 #     reviewer auto-assignment, so the author can self-review first.
 #   - `gh pr ready` and API calls that mark a PR ready for review are denied.
+#   - Adding the label `human-approved` with `gh pr` / `gh issue`, renaming a
+#     label to it, and every label write through `gh api` are denied in every
+#     mode: the label records a person's approval of a guardrail change. A
+#     command hidden in a quoted string or a script is not read (see below).
 #   - `git push` is denied for force / delete / mirror / --all pushes and for
 #     pushes whose destination is the default branch (main, master, origin/HEAD).
 #   - Outbound text (commit messages, PR / issue bodies and comments) must not
@@ -318,6 +322,19 @@ judge_push() {
   return 0
 }
 
+# --- approval label ------------------------------------------------------------
+# `human-approved` on a pull request is a person's approval of a guardrail
+# change (scripts/ci/guardrail.sh). Only a person adds it, in the GitHub UI.
+# Read with quotes and backslashes dropped, so that human-"approved" is seen;
+# a label taken from a variable or a substitution cannot be read and is denied.
+# Label writes through `gh api` are judged with the other API writes below.
+label_cmd="$(printf '%s' "$cmd" | tr '\n' ' ' | tr -d '"\\\047')"
+if printf '%s' "$label_cmd" | grep -qiE \
+  -e '(^|[^[:alnum:]_.-])gh[[:space:]]+(pr|issue)[[:space:]]+(create|new|edit)[[:space:]].*(--add-label|--label|-l)[[:space:]=]+[^[:space:]]*(human-approved|[$`])' \
+  -e '(^|[^[:alnum:]_.-])gh[[:space:]]+label[[:space:]]+edit[[:space:]].*human-approved'; then
+  decide deny "label human-approved は人の承認を表す。agent は付けず、人が GitHub の画面で付ける（label は変数を使わず直接書く）"
+fi
+
 text_dir=""
 api_dir=""
 pending_ask=""
@@ -458,6 +475,10 @@ if [ -n "$api" ]; then
       || decide deny "gh api が送るファイル ${f##*/} を読めない。ファイルを書くコマンドと gh api を別の Bash 呼び出しに分け、パスを直接書く"
     api_text="$api_text"$'\n'"$(cat "$f")"$'\n'"$(jq -r '.. | strings' "$f" 2>/dev/null)"
   done < <(printf '%s\n' "$api" | grep $'^\x02')
+  # A label written through the API can be named by its id, so every label
+  # write is denied here, whatever the label.
+  printf '%s' "$api_text" | grep -qE '(issues|pulls)/[0-9]+/labels|repos/[^[:space:]/]+/[^[:space:]/]+/labels|addLabelsToLabelable|labelIds|createLabel|updateLabel' \
+    && decide deny "gh api で label を書き換えない。human-approved 以外の label は gh pr edit --add-label で付ける"
   # JSON escapes such as \n would hide the boundary before a review ID.
   api_text="$(printf '%s' "$api_text" | sed -E 's/\\[nrt]/ /g')"
   reason="$(leak_reason "$api_text" "$api_dir")"

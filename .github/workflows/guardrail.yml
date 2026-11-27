@@ -1,0 +1,28 @@
+name: Guardrail
+
+# pull_request_target runs this file and scripts/ci/guardrail.sh as they are on
+# the base branch, so a pull request cannot rewrite the check that judges it.
+# The job never checks out or runs the pull request's code, and its token only
+# reads. Runs are not cancelled: scripts/lib/wait-ci.sh counts a cancelled run
+# as red.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  guardrail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: scripts/ci/guardrail.sh gate "$GITHUB_REPOSITORY" "$PR"
