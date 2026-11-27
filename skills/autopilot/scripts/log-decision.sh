@@ -17,7 +17,8 @@ if [ $# -ne 6 ]; then
   exit 2
 fi
 
-. "$(cd "$(dirname "$0")" && pwd)/tsv.sh"
+case "$0" in */*) self_dir="${0%/*}" ;; *) self_dir=. ;; esac
+. "$(cd "$self_dir" && pwd)/tsv.sh"
 
 tsv_append "$1" $'ts\tphase\tdecision\twhy\tevidence\tresult' \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$2" "$3" "$4" "$5" "$6"

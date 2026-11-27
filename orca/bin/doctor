@@ -35,7 +35,8 @@ for dep in jq git; do
   command -v "$dep" >/dev/null 2>&1 || { printf 'doctor: %s is required\n' "$dep" >&2; exit 2; }
 done
 
-HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/hooks" && pwd -P)"
+case "${BASH_SOURCE[0]}" in */*) self_dir="${BASH_SOURCE[0]%/*}" ;; *) self_dir=. ;; esac
+HOOKS_DIR="$(cd "$self_dir/../../scripts/hooks" && pwd -P)"
 PROBE_CMD='git push origin HEAD:main'
 
 first_failure=0

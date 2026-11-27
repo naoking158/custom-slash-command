@@ -19,7 +19,8 @@
 # Dependencies: bash, awk, sed, jq, shasum (NFR-001: no python/node).
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+case "$0" in */*) self_dir="${0%/*}" ;; *) self_dir=. ;; esac
+SCRIPT_DIR="$(cd "$self_dir" && pwd)"
 
 usage() {
   echo "usage: build-screen.sh --diff <patch> --review <json> --out <html> [--template <html>] [--pass1 <json>]" >&2
