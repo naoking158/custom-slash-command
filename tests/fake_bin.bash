@@ -21,10 +21,10 @@ fake_bin() {
     fi
   done
   [ -d "$dir" ] || mkdir -p "$dir"
-  tmp="$(mktemp "$dir/.tmp.XXXXXX")"
+  copy="$(mktemp "$dir/fake.XXXXXX")"
+  tmp="$dir/.tmp.${copy##*/}"
   printf '%s\n' "$body" >"$tmp"
   chmod +x "$tmp"
-  copy="$(mktemp "$dir/fake.XXXXXX")"
   mv -f "$tmp" "$copy"
   ln -sfn "$copy" "$1"
 }
