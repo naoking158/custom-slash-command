@@ -63,6 +63,7 @@ func template(t *testing.T) string {
 				return
 			}
 		}
+		templateErr = chmodTree(dir, false)
 		templateDir = repo
 	})
 	if templateErr != nil {
@@ -91,6 +92,33 @@ func (e *gitError) Error() string {
 	return "git " + strings.Join(e.args, " ") + ": " + e.err.Error() + ": " + e.out
 }
 
+// chmodTree makes every file and directory under dir writable or not.
+func chmodTree(dir string, writable bool) error {
+	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		mode := fs.FileMode(0o444)
+		if d.IsDir() {
+			mode = 0o555
+		}
+		if writable {
+			mode |= 0o200
+		}
+		return os.Chmod(path, mode)
+	})
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if templateDir != "" {
+		dir := filepath.Dir(templateDir)
+		_ = chmodTree(dir, true)
+		_ = os.RemoveAll(dir)
+	}
+	os.Exit(code)
+}
+
 func copyTree(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -105,17 +133,14 @@ func copyTree(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(to, data, info.Mode().Perm())
+		return os.WriteFile(to, data, 0o644)
 	})
 }
 
-// fx is one test's fixture: TMP holds REPO (a copy of the template) and the
-// files the test writes; the autonomy config is absent until a test writes
-// it, and the ship-ready record of me/app is fresh.
+// fx is one test's fixture: REPO is the template, read-only and shared, until
+// the test calls own() for a copy at TMP/repo; TMP holds the files the test
+// writes. The autonomy config is absent until a test writes it, and the
+// ship-ready record of me/app is fresh.
 type fx struct {
 	t                *testing.T
 	tmp, repo, wt    string
@@ -130,10 +155,7 @@ func newFx(t *testing.T) *fx {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &fx{t: t, tmp: tmp, repo: filepath.Join(tmp, "repo")}
-	if err := copyTree(template(t), f.repo); err != nil {
-		t.Fatal(err)
-	}
+	f := &fx{t: t, tmp: tmp, repo: template(t)}
 	home := os.Getenv("HOME")
 	f.env = Env{
 		Home:         &home,
@@ -144,6 +166,16 @@ func newFx(t *testing.T) *fx {
 	}
 	f.write("data/ship-ready/me__app", strconv.FormatInt(f.env.Now, 10)+"\n")
 	return f
+}
+
+// own gives the test its own copy of the template at TMP/repo, for a test
+// that changes REPO.
+func (f *fx) own() {
+	f.t.Helper()
+	f.repo = filepath.Join(f.tmp, "repo")
+	if err := copyTree(template(f.t), f.repo); err != nil {
+		f.t.Fatal(err)
+	}
 }
 
 // write puts content in name, relative to TMP unless absolute.
@@ -283,10 +315,12 @@ var guardTests = []struct {
 		f.guard(`git push origin HEAD:master`).deny()
 	}},
 	{"bare push while on main is denied", func(f *fx) {
+		f.own()
 		f.git("-C", f.repo, "checkout", "-q", "main")
 		f.guard(`git push`).deny()
 	}},
 	{"push to the origin/HEAD default branch is denied", func(f *fx) {
+		f.own()
 		f.git("-C", f.repo, "update-ref", "refs/remotes/origin/develop", "HEAD")
 		f.git("-C", f.repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/develop")
 		f.guard(`git push origin develop`).deny()
@@ -301,28 +335,34 @@ var guardTests = []struct {
 		f.guard(`git push origin :feature/x`).deny()
 	}},
 	{"leading cd selects the repository", func(f *fx) {
+		f.own()
 		f.git("-C", f.repo, "checkout", "-q", "main")
 		f.in("/", "cd "+f.repo+" && git push").deny()
 	}},
 	{"bare push after an assignment and cd is judged in that directory", func(f *fx) {
+		f.own()
 		f.mainAndWorktree()
 		f.guard("W=" + f.wt + `; cd $W && git add f && git commit -q -m "msg" && git push -q && echo pushed`).allow()
 	}},
 	{"bare push after a later cd into a checkout on the default branch is denied", func(f *fx) {
+		f.own()
 		f.mainAndWorktree()
 		f.in(f.wt, "M="+f.repo+`; cd "$M" && git push -q`).deny()
 		f.in(f.wt, "export X=1; cd "+f.repo+" && git push -q").deny()
 	}},
 	{"git -C with a relative path is resolved from the preceding cd", func(f *fx) {
+		f.own()
 		f.mainAndWorktree()
 		f.in("/", "cd "+f.tmp+" && git -C wt push -q").allow()
 		f.in("/", "cd "+f.tmp+" && git -C repo push -q").deny()
 	}},
 	{"a cd after the push does not move it", func(f *fx) {
+		f.own()
 		f.mainAndWorktree()
 		f.in(f.wt, "git push -q && cd "+f.repo+" && git fetch -q").allow()
 	}},
 	{"a cd inside a subshell ends with the subshell", func(f *fx) {
+		f.own()
 		f.mainAndWorktree()
 		f.in(f.wt, "(cd "+f.repo+" && make) ; git push -q").allow()
 		f.in(f.wt, "(cd "+f.repo+" && git push -q)").deny()
@@ -355,6 +395,7 @@ var guardTests = []struct {
 		f.guard(`git push origin "$(git branch --show-current)"`).deny()
 	}},
 	{"a redirection is not a push argument", func(f *fx) {
+		f.own()
 		f.mainAndWorktree()
 		f.guard(`git push origin &>/dev/null`).deny()
 		f.guard(`git push &> /dev/null`).deny()
@@ -364,6 +405,7 @@ var guardTests = []struct {
 		f.in(f.wt, `cd . > /dev/null && git push origin feature/x 2> err.txt`).allow()
 	}},
 	{"a cd behind if, builtin, a command substitution or a function is followed", func(f *fx) {
+		f.own()
 		f.mainAndWorktree()
 		f.in(f.wt, "if cd "+f.repo+"; then git push -q; fi").deny()
 		f.in(f.wt, "builtin cd "+f.repo+" && git push -q").deny()
@@ -377,6 +419,7 @@ var guardTests = []struct {
 		f.guard(`echo \"start\" && git push origin main && echo "done"`).deny()
 	}},
 	{"a comment is not read as part of the command", func(f *fx) {
+		f.own()
 		f.mainAndWorktree()
 		f.in(f.wt, "# it's time to publish\ngit push --force origin feature/x\necho 'done'").deny()
 		f.guard("cd " + f.wt + "  # the worktree\ngit push -u origin feature/x").allow()
@@ -384,6 +427,7 @@ var guardTests = []struct {
 		f.in(f.wt, "(cd "+f.repo+" && make)  # build (see the notes\ngit push -q").allow()
 	}},
 	{"a command written before an unclosed command substitution is still judged", func(f *fx) {
+		f.own()
 		f.guard(`git push origin main $(echo a && echo b)`).deny()
 		f.guard(`gh pr merge 3 $(true && true)`).deny()
 		f.guard(`git push origin feature/x $(true && true)`).deny()
@@ -391,12 +435,14 @@ var guardTests = []struct {
 		f.in(f.wt, "X="+f.wt+"; X=$(cd "+f.repo+" && pwd); cd $X && git push -q").deny()
 	}},
 	{"a redirection into a substitution or a brace list is not a refspec", func(f *fx) {
+		f.own()
 		f.mainAndWorktree()
 		f.guard(`git push origin > $(mktemp)`).deny()
 		f.guard(`git push origin > >(tee log)`).deny()
 		f.in(f.wt, `git push origin {main,feature/x}`).deny()
 	}},
 	{"a segment that closes one substitution and opens the next keeps their directories apart", func(f *fx) {
+		f.own()
 		f.mainAndWorktree()
 		f.guard("echo $(cd " + f.wt + " && pwd) $(true && git push -q)").deny()
 		f.guard("diff <(cd " + f.wt + " && git log -1) <(git push -q | cat)").deny()
@@ -408,11 +454,13 @@ var guardTests = []struct {
 		f.in(f.wt, "echo $(cd "+f.repo+" && pwd) $(true && git push -q)").allow()
 	}},
 	{"a subshell closed on its own segment does not move what follows", func(f *fx) {
+		f.own()
 		f.mainAndWorktree()
 		f.in(f.wt, "(cd "+f.repo+") ; git push -q").allow()
 		f.guard("(cd " + f.wt + ") ; git push -q").deny()
 	}},
 	{"a push on a line with a case statement is denied unless it names its directory", func(f *fx) {
+		f.own()
 		f.mainAndWorktree()
 		f.guard("W=" + f.wt + `; cd "$W" && (cd ` + f.repo + " && case x in a) true ;; esac && git push -q)").deny()
 		f.in(f.wt, "(cd "+f.repo+" && case x in a) echo hi ;; esac && git push -q)").deny()
@@ -422,6 +470,7 @@ var guardTests = []struct {
 		f.in(f.wt, "git push -q; case x in a) true ;; esac").allow()
 	}},
 	{"a cd written after a closing parenthesis makes the directory unknown", func(f *fx) {
+		f.own()
 		f.mainAndWorktree()
 		f.in(f.wt, "X=$(true && true) cd "+f.repo+" && git push -q").deny()
 	}},
@@ -470,6 +519,7 @@ var guardTests = []struct {
 		f.guard("git commit -q -F /dev/stdin <<'EOF'\nfix: x\nEOF").allow()
 	}},
 	{"a body file written in the same call is denied, even when it already exists", func(f *fx) {
+		f.own()
 		f.guard(`printf 'fix H001' > m.txt && git commit -q -F m.txt`).deny()
 		f.write(f.repo+"/m.txt", "old\n")
 		f.guard(`printf 'fix H001' > ./m.txt && git commit -q -F m.txt`).deny()
@@ -480,6 +530,7 @@ var guardTests = []struct {
 		}
 	}},
 	{"cp, mv and tee in a title or message do not count as writing the body file", func(f *fx) {
+		f.own()
 		f.write(f.repo+"/body.md", "body\n")
 		f.guard(`gh pr create --draft --title "Add tcp keepalive" --body-file body.md`).allow()
 		f.guard(`git commit -q -m "rename via mv x" -F body.md`).allow()
@@ -547,38 +598,46 @@ var guardTests = []struct {
 		f.guard(`gh api -X PUT repos/o/r/pulls/3/merge`).deny()
 	}},
 	{"strict: a repo absent from the config stays strict", func(f *fx) {
+		f.own()
 		f.git("-C", f.repo, "remote", "add", "origin", "git@github.com:work/app.git")
 		f.write("autonomy.conf", "ship me/*\n")
 		f.guard(`gh pr create --title t --body b`).deny()
 	}},
 	{"ship: non-draft PR, ready and merge are allowed", func(f *fx) {
+		f.own()
 		f.shipRepo()
 		f.guard(`gh pr create --title t --body b`).allow()
 		f.guard(`gh pr ready 3`).allow()
 		f.guard(`gh pr merge 3 --squash --delete-branch`).allow()
 	}},
 	{"ship: pushing to the default branch is still denied", func(f *fx) {
+		f.own()
 		f.shipRepo()
 		f.guard(`git push origin main`).deny()
 	}},
 	{"ship: force push is still denied", func(f *fx) {
+		f.own()
 		f.shipRepo()
 		f.guard(`git push --force-with-lease origin feature/x`).deny()
 	}},
 	{"ship: leak checks still apply", func(f *fx) {
+		f.own()
 		f.shipRepo()
 		f.guard(`gh pr create --title t --body "see /Users/me/x.md"`).deny()
 	}},
 	{"ship cwd: gh -R naming another repo is judged as that repo", func(f *fx) {
+		f.own()
 		f.shipRepo()
 		f.guard(`gh pr merge 3 -R work/app`).deny()
 	}},
 	{"ship cwd: cd into a strict repo is judged as that repo", func(f *fx) {
+		f.own()
 		f.shipRepo()
 		work := f.newRepo("work", "https://github.com/work/app.git")
 		f.guard("cd " + work + " && gh pr merge 3").deny()
 	}},
 	{"ship cwd: a later cd into a strict repo is judged as that repo", func(f *fx) {
+		f.own()
 		f.shipRepo()
 		work := f.newRepo("work", "https://github.com/work/app.git")
 		f.guard("S=" + work + "; cd $S && gh pr merge 3").deny()
@@ -590,6 +649,7 @@ var guardTests = []struct {
 		f.guard("S=" + ship + "; cd $S && gh pr merge 3 --squash").allow()
 	}},
 	{"a PR command whose repository cannot be followed is denied unless -R names it", func(f *fx) {
+		f.own()
 		f.shipRepo()
 		f.guard(`cd "$(mktemp -d)" && gh pr merge 3`).deny()
 		f.guard(`cd "$(mktemp -d)" && gh pr merge 3 -R me/app`).allow()
@@ -612,17 +672,20 @@ var guardTests = []struct {
 		f.guard(`gh pr new --title t --body b`).deny()
 	}},
 	{"ship cwd: a cd inside a command substitution into a strict repo is followed", func(f *fx) {
+		f.own()
 		f.shipRepo()
 		work := f.newRepo("work", "https://github.com/work/app.git")
 		f.guard("url=$(cd " + work + " && gh pr create --title t --body b)").deny()
 		f.guard("if cd " + work + "; then gh pr merge 3 --squash; fi").deny()
 	}},
 	{"a gh message command whose directory cannot be followed is denied", func(f *fx) {
+		f.own()
 		f.write(f.repo+"/body.md", "see docs/reviews/r.md\n")
 		f.guard(`W=$(pwd); cd "$W" && gh pr create --draft --title t --body-file body.md`).deny()
 		f.guard(`W=$(pwd); cd "$W" && gh pr comment 3 --body "plan is in docs/plans/features/x.md"`).deny()
 	}},
 	{"the hint for gh api does not offer -R", func(f *fx) {
+		f.own()
 		f.shipRepo()
 		f.guard(`cd "$(mktemp -d)" && gh api -X PUT repos/me/app/pulls/3/merge`).deny()
 		if strings.Contains(f.out, "-R") {
@@ -630,6 +693,7 @@ var guardTests = []struct {
 		}
 	}},
 	{"ship cwd: -R after a command substitution still names the repository", func(f *fx) {
+		f.own()
 		f.shipRepo()
 		f.guard(`gh pr merge $(gh pr view 3 --json number -q .number) -R work/app`).deny()
 		f.guard(`gh pr ready $(gh pr view --json number -q .number) -R work/app`).deny()
@@ -637,12 +701,14 @@ var guardTests = []struct {
 		f.guard(`gh api x $(gh pr merge 3 -R work/app)`).deny()
 	}},
 	{"ship cwd: a substitution inside a subshell does not hide where the subshell opens", func(f *fx) {
+		f.own()
 		f.shipRepo()
 		f.guard(`(gh pr merge $(gh pr view 3 --json number -q .number) -R me/app | cat)`).allow()
 		f.guard(`(gh pr merge $(gh pr view 3 --json number -q .number) -R work/app | cat)`).deny()
 		f.guard(`(echo $(date) && gh pr merge 3 -R work/app)`).deny()
 	}},
 	{"a PR command whose arguments are cut by a pipe inside a substitution is denied", func(f *fx) {
+		f.own()
 		f.shipRepo()
 		f.guard(`gh pr merge $(gh pr list --json number -q '.[0].number' | head -1) -R work/app --squash`).deny()
 		f.guard(`echo $(gh pr merge 3 -R me/app) $(true && true)`).allow()
@@ -659,6 +725,7 @@ var guardTests = []struct {
 		f.in(ship, "echo $(cd "+f.repo+" && pwd) $(true && gh pr merge 3)").allow()
 	}},
 	{"ship cwd: a PR command on a line with a case statement needs -R", func(f *fx) {
+		f.own()
 		f.shipRepo()
 		f.guard(`case x in x) gh pr merge 3 -R work/app ;; esac`).deny()
 		f.guard(`case x in x) gh pr merge 3 -R me/app ;; esac`).allow()
@@ -697,6 +764,7 @@ var guardTests = []struct {
 		f.guard("gh api --method POST repos/o/r/issues/1/comments --input " + f.tmp + "/a.json").deny()
 	}},
 	{"api: an input file citing an untracked docs path is denied", func(f *fx) {
+		f.own()
 		f.write(f.repo+"/a.json", `{"body":"see docs/plan/x.md"}`)
 		f.guard(`gh api --method POST repos/o/r/issues/1/comments --input a.json`).deny()
 		f.write(f.repo+"/b.json", `{"body":"see docs/log/tracked.md"}`)
