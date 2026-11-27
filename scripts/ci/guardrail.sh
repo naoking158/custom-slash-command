@@ -3,36 +3,39 @@
 # request that changes one until a person approves it.
 #
 # A guardrail is a file that decides what an agent may send out or merge: the
-# hooks, the autonomy mode, the deny rules of a goal session, the autopilot
-# procedure, and the definition of CI itself. An agent that could change one
+# hooks, the permission settings, the autonomy mode, the deny rules of a goal
+# session and the script that applies them, the autopilot procedure, and the
+# definition of CI with the script that reads its verdict. An agent that could change one
 # and merge the change itself would be setting its own limits.
 #
 #   guardrail.sh paths
 #       Reads file names on stdin, one per line, and prints the guardrails
 #       among them. Exit 0 when there is none, 1 when there is one.
 #
-#   guardrail.sh gate <owner/name> <pr> [<action>]
-#       For CI. Prints the guardrails the pull request changes (renames count
-#       under both names). Exit 0 when there is none, or when the pull request
-#       carries the label `human-approved`; 1 otherwise. With <action>
-#       `synchronize` (new commits were pushed) the label is removed first: an
-#       approval covers the commits a person saw, not later ones.
+#   guardrail.sh gate <owner/name> <pr>
+#       For CI. Prints the guardrails the pull request changes (a renamed file
+#       counts under both names). Exit 0 when there is none, or when the pull
+#       request carries the label `human-approved` and the label was added
+#       after the last push to its branch; 1 otherwise. An approval covers the
+#       commits a person saw, so a push after it makes it stale: remove the
+#       label and add it again. The times compared are GitHub's (the label
+#       event and the push activity), so the order of CI runs does not matter.
 #
 # The label is added in the GitHub UI by a person. scripts/hooks/outbound-guard.sh
-# denies an agent's attempt to add it.
+# denies an agent's attempts to add it.
 #
 # Exit status: 0 and 1 as above, 2 usage error or gh failed.
-# Dependencies: bash; gh for `gate`.
+# Dependencies: bash, grep, sed; gh for `gate`.
 set -u
 
 LABEL=human-approved
 
 is_guardrail() {
   case "$1" in
-    .github/*|scripts/ci/*|scripts/hooks/*|orca/settings/*) return 0 ;;
+    .github/*|.claude/*|scripts/ci/*|scripts/hooks/*|orca/settings/*) return 0 ;;
     mise.toml|tests/run.sh|tests/setup_suite.bash) return 0 ;;
-    scripts/lib/autonomy.sh|scripts/lib/guard-deps.sh) return 0 ;;
-    hooks/hooks.json|hooks.json|skills/autopilot/SKILL.md) return 0 ;;
+    scripts/lib/autonomy.sh|scripts/lib/guard-deps.sh|scripts/lib/wait-ci.sh) return 0 ;;
+    hooks/hooks.json|hooks.json|orca/bin/start-goal|skills/autopilot/SKILL.md) return 0 ;;
   esac
   return 1
 }
@@ -60,30 +63,39 @@ case "${1:-}" in
     guardrails_in
     ;;
   gate)
-    [ $# -ge 3 ] || fail "usage: guardrail.sh gate <owner/name> <pr> [<action>]"
-    repo="$2" pr="$3" action="${4:-}"
+    [ $# -eq 3 ] || fail "usage: guardrail.sh gate <owner/name> <pr>"
+    repo="$2" pr="$3"
     files="$(gh api "repos/$repo/pulls/$pr/files" --paginate \
       --jq '.[] | .filename, (.previous_filename // empty)')" || fail "cannot list the files of $repo#$pr"
     if touched="$(printf '%s\n' "$files" | guardrails_in)"; then
       echo "guardrail: $repo#$pr changes no guardrail"
       exit 0
     fi
-    labels="$(gh api "repos/$repo/issues/$pr/labels" --paginate --jq '.[].name')" \
-      || fail "cannot read the labels of $repo#$pr"
-    if [ "$action" = synchronize ] && printf '%s\n' "$labels" | grep -qx "$LABEL"; then
-      gh api --method DELETE "repos/$repo/issues/$pr/labels/$LABEL" >/dev/null \
-        || fail "cannot remove the label $LABEL from $repo#$pr after new commits"
-      labels="$(printf '%s\n' "$labels" | grep -vx "$LABEL")"
-      echo "guardrail: new commits were pushed, so the label $LABEL was removed"
-    fi
     echo "guardrail: $repo#$pr changes these guardrails:"
     printf '%s\n' "$touched" | sed 's/^/  /'
-    if printf '%s\n' "$labels" | grep -qx "$LABEL"; then
-      echo "guardrail: approved by the label $LABEL"
+
+    labels="$(gh api "repos/$repo/issues/$pr/labels" --paginate --jq '.[].name')" \
+      || fail "cannot read the labels of $repo#$pr"
+    if ! printf '%s\n' "$labels" | grep -qix "$LABEL"; then
+      echo "guardrail: a person has to review these changes and add the label $LABEL in the GitHub UI"
+      exit 1
+    fi
+    approved="$(gh api "repos/$repo/issues/$pr/events" --paginate \
+      --jq ".[] | select(.event == \"labeled\" and (.label.name | ascii_downcase) == \"$LABEL\") | .created_at")" \
+      || fail "cannot read the label events of $repo#$pr"
+    approved="$(printf '%s\n' "$approved" | sort | tail -n 1)"
+    head="$(gh api "repos/$repo/pulls/$pr" --jq '"\(.head.repo.full_name) \(.head.ref)"')" \
+      || fail "cannot read the head of $repo#$pr"
+    pushed="$(gh api --method GET "repos/${head%% *}/activity" -f "ref=refs/heads/${head#* }" -F per_page=1 \
+      --jq '.[0].timestamp // empty')" || fail "cannot read the pushes to ${head#* }"
+    [ -n "$approved" ] && [ -n "$pushed" ] || fail "no time for the label ($approved) or the last push ($pushed)"
+    if [[ "$approved" > "$pushed" ]]; then
+      echo "guardrail: approved by the label $LABEL, added $approved after the last push $pushed"
       exit 0
     fi
-    echo "guardrail: a person has to review these changes and add the label $LABEL in the GitHub UI"
+    echo "guardrail: the label $LABEL was added $approved, not after the last push $pushed."
+    echo "guardrail: a person has to review the new commits, remove the label and add it again"
     exit 1
     ;;
-  *) fail "usage: guardrail.sh paths | gate <owner/name> <pr> [<action>]" ;;
+  *) fail "usage: guardrail.sh paths | gate <owner/name> <pr>" ;;
 esac
