@@ -5,7 +5,7 @@
 # files. Each test runs in its own forked subshell, after setup_file of its
 # file has run once in the file's process.
 #
-#   tests/parallel.sh [-j N] [FILE.bats|DIR]...    (default: tests/, N: CPUs)
+#   tests/parallel.sh [-j N] [FILE.bats|DIR]...    (default: tests/, N: 2 x CPUs)
 #
 # Supports the part of bats this repository uses: setup/teardown,
 # setup_file/teardown_file, run [-N|!] [--separate-stderr] with $status
@@ -25,7 +25,7 @@ while [ $# -gt 0 ]; do
     *) break ;;
   esac
 done
-[ -n "$jobs" ] || jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
+[ -n "$jobs" ] || jobs=$((2 * $(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)))
 case "$jobs" in '' | *[!0-9]* | 0) echo "parallel.sh: -j needs a positive number" >&2; exit 2 ;; esac
 [ $# -gt 0 ] || set -- "$(cd "$(dirname "$0")" && pwd)"
 
