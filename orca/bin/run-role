@@ -223,8 +223,9 @@ started=$SECONDS
 state="" activity="" misses=0
 while :; do
   show="$(orca orchestration worker-show --dispatch "$id" --json 2>/dev/null)"
-  state="$(printf '%s' "$show" | jq -r '.result.state // empty' 2>/dev/null)"
-  activity="$(printf '%s' "$show" | jq -r '.result.activity // empty' 2>/dev/null)"
+  state="" activity=""
+  IFS=$'\x1f' read -r state activity < <(printf '%s' "$show" \
+    | jq -r '"\(.result.state // "")\u001f\(.result.activity // "")"' 2>/dev/null)
   case "$state" in succeeded|failed|stopped|abandoned) break ;; esac
   if [ -z "$state" ]; then
     misses=$((misses + 1))

@@ -86,9 +86,10 @@ repo_wanted() {
 # and one {rounds, verify} per task from tasks.tsv and progress.md.
 parse_goal() {
   local goal_md="$1/goal.md" progress="$1/progress.md" tsv="$1/tasks.tsv" head="" rows=""
-  [ -f "$goal_md" ] && head="$(cat "$goal_md")"
-  [ -f "$tsv" ] && rows="$(cat "$tsv")"
-  { [ -f "$progress" ] && cat "$progress"; } | jq -Rs --arg goal "$head" --arg tsv "$rows" '
+  [ -f "$goal_md" ] && head="$(<"$goal_md")"
+  [ -f "$tsv" ] && rows="$(<"$tsv")"
+  [ -f "$progress" ] || progress=/dev/null
+  jq -Rs --arg goal "$head" --arg tsv "$rows" <"$progress" '
     def norm: if test("^[0-9]+$") then tonumber | tostring else . end;
     def heading_level: capture("^(?<h>#+) ").h | length;
     def task_number:
@@ -160,8 +161,13 @@ progress_json="$(jq -c --arg s "$since" --arg u "$until" --argjson only "$only_j
 
 # checkout_repo <path> — owner/name from the checkout's origin URL, or empty.
 checkout_repo() {
-  git -C "$1" remote get-url origin 2>/dev/null |
-    sed -nE 's#^.*github\.com[:/]+([^/]+/[^/]+)$#\1#p' | sed -E 's#\.git$##'
+  local url line
+  url="$(git -C "$1" remote get-url origin 2>/dev/null)"
+  while IFS= read -r line; do
+    [[ "$line" =~ ^.*github\.com[:/]+([^/]+/[^/]+)$ ]] || continue
+    line="${BASH_REMATCH[1]}"
+    printf '%s\n' "${line%.git}"
+  done <<<"$url"
 }
 
 checkout_pairs=""
@@ -184,7 +190,11 @@ pr_is_auto() {
   else
     heads="$(gh pr list -R "$1" --state all --search "$2" --json headRefName -q '.[].headRefName' 2>/dev/null)" || return 1
   fi
-  if printf '%s\n' "$heads" | grep -q '^auto/'; then echo true; else echo false; fi
+  local head
+  while IFS= read -r head; do
+    case "$head" in auto/*) echo true; return 0 ;; esac
+  done <<<"$heads"
+  echo false
 }
 
 # human_pushback <owner/name> <number> <PR author> — prints true/false: whether
@@ -210,7 +220,11 @@ repo_metrics() {
     jq -nc --arg r "$repo" '{repo: $r, gh: false, git: false}'
     return
   fi
-  checkout="$(printf '%s' "$checkout_pairs" | awk -F'\t' -v r="$repo" '$1 == r { print $2; exit }')"
+  checkout=""
+  local pair_repo pair_dir
+  while IFS=$'\t' read -r pair_repo pair_dir; do
+    if [ "$pair_repo" = "$repo" ]; then checkout=$pair_dir; break; fi
+  done <<<"$checkout_pairs"
   if [ -n "$checkout" ]; then
     has_git=true
     ref=origin/HEAD
