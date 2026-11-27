@@ -17,8 +17,10 @@ go_pid=$!
 tests/parallel.sh "$@"
 status=$?
 wait "$go_pid" || status=1
-passed=$(grep -c -- '^ *--- PASS: .*/' "$go_out")
-failed=$(grep -c -- '^ *--- FAIL: .*/' "$go_out")
-[ "$failed" -eq 0 ] || grep -B2 -A20 -- '--- FAIL' "$go_out"
-echo "# go test: $((passed + failed)) tests, $failed failed"
+# Count the tests that have no subtests: a parent passes when its subtests do.
+counts="$(awk '$1 == "---" && ($2 == "PASS:" || $2 == "FAIL:") { r[$3] = $2 }
+  END { for (n in r) for (m in r) if (index(m, n "/") == 1) { delete r[n]; break }
+        for (n in r) { t++; if (r[n] == "FAIL:") f++ } printf "%d %d", t, f }' "$go_out")"
+[ "${counts#* }" -eq 0 ] || grep -B2 -A20 -- '--- FAIL' "$go_out"
+echo "# go test: ${counts% *} tests, ${counts#* } failed"
 exit "$status"
