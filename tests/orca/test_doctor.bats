@@ -51,8 +51,8 @@ SH
 
 reachable='{"id":"local-status","ok":true,"result":{"runtime":{"state":"ready","reachable":true,"appVersion":"1.4.277"}}}'
 
-# doctor_with_guards OUTBOUND_BODY ANTIGRAVITY_BODY — run a copy of doctor
-# whose sibling scripts/hooks hold stub guards with the given bodies.
+# doctor_with_guards OUTBOUND_BODY ANTIGRAVITY_BODY — run doctor through a
+# symlink whose sibling scripts/hooks hold stub guards with the given bodies.
 doctor_with_guards() {
   local tree="$TMP/tree"
   mkdir -p "$tree/orca/bin" "$tree/scripts/hooks"

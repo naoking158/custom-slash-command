@@ -9,6 +9,7 @@
 
 setup_file() {
   local REPO="$BATS_FILE_TMPDIR/repo"
+  export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
   git init -q --template= -b main "$REPO"
   git -C "$REPO" -c user.email=t@example.com -c user.name=t commit -q --allow-empty -m init
   mkdir -p "$REPO/docs/log"

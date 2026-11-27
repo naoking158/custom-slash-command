@@ -36,7 +36,8 @@ setup() {
 }
 
 # setup_file — builds the goals, repository, PRs and fake gh once; each test
-# copies them. They hold no absolute path, so the copy works anywhere.
+# copies them. Their contents hold no absolute path, so a copy works anywhere;
+# bin/gh is a symlink into $BATS_FILE_TMPDIR, which outlives every test.
 setup_file() {
   TMP="$BATS_FILE_TMPDIR/tpl"
   mkdir -p "$TMP/bin" "$TMP/home"

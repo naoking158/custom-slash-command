@@ -6,6 +6,7 @@
 #   - It says nothing about a call that matches none of the outbound patterns.
 
 setup() {
+  export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   GUARD="$REPO_ROOT/scripts/hooks/outbound-guard.sh"
   AGY_GUARD="$REPO_ROOT/scripts/hooks/antigravity-guard.sh"
