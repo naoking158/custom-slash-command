@@ -90,11 +90,12 @@ run() {
   done
   set +eE
   if [ "$sep" = 1 ]; then
-    errf="$BATS_TEST_TMPDIR/.run-stderr"
+    errf="${BATS_TEST_TMPDIR%.tmp}.stderr"
     output="$("$@" 2>"$errf")"
     status=$?
-    stderr="$(cat "$errf")"
-    rm -f "$errf"
+    stderr=""
+    IFS= read -r -d '' stderr <"$errf"
+    while [ "${stderr%$'\n'}" != "$stderr" ]; do stderr="${stderr%$'\n'}"; done
     __split stderr_lines "$stderr"
   else
     output="$("$@" 2>&1)"
