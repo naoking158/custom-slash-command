@@ -8,6 +8,8 @@
 #   - Every run the commit triggered counts, including one that registers
 #     late; runs of other events (schedule ...) on the same commit do not.
 
+load ../fake_bin
+
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   WAIT_CI="$REPO_ROOT/scripts/lib/wait-ci.sh"
@@ -16,7 +18,7 @@ setup() {
   # Stub gh: `workflow list` prints $GH_WORKFLOWS; `api` finds the commit
   # unless $GH_NO_COMMIT is set; each `run list` prints the next line of
   # $TMP/frames and repeats the last one.
-  cat >"$TMP/bin/gh" <<'GH'
+  fake_bin "$TMP/bin/gh" <<'GH'
 #!/usr/bin/env bash
 dir="$(cd "$(dirname "$0")/.." && pwd)"
 echo "$*" >>"$dir/calls"
@@ -33,7 +35,6 @@ case "$1 $2" in
     echo $((n + 1)) >"$dir/n" ;;
 esac
 GH
-  chmod +x "$TMP/bin/gh"
   export PATH="$TMP/bin:$PATH"
   export WAIT_CI_INTERVAL=0
   SHA=0123456789abcdef0123456789abcdef01234567
@@ -107,7 +108,7 @@ run_of() {
 }
 
 @test "a gh failure is not reported as a verdict" {
-  cat >"$TMP/bin/gh" <<'GH'
+  fake_bin "$TMP/bin/gh" <<'GH'
 #!/usr/bin/env bash
 echo "gh: not logged in" >&2
 exit 4

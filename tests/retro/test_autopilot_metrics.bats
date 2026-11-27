@@ -15,7 +15,10 @@
 
 bats_require_minimum_version 1.5.0
 
+load ../fake_bin
+
 setup() {
+  export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
   METRICS="$REPO_ROOT/skills/retro/scripts/autopilot-metrics.sh"
   LOG_TASK="$REPO_ROOT/skills/autopilot/scripts/log-task.sh"
@@ -28,10 +31,22 @@ setup() {
   export MY_METRICS_TODAY=2026-11-26
   export FAKE="$TMP"
   STATE="$HOME/.local/state/autopilot"
+  REPO="$TMP/repo"
+  cp -R "$BATS_FILE_TMPDIR/tpl/." "$TMP/"
+}
+
+# setup_file — builds the goals, repository, PRs and fake gh once; each test
+# copies them. They hold no absolute path, so the copy works anywhere.
+setup_file() {
+  TMP="$BATS_FILE_TMPDIR/tpl"
+  mkdir -p "$TMP/bin" "$TMP/home"
+  export HOME="$TMP/home" GIT_CONFIG_GLOBAL=/dev/null
+  STATE="$HOME/.local/state/autopilot"
   make_goals
   make_repo
   make_prs
   fake_gh
+  export OLD8 C1 MANUAL
 }
 
 teardown() {
@@ -169,7 +184,7 @@ make_prs() {
 # fake_gh — answers the read-only calls the script makes from $FAKE/prs.json and
 # logs them to $FAKE/gh.calls. Fails every call when $FAKE/gh-fail exists.
 fake_gh() {
-  cat >"$TMP/bin/gh" <<'SH'
+  fake_bin "$TMP/bin/gh" <<'SH'
 #!/bin/bash
 printf '%s\n' "$*" >>"$FAKE/gh.calls"
 [ -f "$FAKE/gh-fail" ] && { echo "gh: not logged in" >&2; exit 1; }
@@ -194,7 +209,6 @@ case "$1 $2" in
   *) echo "fake gh: unexpected $*" >&2; exit 1 ;;
 esac
 SH
-  chmod +x "$TMP/bin/gh"
 }
 
 @test "four metrics and the unreadable counts come out of logs, gh and git" {

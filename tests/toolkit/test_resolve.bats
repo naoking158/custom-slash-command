@@ -6,6 +6,7 @@
 # Falling back to $PWD is forbidden in all cases.
 
 setup() {
+  export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   TOOLKIT_LIB="$REPO_ROOT/scripts/lib/toolkit.sh"
 

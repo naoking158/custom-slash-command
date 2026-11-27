@@ -8,6 +8,8 @@
 #     5 not in an Orca terminal, 6 outbound-guard allows, 7 antigravity-guard
 #     allows. Every check still runs and is reported.
 
+load ../fake_bin
+
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
   DOCTOR="$REPO_ROOT/orca/bin/doctor"
@@ -37,13 +39,14 @@ teardown() {
 # fake_orca STATUS_JSON [EXIT] — an orca whose `status --json` prints STATUS_JSON.
 fake_orca() {
   printf '%s' "$1" >"$TMP/status.json"
-  cat >"$FAKE_BIN/orca" <<SH
+  printf '%s' "${2:-0}" >"$TMP/status.rc"
+  export FAKE="$TMP"
+  fake_bin "$FAKE_BIN/orca" <<'SH'
 #!/bin/bash
-[ "\$1 \$2" = "status --json" ] || exit 64
-cat "$TMP/status.json"
-exit ${2:-0}
+[ "$1 $2" = "status --json" ] || exit 64
+cat "$FAKE/status.json"
+exit "$(cat "$FAKE/status.rc")"
 SH
-  chmod +x "$FAKE_BIN/orca"
 }
 
 reachable='{"id":"local-status","ok":true,"result":{"runtime":{"state":"ready","reachable":true,"appVersion":"1.4.277"}}}'
@@ -53,10 +56,9 @@ reachable='{"id":"local-status","ok":true,"result":{"runtime":{"state":"ready","
 doctor_with_guards() {
   local tree="$TMP/tree"
   mkdir -p "$tree/orca/bin" "$tree/scripts/hooks"
-  cp "$DOCTOR" "$tree/orca/bin/doctor"
-  printf '#!/bin/bash\ncat >/dev/null\n%s\n' "$1" >"$tree/scripts/hooks/outbound-guard.sh"
-  printf '#!/bin/bash\ncat >/dev/null\n%s\n' "$2" >"$tree/scripts/hooks/antigravity-guard.sh"
-  chmod +x "$tree/scripts/hooks/"*.sh
+  ln -s "$DOCTOR" "$tree/orca/bin/doctor"
+  printf '#!/bin/bash\ncat >/dev/null\n%s\n' "$1" | fake_bin "$tree/scripts/hooks/outbound-guard.sh"
+  printf '#!/bin/bash\ncat >/dev/null\n%s\n' "$2" | fake_bin "$tree/scripts/hooks/antigravity-guard.sh"
   run "$tree/orca/bin/doctor"
 }
 

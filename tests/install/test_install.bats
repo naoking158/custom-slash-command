@@ -4,7 +4,10 @@
 # Each test redirects HOME to a temp dir so the user's real ~/.claude is
 # untouched.
 
+load ../fake_bin
+
 setup() {
+  export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
   INSTALL="$REPO_ROOT/scripts/install.sh"
   PLUGIN_LINK=".claude/skills/my"
@@ -30,8 +33,7 @@ path_without_orca() {
 
 # fake_orca — put an orca on PATH that fails if install.sh ever runs it.
 fake_orca() {
-  printf '#!/bin/bash\nexit 99\n' >"$FAKE_BIN/orca"
-  chmod +x "$FAKE_BIN/orca"
+  printf '#!/bin/bash\nexit 99\n' | fake_bin "$FAKE_BIN/orca"
 }
 
 teardown() {

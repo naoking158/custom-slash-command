@@ -12,7 +12,20 @@
 
 bats_require_minimum_version 1.5.0
 
+load ../fake_bin
+
+setup_file() {
+  local tpl="$BATS_FILE_TMPDIR/repo-tpl"
+  export GIT_CONFIG_GLOBAL=/dev/null GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
+  git init -q -b trunk "$tpl/seed"
+  git -C "$tpl/seed" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+  git init -q --bare -b trunk "$tpl/origin.git"
+  git -C "$tpl/origin.git" fetch -q "$tpl/seed" trunk:trunk
+  git clone -q "$tpl/origin.git" "$tpl/repo"
+}
+
 setup() {
+  export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
   START_GOAL="$REPO_ROOT/orca/bin/start-goal"
   TMP="$(mktemp -d -t orca-start-goal-test.XXXXXX)"
@@ -46,12 +59,9 @@ path_without_orca() {
 
 # make_repo — $TMP/repo, a clone of a local bare origin whose default branch is trunk.
 make_repo() {
-  git init -q -b trunk "$TMP/seed"
-  git -C "$TMP/seed" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
-  git init -q --bare -b trunk "$TMP/origin.git"
-  git -C "$TMP/origin.git" fetch -q "$TMP/seed" trunk:trunk
-  git clone -q "$TMP/origin.git" "$TMP/repo"
+  cp -R "$BATS_FILE_TMPDIR/repo-tpl/origin.git" "$BATS_FILE_TMPDIR/repo-tpl/repo" "$TMP/"
   REPO="$TMP/repo"
+  git -C "$REPO" remote set-url origin "$TMP/origin.git"
 }
 
 # fake_orca — an orca that logs every call to $FAKE/calls. `worktree create`
@@ -61,7 +71,7 @@ make_repo() {
 # saves its arguments and copies the worktree's local settings and autopilot
 # marker as they are at that moment, and answers with $FAKE/launch.json when present.
 fake_orca() {
-  cat >"$FAKE_BIN/orca" <<'SH'
+  fake_bin "$FAKE_BIN/orca" <<'SH'
 #!/bin/bash
 printf '%s\n' "$*" >>"$FAKE/calls"
 arg() { local want="$1"; shift; while [ $# -gt 0 ]; do [ "$1" = "$want" ] && { printf '%s' "$2"; return; }; shift; done; }
@@ -90,7 +100,6 @@ case "$1 $2" in
   *) exit 64 ;;
 esac
 SH
-  chmod +x "$FAKE_BIN/orca"
 }
 
 run_start_goal() {
