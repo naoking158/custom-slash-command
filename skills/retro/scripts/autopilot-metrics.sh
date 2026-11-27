@@ -142,8 +142,9 @@ parse_goal() {
       }'
 }
 
+goal_dirs=("$state_dir"/*/*/)
 goals_json="$(
-  for dir in "$state_dir"/*/*/; do
+  for dir in "${goal_dirs[@]}"; do
     [ -f "$dir/goal.md" ] || [ -f "$dir/progress.md" ] || continue
     parse_goal "${dir%/}"
   done | jq -s '.'
