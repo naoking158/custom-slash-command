@@ -697,6 +697,30 @@ var guardTests = []struct {
 		f.guard(`echo "wait for HOME to load"; git push origin feature/x`).allow()
 		f.guard(`export PATH=${HOME}/bin:$PATH; git push origin feature/x`).allow()
 	}},
+	{"words in a message or an argument are not taken for setting a variable that points git elsewhere", func(f *fx) {
+		for _, c := range []string{
+			`git commit -m "fix local HOME lookup" && git push origin feature/x`,
+			`git commit -m "read the HOME page"; git push origin feature/x`,
+			`git commit -m "doc HOME=/x"; git push origin feature/x`,
+			`git commit -m "export GIT_DIR before the build"; git push origin feature/x`,
+			`git commit -m 'set GIT_CONFIG_COUNT=1 in CI'; git push origin feature/x`,
+			`echo 'HOME=x'; git push origin feature/x`,
+			`printf '%s\n' "for HOME in list"; git push origin feature/x`,
+			`gh pr comment 3 --body "declare HOME is fine" && git push origin feature/x`,
+			`echo ${HOME[0]}; git push origin feature/x`,
+			`env -uLC_ALL git push origin feature/x`,
+			`env -u LC_ALL git push origin feature/x`,
+			`env -S true git push origin feature/x`,
+		} {
+			f.guard(c).allow()
+		}
+	}},
+	{"a push denied for a git pointed elsewhere says what points it there", func(f *fx) {
+		f.guard(`GIT_DIR=/x/.git git push origin feature/x`).deny()
+		if !strings.Contains(f.out, "GIT_DIR") || strings.Contains(f.out, "cd <絶対パス>") {
+			f.t.Fatalf("reason does not name what points git elsewhere: %q", f.out)
+		}
+	}},
 	{"a gh release upload asset label is checked", func(f *fx) {
 		f.guard(`gh release upload v1 './app.tgz#fix H001'`).deny()
 		f.guard(`gh release upload v1 ./app.tgz`).allow()

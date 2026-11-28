@@ -82,7 +82,7 @@ func parseCommands(cmd, cwd string, home *string) []command {
 		return marker(len(p.lit) - 1)
 	})
 	s = strings.ReplaceAll(s, "\\\n", " ")
-	p.gitElsewhere = setsGitEnv(p.wordValue(s))
+	p.gitElsewhere = setsGitEnv(p.envText(s))
 	for _, seg := range splitOn(s, listSep(true, "<>|&")) {
 		p.segment(stripRedirections(seg))
 	}
@@ -267,7 +267,11 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 		at = nil
 	}
 	if start, opts, end, ok := gitSub(text, "push", 0, p.wordValue); ok {
-		in := p.gitDir(at, text[:start], opts)
+		in, elsewhere := p.gitDir(at, text[:start], opts)
+		where := orUnknown(in, unknown)
+		if elsewhere {
+			where = "?git"
+		}
 		argEnd := strings.IndexByte(text[end:], ')')
 		if argEnd < 0 {
 			argEnd = len(text) - end
@@ -280,7 +284,7 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 			}
 			args = append(args, v)
 		}
-		p.out = append(p.out, command{"push", orUnknown(in, unknown), strings.Join(args, " "), nil, nil, nil})
+		p.out = append(p.out, command{"push", where, strings.Join(args, " "), nil, nil, nil})
 	}
 	for from := 0; ; {
 		start, end, ok := findGh(text, from, ghPRSend)
@@ -309,8 +313,12 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 		p.out = append(p.out, command{"pr", orUnknown(at, unknown), gh, repos, also, words})
 	}
 	if start, opts, _, ok := gitSub(text, "commit", 0, p.wordValue); ok {
-		in := p.gitDir(at, text[:start], opts)
-		p.out = append(p.out, command{"text", orUnknown(in, unknown), "git", nil, nil, nil})
+		in, elsewhere := p.gitDir(at, text[:start], opts)
+		where := orUnknown(in, unknown)
+		if elsewhere {
+			where = "?git"
+		}
+		p.out = append(p.out, command{"text", where, "git", nil, nil, nil})
 	} else if start, end, ok := findGh(text, 0, ghPRText); ok {
 		rest := "gh"
 		if isCmd(strings.Join(fields(text[start:end]), " "), "gh pr merge") {
@@ -470,14 +478,93 @@ func (p *commandParser) emptyQuotes(s string) string {
 }
 
 // envChdir reports whether t is an option of env that changes the directory:
-// -C, alone or with other short options (-iC), or --chdir and the
-// abbreviations GNU env takes (--c).
+// -C, alone or after other short options (-iC) but not in the value of -u,
+// -S or -a (-uLC_ALL), or --chdir and the abbreviations GNU env takes (--c).
 func envChdir(t string) bool {
 	if strings.HasPrefix(t, "--") {
 		name, _, _ := strings.Cut(t[2:], "=")
 		return name != "" && strings.HasPrefix("chdir", name)
 	}
-	return len(t) > 1 && t[0] == '-' && strings.Contains(t, "C")
+	if len(t) < 2 || t[0] != '-' {
+		return false
+	}
+	for _, c := range t[1:] {
+		switch c {
+		case 'C':
+			return true
+		case 'u', 'S', 'a':
+			return false
+		}
+	}
+	return false
+}
+
+var (
+	shellKeywords = map[string]bool{"if": true, "then": true, "elif": true, "else": true, "fi": true,
+		"while": true, "until": true, "do": true, "done": true, "case": true, "esac": true, "{": true, "}": true, "!": true}
+	// envWrappers run the command that follows their options.
+	envWrappers = map[string]bool{"env": true, "command": true, "exec": true, "nohup": true, "nice": true,
+		"timeout": true, "time": true, "builtin": true, "sudo": true, "xargs": true}
+	// envSetters set the variables named in their arguments.
+	envSetters = map[string]bool{"export": true, "declare": true, "typeset": true, "readonly": true, "local": true, "read": true, "eval": true, "for": true}
+	assignWord = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?\+?=`)
+)
+
+// envText is the command line s as setsGitEnv reads it, one command a line:
+// the words that may set a variable (the assignments before the command
+// word, the words up to and including it, every argument of an envSetter or
+// of printf -v) with their quotes and backslashes removed. The quoted
+// arguments of any other command (a commit message, an echo) become a space
+// unless they expand something ($( ), ` `, ${ }), so a word in a message is
+// not taken for an assignment.
+func (p *commandParser) envText(s string) string {
+	var lines []string
+	for _, seg := range splitOn(s, listSep(true, "<>|&")) {
+		toks := fields(seg)
+		var out []string
+		head, sets := true, false
+		for i, t := range toks {
+			if !head {
+				if sets {
+					out = append(out, p.wordValue(t))
+				} else {
+					out = append(out, p.argText(t))
+				}
+				continue
+			}
+			v := strings.TrimLeft(p.wordValue(t), "({!")
+			if v != "" && !shellKeywords[v] && !assignWord.MatchString(v) && !strings.HasPrefix(v, "-") {
+				name := basename(v)
+				head = envWrappers[name]
+				sets = envSetters[name] || (name == "printf" && i+1 < len(toks) && strings.HasPrefix(p.wordValue(toks[i+1]), "-v"))
+			}
+			out = append(out, p.wordValue(t))
+		}
+		lines = append(lines, strings.Join(out, " "))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// argText is an argument word of a command that sets no variable: its
+// quoted strings become a space unless they expand something, and its
+// backslashes are removed.
+func (p *commandParser) argText(w string) string {
+	var b strings.Builder
+	for i := 0; i < len(w); {
+		if idx, end, ok := markerAt(w, i); ok && idx < len(p.lit) {
+			c := p.lit[idx].content
+			if p.lit[idx].expand && (strings.Contains(c, "$(") || strings.Contains(c, "`") || strings.Contains(c, "${")) {
+				b.WriteString(c)
+			} else {
+				b.WriteByte(' ')
+			}
+			i = end
+			continue
+		}
+		b.WriteByte(w[i])
+		i++
+	}
+	return strings.ReplaceAll(b.String(), "\\", "")
 }
 
 // wordValue is the value of a word as git reads it: its quotes and
@@ -487,20 +574,20 @@ func (p *commandParser) wordValue(w string) string {
 }
 
 // gitDir is the directory git runs in from at, given the words before it
-// (before) and its options: moved by each -C, and unknown when the line may
-// point git at another repository, work tree or push target (--git-dir,
+// (before) and its options: moved by each -C. elsewhere is set when the line
+// may point git at another repository, work tree or push target (--git-dir,
 // --work-tree, --namespace, a config key that is not gitSafeKey, a value
 // given to one of gitEnvNames on the line, env -C / --chdir).
-func (p *commandParser) gitDir(at *string, before, opts string) *string {
+func (p *commandParser) gitDir(at *string, before, opts string) (dir *string, elsewhere bool) {
 	if p.gitElsewhere {
-		return nil
+		return nil, true
 	}
 	env := false
 	for _, w := range fields(before) {
 		t := p.wordValue(w)
 		env = env || basename(t) == "env"
 		if env && envChdir(t) {
-			return nil
+			return nil, true
 		}
 	}
 	words := fields(opts)
@@ -514,12 +601,12 @@ func (p *commandParser) gitDir(at *string, before, opts string) *string {
 		case strings.HasPrefix(w, "--git-dir"), strings.HasPrefix(w, "--work-tree"), strings.HasPrefix(w, "--namespace"),
 			(w == "-c" || w == "--config-env") && !gitSafeKey(next),
 			strings.HasPrefix(w, "--config-env=") && !gitSafeKey(w[len("--config-env="):]):
-			return nil
+			return nil, true
 		case w == "-C" && n+1 < len(words):
 			at = p.enter(at, words[n+1])
 		}
 	}
-	return at
+	return at, false
 }
 
 // pushArgUnreadable: whitespace, a redirection, a ( ) or a {a,b} brace list.
