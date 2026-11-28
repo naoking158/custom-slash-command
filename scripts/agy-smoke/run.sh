@@ -67,27 +67,12 @@ settings_json() {
     "command(gh pr ready)", "command(gh issue create)", "command(gh api)"]}}'
 }
 
-# make_home DIR PLUGIN DATA — a HOME for agy that loads PLUGIN as `my`.
+# make_home DIR PLUGIN DATA — a HOME for agy that loads PLUGIN as `my`, with
+# DATA as its toolkit data.
 make_home() {
-  local h="$1" plugin="$2" data="$3" f b
-  mkdir -p "$h/.gemini/config/plugins" "$h/.claude"
-  for f in "$HOME"/.gemini/* "$HOME"/.gemini/.[!.]*; do
-    [ -e "$f" ] || continue
-    b="${f##*/}"
-    [ "$b" = config ] || ln -s "$f" "$h/.gemini/$b"
-  done
-  for f in "$HOME"/.gemini/config/*; do
-    b="${f##*/}"
-    [ "$b" = plugins ] || ln -s "$f" "$h/.gemini/config/$b"
-  done
-  ln -s "$plugin" "$h/.gemini/config/plugins/my"
-  [ -d "$plugin/antigravity-agents" ] && ln -s "$plugin/antigravity-agents" "$h/.gemini/config/plugins/my-agents"
-  for b in Library .gitconfig .config .local/bin .local/share .local/lib; do
-    [ -e "$HOME/$b" ] || continue
-    mkdir -p "$(dirname "$h/$b")"
-    ln -s "$HOME/$b" "$h/$b"
-  done
-  ln -s "$data" "$h/.claude/my-toolkit"
+  "$here/../lib/agy-home.sh" "$1" "$2" || die "cannot make the agy home $1"
+  mkdir -p "$1/.claude"
+  ln -s "$3" "$1/.claude/my-toolkit"
 }
 
 # summarize SKILL DIR — print the case's summary JSON.
