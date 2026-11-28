@@ -2,16 +2,17 @@ name: Guardrail
 
 # pull_request_target runs this file and scripts/ci/guardrail.sh as they are on
 # the base branch, so a pull request cannot rewrite the check that judges it.
-# Its token only reads, and no cache is read or written. The pull request's
-# code runs only for the outbound-guard exception, only for a head in this
-# repository, and only after guardrail.sh has checked its source and its
-# binaries without running it (see guardrail.sh). Runs are not cancelled:
-# scripts/lib/wait-ci.sh counts a cancelled run as red.
+# Its token only reads, and no cache is read or written. The job never runs
+# the pull request's code: for the outbound-guard exception it fetches the
+# head, reads its source and builds bin/ from it, and reads CI's test results
+# for it (see guardrail.sh). Runs are not cancelled: scripts/lib/wait-ci.sh
+# counts a cancelled run as red.
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, edited, labeled, unlabeled]
 
 permissions:
+  checks: read
   contents: read
   issues: read
   pull-requests: read
@@ -19,7 +20,7 @@ permissions:
 jobs:
   guardrail:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

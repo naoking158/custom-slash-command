@@ -4,12 +4,12 @@
 # Contract under test:
 #   - `tighten <base> <head>` passes a change of only outbound-guard's
 #     source, added test cases and bin/ rebuilt from it, and holds one that
-#     touches another file, rewrites a test, loosens a decision a test checks,
-#     ships a binary not built from the source, or keeps the tests from
-#     running.
-#   - `gate` lets such a pull request through without the label only when it
-#     comes from this repository, HEAD_SHA is its head, the checkout is the
-#     base branch's tip and the head contains it.
+#     touches another file, rewrites a test, adds a case that reaches outside
+#     its fixture, or ships a binary not built from the source.
+#   - `gate` lets such a pull request through without the label only when the
+#     base branch requires guardrail with branches up to date, the head comes
+#     from this repository, HEAD_SHA is its head, the checkout is the base
+#     branch's tip, the head contains it, and CI's tests pass on the head.
 
 load ../fake_bin
 
@@ -60,14 +60,6 @@ append_case() {
   ' "$file" >"$file.new" && mv "$file.new" "$file"
 }
 
-# loosen_run — make Run allow everything.
-loosen_run() {
-  local file=internal/outboundguard/guard.go
-  awk '{ print } /^func Run\(payload \[\]byte, env Env\) \(out string\) \{$/ { print "\tif len(payload) > 0 {\n\t\treturn \"\"\n\t}" }' \
-    "$file" >"$file.new" && mv "$file.new" "$file"
-  grep -q 'return ""' "$file"
-}
-
 @test "tighten: appended cases, a new source file and bin/ rebuilt from them pass" {
   append_case "a merge from an extra case is denied" 'f.guard(`gh pr merge 99`).deny()'
   printf 'package outboundguard\n\nvar extraWords = []string{"x"}\n\nfunc init() { _ = extraWords }\n' >internal/outboundguard/extra.go
@@ -75,7 +67,7 @@ loosen_run() {
   commit_head
   run bash "$GUARDRAIL" tighten "$BASE" "$HEAD_COMMIT"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"only tightens outbound-guard"* ]]
+  [[ "$output" == *"keeps the base's cases, and bin/ is built from it"* ]]
 }
 
 @test "tighten: a file outside outbound-guard's source and bin/ is held" {
@@ -120,13 +112,19 @@ loosen_run() {
   [[ "$output" == *"uses .Skip"* ]]
 }
 
-@test "tighten: a command the base denied that the head allows is held" {
-  loosen_run
-  scripts/build-bin.sh
+@test "tighten: an added case that runs git or writes outside its fixture is held" {
+  append_case "runs git" 'f.git("-c", "alias.x=!touch /tmp/x", "x")'
   commit_head
   run bash "$GUARDRAIL" tighten "$BASE" "$HEAD_COMMIT"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"go test of the head failed"* ]]
+  [[ "$output" == *"uses .git"* ]]
+
+  git reset -q --hard "$BASE"
+  append_case "writes outside" 'f.write("/tmp/elsewhere.txt", "x")'
+  commit_head
+  run bash "$GUARDRAIL" tighten "$BASE" "$HEAD_COMMIT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"passes write a path that may be outside the fixture's directory"* ]]
 }
 
 @test "tighten: a binary that is not built from the head's source is held" {
@@ -165,16 +163,6 @@ loosen_run() {
   [[ "$output" == *"imports runtime, which the base does not"* ]]
 }
 
-@test "tighten: code that exits before the tests run is held" {
-  printf 'package outboundguard\n\nimport "os"\n\nfunc init() {\n\tif len(os.Args) > 0 {\n\t\tos.Exit(0)\n\t}\n}\n' \
-    >internal/outboundguard/extra.go
-  scripts/build-bin.sh
-  commit_head
-  run bash "$GUARDRAIL" tighten "$BASE" "$HEAD_COMMIT"
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"go test passed 0 of the"* ]]
-}
-
 # gate_fixture — a head that passes tighten, an origin holding it as
 # refs/pull/7/head, the repository back on main, and a gh stub answering for
 # that pull request.
@@ -189,11 +177,13 @@ gate_fixture() {
   export GH_LOG="$BATS_TEST_TMPDIR/gh.log"
   export GH_FILES='[{"filename":"internal/outboundguard/guard_test.go"}]'
   export GH_HEAD_REPO=me/app GH_PR_HEAD="$HEAD_COMMIT" GH_BASE_TIP="$BASE" GH_COMPARE=ahead
+  export GH_RULES='[{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"lint"},{"context":"guardrail"}]}}]'
+  export GH_TESTS=success GH_TESTS_PENDING="$BATS_TEST_TMPDIR/pending" GUARDRAIL_CI_POLL=0
   mkdir -p "$BATS_TEST_TMPDIR/bin"
   fake_bin "$BATS_TEST_TMPDIR/bin/gh" <<'STUB'
 #!/bin/bash
 echo "$*" >>"$GH_LOG"
-filter="." path=""
+all="$*" filter="." path=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --jq) filter="$2"; shift ;;
@@ -205,8 +195,24 @@ case "$path" in
   */pulls/*/files) json="$GH_FILES" ;;
   */pulls/*) json="{\"head\":{\"ref\":\"feature\",\"sha\":\"$GH_PR_HEAD\",\"repo\":{\"full_name\":\"$GH_HEAD_REPO\"}},\"base\":{\"ref\":\"main\"}}" ;;
   */issues/*/labels) json='[]' ;;
-  */branches/main) json="{\"commit\":{\"sha\":\"$GH_BASE_TIP\"}}" ;;
   */compare/*) json="{\"status\":\"$GH_COMPARE\"}" ;;
+  */rules/branches/main) json="$GH_RULES" ;;
+  */branches/main) json="{\"commit\":{\"sha\":\"$GH_BASE_TIP\"}}" ;;
+  */check-runs)
+    # gh sends a request with -F as a POST unless told otherwise.
+    [[ "$all" == *"--method GET"* ]] || exit 1
+    # A file GH_TESTS_PENDING holds a count of reads to answer "in progress".
+    state="\"completed\",\"conclusion\":\"$GH_TESTS\""
+    if [ -s "$GH_TESTS_PENDING" ]; then
+      n="$(cat "$GH_TESTS_PENDING")"
+      [ "$n" -le 1 ] && rm -f "$GH_TESTS_PENDING" || echo $((n - 1)) >"$GH_TESTS_PENDING"
+      state='"in_progress","conclusion":null'
+    fi
+    json="{\"check_runs\":[
+      {\"id\":1,\"name\":\"test (ubuntu-latest)\",\"app\":{\"slug\":\"github-actions\"},\"status\":\"completed\",\"conclusion\":\"failure\"},
+      {\"id\":2,\"name\":\"test (ubuntu-latest)\",\"app\":{\"slug\":\"github-actions\"},\"status\":$state},
+      {\"id\":3,\"name\":\"test (macos-latest)\",\"app\":{\"slug\":\"github-actions\"},\"status\":$state},
+      {\"id\":4,\"name\":\"test (macos-latest)\",\"app\":{\"slug\":\"other\"},\"status\":\"completed\",\"conclusion\":\"failure\"}]}" ;;
   *) exit 1 ;;
 esac
 printf '%s' "$json" | jq -r "$filter"
@@ -219,7 +225,50 @@ STUB
   run bash "$GUARDRAIL" gate me/app 7
   [ "$status" -eq 0 ]
   [[ "$output" == *"add the label human-approved"* ]]
-  [[ "$output" == *"only tightens outbound-guard"* ]]
+  [[ "$output" == *"only tightens outbound-guard: CI's tests pass on the head"* ]]
+}
+
+@test "gate: the exception waits for CI's tests to finish" {
+  gate_fixture
+  echo 2 >"$GH_TESTS_PENDING"
+  run bash "$GUARDRAIL" gate me/app 7
+  [ "$status" -eq 0 ]
+  [ "$(grep -c check-runs "$GH_LOG")" -eq 3 ]
+}
+
+@test "gate: a head on which CI's tests fail needs the label" {
+  gate_fixture
+  GH_TESTS=failure run bash "$GUARDRAIL" gate me/app 7
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"CI's test (ubuntu-latest) ended failure"* ]]
+}
+
+@test "gate: CI's tests that do not finish in time hold the pull request" {
+  gate_fixture
+  echo 1000 >"$GH_TESTS_PENDING"
+  GUARDRAIL_CI_WAIT=0 run bash "$GUARDRAIL" gate me/app 7
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"did not finish in time"* ]]
+}
+
+@test "gate: a base branch that does not require guardrail with branches up to date allows no exception" {
+  gate_fixture
+  GH_RULES='[{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":false,"required_status_checks":[{"context":"guardrail"}]}}]' \
+    run bash "$GUARDRAIL" gate me/app 7
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"main does not require guardrail with branches up to date"* ]]
+  GH_RULES='[{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"lint"}]}}]' \
+    run bash "$GUARDRAIL" gate me/app 7
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"main does not require guardrail with branches up to date"* ]]
+}
+
+@test "gate: a fetched head other than the one the API names needs the label" {
+  gate_fixture
+  git push -q -f "$BATS_TEST_TMPDIR/origin.git" "$BASE:refs/pull/7/head"
+  run bash "$GUARDRAIL" gate me/app 7
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"fetched $BASE, not $HEAD_COMMIT"* ]]
 }
 
 @test "gate: without HEAD_SHA there is no exception" {
