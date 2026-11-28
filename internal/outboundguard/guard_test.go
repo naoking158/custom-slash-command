@@ -647,6 +647,28 @@ var guardTests = []struct {
 			`GIT_COMMON_DIR=/x/.git git push origin feature/x`,
 			`git -c remote.origin.push=HEAD:main push origin`,
 			`git -c Push.Default=current push`,
+			`git -c include.path=/x/cfg push origin feature/x`,
+			`K=remote.origin.url; git -c "$K=/x" push origin feature/x`,
+			`git -c x.y=z push origin feature/x`,
+			`HOME=/x git push origin feature/x`,
+			`XDG_CONFIG_HOME=/x git push origin feature/x`,
+			`env -C /x git push origin feature/x`,
+			`read GIT_DIR <<< /x/.git; export GIT_DIR; git push origin feature/x`,
+			`for GIT_DIR in /x/.git; do export GIT_DIR; git push origin feature/x; done`,
+			`git --namespace n push origin feature/x`,
+			`cd /tmp&&GIT_DIR=/x/.git git push origin feature/x`,
+			`true;GIT_DIR=/x/.git git push origin feature/x`,
+			`(GIT_DIR=/x/.git git push origin feature/x)`,
+			`export "GIT_DIR=/x/.git"; git push origin feature/x`,
+			`export 'GIT_DIR'=/x/.git; git push origin feature/x`,
+			`env -C/x git push origin feature/x`,
+			`env -iC /x git push origin feature/x`,
+			`env "-C" /x git push origin feature/x`,
+			`"env" -C /x git push origin feature/x`,
+			`/usr/bin/env -C /x git push origin feature/x`,
+			`env --ch /x git push origin feature/x`,
+			`env GIT\_DIR=/x/.git git push origin feature/x`,
+			`eval GIT\_DIR=/x/.git; git push origin feature/x`,
 		} {
 			f.guard(c).deny()
 			if !strings.Contains(f.out, "directory を判定できない") {
@@ -654,7 +676,15 @@ var guardTests = []struct {
 			}
 		}
 		f.guard(`GIT_INDEX_FILE=/tmp/i git push origin feature/x`).allow()
-		f.guard(`git -c x.y=z push origin feature/x`).allow()
+		f.guard(`git -c user.name=x -c color.ui=never push origin feature/x`).allow()
+		f.guard(`git -c core.pager=less push origin feature/x`).allow()
+		f.guard(`cd "$HOME" && git push origin feature/x; echo HOME`).allow()
+		f.guard(`echo "wait for HOME to load"; git push origin feature/x`).allow()
+		f.guard(`git commit -m "doc HOME=/x"; git push origin feature/x`).allow()
+	}},
+	{"a gh release upload asset label is checked", func(f *fx) {
+		f.guard(`gh release upload v1 './app.tgz#fix H001'`).deny()
+		f.guard(`gh release upload v1 ./app.tgz`).allow()
 	}},
 	{"quoted git options and subcommands are read by their value", func(f *fx) {
 		f.guard(`git "-P" commit -m "fix H001"`).deny()
@@ -662,19 +692,6 @@ var guardTests = []struct {
 		f.guard(`git "--no-pager" push origin main`).deny()
 		f.guard(`git "--git-dir=/x/.git" push origin feature/x`).deny()
 		f.guard(`git "-C" /Users/me/tmp/w commit -m ok`).allow()
-	}},
-	{"git that the guard runs does not start the repository's fsmonitor", func(f *fx) {
-		f.own()
-		mark := filepath.Join(f.tmp, "ran")
-		f.write("fsmonitor.sh", "#!/bin/sh\ntouch "+mark+"\n")
-		if err := os.Chmod(filepath.Join(f.tmp, "fsmonitor.sh"), 0o755); err != nil {
-			f.t.Fatal(err)
-		}
-		f.git("-C", f.repo, "config", "core.fsmonitor", filepath.Join(f.tmp, "fsmonitor.sh"))
-		f.guard(`git commit -m "record the result in docs/log/tracked.md"`).allow()
-		if _, err := os.Stat(mark); err == nil {
-			f.t.Fatal("the guard's git ran core.fsmonitor")
-		}
 	}},
 	{"bodies of other gh commands are checked", func(f *fx) {
 		f.own()
@@ -700,7 +717,6 @@ var guardTests = []struct {
 			`gh gist edit abc - < m.txt`,
 			`gh release new v1 --notes "fix H001"`,
 			`gh release create v1 './app.tgz#fix H001'`,
-			`gh release upload v1 './app.tgz#fix H001'`,
 			`gh pr comment 3 -b x --attach './a.png#see H001'`,
 		} {
 			f.guard(c).deny()

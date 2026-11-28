@@ -1,7 +1,7 @@
 package outboundguard
 
 import (
-	"slices"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -371,7 +371,11 @@ func gitGlobals(s string, p int, val func(string) string) []span {
 		if !strings.HasPrefix(w, "-") || w == "-" || w == "--" {
 			return out
 		}
-		if slices.Contains(gitValued, w) {
+		valued := false
+		for _, v := range gitValued {
+			valued = valued || w == v
+		}
+		if valued {
 			vs, ve, ok := wordAfter(s, e)
 			if !ok || vs == e {
 				return out
@@ -385,24 +389,35 @@ func gitGlobals(s string, p int, val func(string) string) []span {
 	}
 }
 
-// gitEnv reports whether an environment variable named name may point git at
-// another repository or work tree or change its config: GIT_DIR,
-// GIT_WORK_TREE, GIT_COMMON_DIR, and every GIT_CONFIG* (GIT_CONFIG_KEY_n
-// sets any key; the others are denied with them rather than told apart).
-func gitEnv(name string) bool {
-	return name == "GIT_DIR" || name == "GIT_WORK_TREE" || name == "GIT_COMMON_DIR" || strings.HasPrefix(name, "GIT_CONFIG")
+// gitEnvNames are the environment variables that may point git at another
+// repository, work tree or push target, or change the config it reads:
+// GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR, GIT_NAMESPACE, every GIT_CONFIG*
+// (GIT_CONFIG_KEY_n sets any key), and HOME and XDG_CONFIG_HOME, which choose
+// the global config.
+var (
+	gitEnvNames  = `(GIT_DIR|GIT_WORK_TREE|GIT_COMMON_DIR|GIT_NAMESPACE|GIT_CONFIG[A-Za-z0-9_]*|HOME|XDG_CONFIG_HOME)`
+	gitEnvAssign = regexp.MustCompile(`(^|[^A-Za-z0-9_$])` + gitEnvNames + `\+?=`)
+	gitEnvSet    = regexp.MustCompile(`(^|[^A-Za-z0-9_])(export|declare|typeset|readonly|local|read|for)[[:space:]]([^;&|\n]*[^A-Za-z0-9_$])?` + gitEnvNames + `([^A-Za-z0-9_]|$)`)
+)
+
+// setsGitEnv reports whether line gives a value to one of gitEnvNames:
+// NAME=value anywhere (after ;, (, a quote ...), or NAME as an argument of
+// export, declare, read, for and the like. A line that only reads one ($HOME)
+// does not. line is the command line as wordsText gives it.
+func setsGitEnv(line string) bool {
+	return gitEnvAssign.MatchString(line) || gitEnvSet.MatchString(line)
 }
 
-// gitElsewhereKey reports whether a config key given with -c or --config-env
-// may change where git works or where and what it pushes: core.worktree and
-// the remote.*, branch.*, push.* and url.* keys.
-func gitElsewhereKey(key string) bool {
-	key = strings.ToLower(key)
-	if strings.HasPrefix(key, "core.worktree") {
+// gitSafeKey reports whether a config key given with -c or --config-env
+// leaves alone where git works and where and what it pushes. Any other key,
+// one written with a variable and include.path among them, may change them.
+func gitSafeKey(key string) bool {
+	key, _, _ = strings.Cut(strings.ToLower(key), "=")
+	if key == "core.pager" {
 		return true
 	}
-	for _, p := range []string{"remote.", "branch.", "push.", "url."} {
-		if strings.HasPrefix(key, p) {
+	for _, p := range []string{"credential.", "user.", "color.", "advice.", "http."} {
+		if strings.HasPrefix(key, p) && !strings.ContainsAny(key, "$`") {
 			return true
 		}
 	}
