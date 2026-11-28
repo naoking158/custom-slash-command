@@ -8,7 +8,8 @@
 # it is on the default branch, has no uncommitted changes to tracked files and
 # is behind origin/<default> without commits of its own. Any other checkout is
 # left as it is. The default branch is origin/HEAD, or what origin reports as
-# HEAD when that ref is missing.
+# HEAD when that ref is missing (then origin/HEAD is set, so a later run
+# without network still knows it).
 #
 # Prints two lines:
 #   base: origin/<default> <sha>      the ref and commit to judge signals on
@@ -39,8 +40,12 @@ default="${default#origin/}"
 if [ -z "$default" ] && [ "$fetched" -eq 0 ]; then
   default="$(git -C "$repo" ls-remote --symref origin HEAD 2>/dev/null \
     | sed -n 's#^ref: refs/heads/\([^[:space:]]*\)[[:space:]]*HEAD$#\1#p')"
+  [ -z "$default" ] || git -C "$repo" remote set-head origin "$default" >/dev/null 2>&1
 fi
-[ -n "$default" ] || fail "cannot tell the default branch of origin"
+if [ -z "$default" ]; then
+  [ "$fetched" -eq 0 ] || fail "fetch failed and origin/HEAD is unset: $(printf '%s' "$fetch_err" | head -n 1)"
+  fail "cannot tell the default branch of origin"
+fi
 base_sha="$(git -C "$repo" rev-parse --verify --quiet "refs/remotes/origin/$default")" \
   || fail "origin/$default does not exist; fetch it first"
 

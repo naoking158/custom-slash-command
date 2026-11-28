@@ -6,7 +6,8 @@
 #   - A clean checkout on the default branch that is behind is fast-forwarded.
 #   - A checkout on another branch, with uncommitted changes, or with commits
 #     of its own is left alone; base still names the fetched origin/<default>.
-#   - The default branch comes from origin, also when origin/HEAD is missing.
+#   - The default branch comes from origin, also when origin/HEAD is missing,
+#     and is remembered for a later run whose fetch fails.
 #   - A failed fetch exits 1 and leaves the checkout alone.
 
 bats_require_minimum_version 1.5.0
@@ -48,10 +49,15 @@ head_of() { git -C "$TMP/co" rev-parse HEAD; }
 
 @test "sync: default branch is asked from origin when origin/HEAD is missing" {
   git -C "$TMP/co" remote set-head origin --delete
+  git -C "$TMP/co" config remote.origin.followRemoteHEAD never
   run "$SYNC" "$TMP/co"
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "base: origin/trunk $NEW" ]
   [ "$(head_of)" = "$NEW" ]
+  git -C "$TMP/co" remote set-url origin "$TMP/missing.git"
+  run "$SYNC" "$TMP/co"
+  [ "$status" -eq 1 ]
+  [ "${lines[0]}" = "base: origin/trunk $NEW" ]
 }
 
 @test "sync: uncommitted changes keep the checkout where it is" {
@@ -92,5 +98,15 @@ head_of() { git -C "$TMP/co" rev-parse HEAD; }
   [ "${lines[0]}" = "base: origin/trunk $OLD" ]
   [ "${lines[1]}" = "checkout: current" ]
   [[ "${lines[2]}" == "fetch: failed ("* ]]
+  [ "$(head_of)" = "$OLD" ]
+}
+
+@test "sync: failed fetch does not fast-forward to the last fetched ref" {
+  git -C "$TMP/co" fetch -q origin
+  git -C "$TMP/co" remote set-url origin "$TMP/missing.git"
+  run "$SYNC" "$TMP/co"
+  [ "$status" -eq 1 ]
+  [ "${lines[0]}" = "base: origin/trunk $NEW" ]
+  [ "${lines[1]}" = "checkout: kept (fetch failed)" ]
   [ "$(head_of)" = "$OLD" ]
 }
