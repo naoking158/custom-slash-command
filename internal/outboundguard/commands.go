@@ -11,17 +11,20 @@ import (
 //	      expanded, "?" for one the line does not show).
 //	pr:   Rest is the gh command with quoted strings and $( ) emptied; it ends
 //	      in " ?" when the line cuts its arguments short.
-//	text: Rest is "git" or "gh", for a command that carries a message.
+//	text: Rest is "git" or "gh", for a command that carries a message, or
+//	      "gh pr merge", whose directory the PR rules judge.
 //
 // Dir is "?" when the line does not show it and "?case" when a case statement
 // precedes the command. For pr, Repos are the repositories gh is told to use
 // instead of Dir's (-R or --repo with its value as the next word, GH_REPO
 // assigned just before gh) and Also the ones it may act on besides (an
 // attached -R<repo>, a pull request URL, a repos/OWNER/NAME path, any other
-// GH_REPO assignment); "" stands for one the line does not show.
+// GH_REPO assignment); "" stands for one the line does not show. Args are the
+// words of a pr command with their quotes removed, unexpanded.
 type command struct {
 	Kind, Dir, Rest string
 	Repos, Also     []string
+	Args            []string
 }
 
 type literal struct {
@@ -262,10 +265,7 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 		at = nil
 	}
 	if _, opts, end, ok := gitSub(text, "push", 0); ok {
-		in := at
-		if c, found := optionC(opts); found {
-			in = p.enter(at, c)
-		}
+		in := p.gitDir(at, opts)
 		argEnd := strings.IndexByte(text[end:], ')')
 		if argEnd < 0 {
 			argEnd = len(text) - end
@@ -278,7 +278,7 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 			}
 			args = append(args, v)
 		}
-		p.out = append(p.out, command{"push", orUnknown(in, unknown), strings.Join(args, " "), nil, nil})
+		p.out = append(p.out, command{"push", orUnknown(in, unknown), strings.Join(args, " "), nil, nil, nil})
 	}
 	for from := 0; ; {
 		start, end, ok := findGh(text, from, ghPRSend)
@@ -291,6 +291,10 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 		if k := strings.IndexByte(gh, ')'); k >= 0 {
 			gh, closedParen = gh[:k], true
 		}
+		var words []string
+		for _, t := range fields(gh) {
+			words = append(words, p.literalText(t))
+		}
 		repos, also := p.namedRepos(gh)
 		repos = append(p.prefixGhRepo(text[:start]), repos...)
 		also = append(append([]string{}, p.ghMay...), also...)
@@ -300,16 +304,17 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 		}
 		gh = strings.Join(splitKeepEmpty(gh), " ")
 		gh = strings.TrimSuffix(gh, " ")
-		p.out = append(p.out, command{"pr", orUnknown(at, unknown), gh, repos, also})
+		p.out = append(p.out, command{"pr", orUnknown(at, unknown), gh, repos, also, words})
 	}
 	if _, opts, _, ok := gitSub(text, "commit", 0); ok {
-		in := at
-		if c, found := optionC(opts); found {
-			in = p.enter(at, c)
+		in := p.gitDir(at, opts)
+		p.out = append(p.out, command{"text", orUnknown(in, unknown), "git", nil, nil, nil})
+	} else if start, end, ok := findGh(text, 0, ghPRText); ok {
+		rest := "gh"
+		if isCmd(strings.Join(fields(text[start:end]), " "), "gh pr merge") {
+			rest = "gh pr merge"
 		}
-		p.out = append(p.out, command{"text", orUnknown(in, unknown), "git", nil, nil})
-	} else if _, _, ok := findGh(text, 0, ghPRText); ok {
-		p.out = append(p.out, command{"text", orUnknown(at, unknown), "gh", nil, nil})
+		p.out = append(p.out, command{"text", orUnknown(at, unknown), rest, nil, nil, nil})
 	}
 }
 
@@ -358,10 +363,10 @@ func (p *commandParser) namedRepos(gh string) (repos, also []string) {
 	if gr, ok := ghGrammarOf(gh); ok {
 		words := make([]word, len(toks))
 		for i, t := range toks {
-			words[i] = word{text: t}
+			words[i] = word{text: p.literalText(t)}
 		}
 		for _, o := range gr.options(words) {
-			if !o.is("R") || !o.hasValue || strings.HasPrefix(toks[o.first], "-R") {
+			if !o.is("R", "repo") || !o.hasValue || strings.HasPrefix(toks[o.first], "-R") || toks[o.first] == "--repo" || strings.HasPrefix(toks[o.first], "--repo=") {
 				continue
 			}
 			if o.attached {
@@ -460,6 +465,18 @@ func (p *commandParser) emptyQuotes(s string) string {
 		i++
 	}
 	return b.String()
+}
+
+// gitDir is the directory git runs in from at: moved by -C, and unknown when
+// --git-dir or --work-tree points it elsewhere.
+func (p *commandParser) gitDir(at *string, opts string) *string {
+	if gitElsewhere(opts) {
+		return nil
+	}
+	if c, found := optionC(opts); found {
+		return p.enter(at, c)
+	}
+	return at
 }
 
 // optionC returns the value of the first -C in git's options.

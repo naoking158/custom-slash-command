@@ -619,6 +619,73 @@ var guardTests = []struct {
 			f.guard(c).allow()
 		}
 	}},
+	{"git options other than -C and -c before the subcommand do not hide it", func(f *fx) {
+		f.own()
+		f.write(f.repo+"/m.txt", "fix H001\n")
+		f.guard(`git --no-pager commit -m "fix H001"`).deny()
+		f.guard(`git -P commit -qF m.txt`).deny()
+		f.guard(`git --literal-pathspecs -c x.y=z commit -mH001`).deny()
+		f.guard(`git --no-pager -C /Users/me/tmp/w commit -m ok`).allow()
+		f.guard(`git --no-pager push origin main`).deny()
+		f.guard(`git --no-pager push origin feature/x`).allow()
+		f.guard(`git --git-dir=/x/.git push origin feature/x`).deny()
+		f.guard(`git --work-tree /x push origin feature/x`).deny()
+		f.guard(`git --attr-source HEAD commit -mH001`).deny()
+	}},
+	{"bodies of other gh commands are checked", func(f *fx) {
+		f.own()
+		f.shipRepo()
+		f.write(f.repo+"/m.txt", "fix H001\n")
+		f.write(f.repo+"/clean.txt", "fix x\n")
+		for _, c := range []string{
+			`gh pr merge 3 -s --body "fix H001"`,
+			`gh pr merge 3 -s -F m.txt`,
+			`gh pr merge 3 -s -tH001`,
+			`gh pr close 3 -c "fix H001"`,
+			`gh pr reopen 3 --comment "fix H001"`,
+			`gh issue close 3 -c "fix H001"`,
+			`gh issue reopen 3 -c "fix H001"`,
+			`gh release create v1 --notes "fix H001"`,
+			`gh release create v1 -F m.txt`,
+			`gh release edit v1 --notes-file m.txt`,
+			`gh gist create m.txt`,
+			`gh gist create -d "fix H001" clean.txt`,
+			`gh gist edit abc -a m.txt`,
+			`gh gist create < m.txt`,
+			`gh gist edit abc m.txt`,
+			`gh gist edit abc - < m.txt`,
+			`gh release new v1 --notes "fix H001"`,
+			`gh release create v1 './app.tgz#fix H001'`,
+			`gh pr comment 3 -b x --attach './a.png#see H001'`,
+		} {
+			f.guard(c).deny()
+			if !strings.Contains(f.out, "review finding ID") {
+				f.t.Fatalf("command %q: reason is not the review ID: %q", c, f.out)
+			}
+		}
+		for _, c := range []string{
+			`gh pr merge 3 -s --body ok`,
+			`gh gist create clean.txt`,
+			`gh release create v1 /Users/me/dist/app.tgz --notes ok`,
+			`gh pr comment 3 -b x --attach /Users/me/a.png`,
+		} {
+			f.guard(c).allow()
+		}
+	}},
+	{"a body file path written in the same word as its option is not message text", func(f *fx) {
+		f.write("tmp/claude-x/clean.txt", "fix x\n")
+		f.guard("git commit -qF" + f.tmp + "/tmp/claude-x/clean.txt").allow()
+		f.guard("gh api repos/o/r/issues/1/comments -Fbody=@" + f.tmp + "/tmp/claude-x/clean.txt").allow()
+	}},
+	{"quoted gh options are read by their value", func(f *fx) {
+		f.guard(`gh pr create -d "--draft=false" --title t --body b`).deny()
+		f.own()
+		f.shipRepo()
+		f.guard(`gh pr merge 3 "-R" work/app`).deny()
+		f.guard(`gh pr merge 3 "-R" me/app`).allow()
+		f.guard(`gh pr merge 3 "--repo" work/app`).deny()
+		f.guard(`gh pr merge 3 "--repo=work/app"`).deny()
+	}},
 	{"file flags quoted inside a message are message text, not body files", func(f *fx) {
 		f.guard(`git commit -q -m 'read config with --file $CONFIG or -F /etc/nothere'`).allow()
 		f.guard(`git commit -q --allow-empty -F /dev/null`).allow()
