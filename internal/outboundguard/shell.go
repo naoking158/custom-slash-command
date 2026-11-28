@@ -395,19 +395,29 @@ func gitGlobals(s string, p int, val func(string) string) []span {
 // (GIT_CONFIG_KEY_n sets any key), and HOME and XDG_CONFIG_HOME, which choose
 // the global config.
 var (
-	gitEnvNames  = `(GIT_DIR|GIT_WORK_TREE|GIT_COMMON_DIR|GIT_NAMESPACE|GIT_CONFIG[A-Za-z0-9_]*|HOME|XDG_CONFIG_HOME)`
-	gitEnvAssign = regexp.MustCompile(`(^|[^A-Za-z0-9_$])` + gitEnvNames + `\+?=`)
-	gitEnvSet    = regexp.MustCompile(`(^|[;&|(){}\n!]|[;&|(){}\n!][[:space:]]*(then|do|else))[[:space:]]*(export|declare|typeset|readonly|local|read|for|printf[[:space:]]+-v)([[:space:]]+[^;&|\n]*[^A-Za-z0-9_${]|[[:space:]]+)` + gitEnvNames + `([^A-Za-z0-9_]|$)`)
+	gitEnvNames = `(GIT_DIR|GIT_WORK_TREE|GIT_COMMON_DIR|GIT_NAMESPACE|GIT_CONFIG[A-Za-z0-9_]*|HOME|XDG_CONFIG_HOME)`
+	// NAME=, NAME+=, NAME[i]= and ${NAME:=v} / ${NAME=v}, wherever they are.
+	gitEnvAssign = regexp.MustCompile(`(^|[^A-Za-z0-9_$])` + gitEnvNames + `(\+?=|\[)|\$\{` + gitEnvNames + `:?=`)
+	// NAME as an argument of a builtin that sets it, in the same command.
+	gitEnvSetter = regexp.MustCompile(`(^|[^A-Za-z0-9_-])(export|declare|typeset|readonly|local|read|printf[[:space:]]+-v)([[:space:]][^;&|\n]*[^A-Za-z0-9_${]|[[:space:]]|$)` + gitEnvNames + `([^A-Za-z0-9_]|$)`)
+	// printf -vNAME.
+	gitEnvPrintf = regexp.MustCompile(`(^|[^A-Za-z0-9_-])printf[[:space:]]+-v` + gitEnvNames + `([^A-Za-z0-9_]|$)`)
+	// for NAME in, where a command starts.
+	gitEnvFor = regexp.MustCompile(`(^|[;&|(){}\n!]|[;&|(){}\n!][[:space:]]*(then|do|else))[[:space:]]*for[[:space:]]+` + gitEnvNames + `([^A-Za-z0-9_]|$)`)
 )
 
 // setsGitEnv reports whether line, its quotes and backslashes removed, may
-// give a value to one of gitEnvNames: NAME=value anywhere, inside a quoted
-// message too, or NAME as an argument of export, declare, read, for,
-// printf -v and the like where a command starts. A line that only reads one
-// ($HOME) does not. NAME= in a message is taken as an assignment: a wrong
-// deny there costs less than a missed one.
+// give a value to one of gitEnvNames: an assignment anywhere, a quoted message
+// included, NAME as an argument of export, declare, read, printf -v and the
+// like, or the variable of a for loop. A line that only reads one ($HOME,
+// ${HOME}) does not.
 func setsGitEnv(line string) bool {
-	return gitEnvAssign.MatchString(line) || gitEnvSet.MatchString(line)
+	for _, re := range []*regexp.Regexp{gitEnvAssign, gitEnvSetter, gitEnvPrintf, gitEnvFor} {
+		if re.MatchString(line) {
+			return true
+		}
+	}
+	return false
 }
 
 // gitSafeKey reports whether a config key given with -c or --config-env

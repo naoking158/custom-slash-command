@@ -674,6 +674,16 @@ var guardTests = []struct {
 			`env "GIT_DIR=/x y/.git" git push origin feature/x`,
 			`printf -v HOME %s /x; git push origin feature/x`,
 			`if true; then export GIT_DIR=/x/.git; fi; git push origin feature/x`,
+			`git --git\-dir=/x/.git push origin feature/x`,
+			`git \-c core.worktree=/x push origin feature/x`,
+			`git \-\-work-tree=/x push origin feature/x`,
+			`git -\c remote.origin.url=/x push origin feature/x`,
+			`IFS= read -r HOME <<< /x; git push origin feature/x`,
+			`if read HOME < /dev/null; then git push origin feature/x; fi`,
+			`command read HOME <<< /x; git push origin feature/x`,
+			`printf -vHOME %s /x; git push origin feature/x`,
+			`HOME[0]=/x git push origin feature/x`,
+			`set -a; : ${GIT_DIR:=/x/.git}; git push origin feature/x`,
 		} {
 			f.guard(c).deny()
 			if !strings.Contains(f.out, "directory を判定できない") {
