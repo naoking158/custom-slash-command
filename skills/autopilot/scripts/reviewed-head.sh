@@ -5,7 +5,8 @@
 #
 # <reviews-dir> is where `my:review --report-dir` wrote, and the report names
 # are the ones skills/review/scripts/report-path.sh gives. <sha> is covered
-# when no review that read <sha> says NEEDS_REVISION and one of these holds:
+# when every review that read <sha> (perspective reviews aside) has a PASS
+# verdict line and none says NEEDS_REVISION, and one of these holds:
 #   - a PASS report of a full review of <sha>: prs/<pr>-<sha7>[-<k>].md
 #   - a PASS report of a delta review that ends at <sha>,
 #     prs/<pr>-<since7>..<sha7>[-<k>].md, where <since> is an ancestor of

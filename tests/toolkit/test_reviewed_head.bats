@@ -4,7 +4,8 @@
 # Contract under test: a PR head is covered only by a PASS report of a full
 # review of it, by a PASS delta review from a covered ancestor, or (given the
 # default branch) by a merge of the default branch into a covered head that
-# shares no file with the PR. A commit added after the last review is not.
+# shares no file with the PR. A commit added after the last review is not, and
+# neither is a head that any of its reviews did not pass.
 
 bats_require_minimum_version 1.5.0
 
@@ -92,7 +93,8 @@ report() {
 
 @test "a delta review that starts at its own head ends" {
   report "7-${REVIEWED:0:7}..${REVIEWED:0:7}" PASS
-  run -1 bash "$REVIEWED_HEAD" "$REPO" "$REVIEWS" 7 "$REVIEWED"
+  FUNCNEST=20 run -1 bash "$REVIEWED_HEAD" "$REPO" "$REVIEWS" 7 "$REVIEWED"
+  [[ "$output" != *nesting* ]]
 }
 
 @test "a delta review from a commit that is not an ancestor does not cover" {
