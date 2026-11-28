@@ -505,10 +505,10 @@ func (p *commandParser) gitDir(at *string, before, opts string) *string {
 	}
 	words := fields(opts)
 	for n := 0; n < len(words); n++ {
-		w := p.literalText(words[n])
+		w := p.wordValue(words[n])
 		next := ""
 		if n+1 < len(words) {
-			next = strings.ToLower(p.literalText(words[n+1]))
+			next = strings.ToLower(p.wordValue(words[n+1]))
 		}
 		switch {
 		case strings.HasPrefix(w, "--git-dir"), strings.HasPrefix(w, "--work-tree"), strings.HasPrefix(w, "--namespace"),
