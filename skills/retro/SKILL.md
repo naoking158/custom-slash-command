@@ -96,10 +96,12 @@ Data dir: `data="${MY_TOOLKIT_DATA:-$HOME/.claude/my-toolkit}"`.
    to paste relevant friction points (do not try to locate the report
    yourself).
 4. **`--deep` only**: for sessions listed in `$data/sessions.jsonl` within
-   `--since`, read their `transcript_path` files (skip missing ones) and
-   look for repeated corrections and abandoned/retried tool patterns. Use
-   subagents to keep transcript bulk out of this context; each returns at
-   most a 10-line digest per session.
+   `--since`, run `"${CLAUDE_SKILL_DIR}/scripts/transcript-digest.sh" <transcript_path>`
+   on each (skip missing files). It reads Claude Code and Antigravity
+   transcripts alike and prints the person's prompts and the failed tool
+   calls, one line each. Look in those digests for repeated corrections and
+   abandoned/retried tool patterns. Use subagents to keep the digests out of
+   this context; each returns at most a 10-line digest per session.
 
 ## Step 3 — Cluster and rank
 
