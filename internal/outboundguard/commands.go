@@ -16,8 +16,8 @@ import (
 //
 // Dir is "?" when the line does not show it, "?case" when a case statement
 // precedes the command, and gitElsewhereDir for a git the line points at
-// another repository, work tree or push target. For pr, Repos are the repositories gh is told to use
-// instead of Dir's (-R or --repo with its value as the next word, GH_REPO
+// another repository, work tree or push target. For pr, Repos are the
+// repositories gh is told to use instead of Dir's (-R or --repo with its value as the next word, GH_REPO
 // assigned just before gh) and Also the ones it may act on besides (an
 // attached -R<repo>, a pull request URL, a repos/OWNER/NAME path, any other
 // GH_REPO assignment); "" stands for one the line does not show. Args are the
@@ -268,11 +268,7 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 		at = nil
 	}
 	if start, opts, end, ok := gitSub(text, "push", 0, p.wordValue); ok {
-		in, elsewhere := p.gitDir(at, text[:start], opts)
-		where := orUnknown(in, unknown)
-		if elsewhere {
-			where = gitElsewhereDir
-		}
+		where := p.gitWhere(at, text[:start], opts, unknown)
 		argEnd := strings.IndexByte(text[end:], ')')
 		if argEnd < 0 {
 			argEnd = len(text) - end
@@ -314,12 +310,7 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 		p.out = append(p.out, command{"pr", orUnknown(at, unknown), gh, repos, also, words})
 	}
 	if start, opts, _, ok := gitSub(text, "commit", 0, p.wordValue); ok {
-		in, elsewhere := p.gitDir(at, text[:start], opts)
-		where := orUnknown(in, unknown)
-		if elsewhere {
-			where = gitElsewhereDir
-		}
-		p.out = append(p.out, command{"text", where, "git", nil, nil, nil})
+		p.out = append(p.out, command{"text", p.gitWhere(at, text[:start], opts, unknown), "git", nil, nil, nil})
 	} else if start, end, ok := findGh(text, 0, ghPRText); ok {
 		rest := "gh"
 		if isCmd(strings.Join(fields(text[start:end]), " "), "gh pr merge") {
@@ -481,7 +472,8 @@ func (p *commandParser) emptyQuotes(s string) string {
 // envChdir reports whether t is an option of env that changes the directory:
 // -C, alone or after other short options (-iC) but not in the value of -u
 // or -a (-uLC_ALL), -S with a C in its value (env reads it as options again),
-// or --chdir and the abbreviations GNU env takes (--c).
+// a word with whitespace and a C in it (the value of -S given as its own
+// word), or --chdir and the abbreviations GNU env takes (--c).
 func envChdir(t string) bool {
 	if strings.HasPrefix(t, "--") {
 		name, _, _ := strings.Cut(t[2:], "=")
@@ -489,6 +481,9 @@ func envChdir(t string) bool {
 	}
 	if len(t) < 2 || t[0] != '-' {
 		return false
+	}
+	if strings.ContainsAny(t, " \t\n") {
+		return strings.Contains(t, "C")
 	}
 	for _, c := range t[1:] {
 		switch c {
@@ -596,6 +591,16 @@ func (p *commandParser) wordValue(w string) string {
 // gitElsewhereDir is the directory recorded for a git that the line points at
 // another repository, work tree or push target.
 const gitElsewhereDir = "?git"
+
+// gitWhere is the Dir of a git command run from at: gitDir's, unknown when the
+// line does not show it, gitElsewhereDir when the line points git elsewhere.
+func (p *commandParser) gitWhere(at *string, before, opts, unknown string) string {
+	in, elsewhere := p.gitDir(at, before, opts)
+	if elsewhere {
+		return gitElsewhereDir
+	}
+	return orUnknown(in, unknown)
+}
 
 // gitDir is the directory git runs in from at, given the words before it
 // (before) and its options: moved by each -C. elsewhere is set when the line
