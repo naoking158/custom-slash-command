@@ -76,7 +76,8 @@ skills/autopilot/SKILL.md" ]
 
 @test "paths: the check script, the CI definition and what applies the deny rules are guardrails" {
   for name in scripts/ci/guardrail.sh mise.toml tests/run.sh orca/settings/goal.deny.json orca/bin/start-goal \
-    hooks.json scripts/lib/autonomy.sh scripts/lib/wait-ci.sh .claude/settings.json; do
+    hooks.json scripts/lib/autonomy.sh scripts/lib/wait-ci.sh .claude/settings.json \
+    bin/my-toolkit-darwin-arm64 cmd/my-toolkit/main.go internal/outboundguard/guard.go go.mod scripts/build-bin.sh; do
     run bash "$GUARDRAIL" paths < <(echo "$name")
     [ "$status" -eq 1 ]
   done
