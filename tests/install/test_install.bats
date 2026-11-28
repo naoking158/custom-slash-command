@@ -354,3 +354,52 @@ select_profile() {
   [ "$status" -eq 0 ]
   [[ "$output" != *"doctor"* ]]
 }
+
+# ============================================================================
+# Antigravity allow rules
+
+agy_settings() { printf '%s' "$HOME/.gemini/antigravity-cli/settings.json"; }
+
+@test "agy rules: install adds the allow rules and keeps the user's settings" {
+  mkdir -p "$HOME/.gemini/antigravity-cli"
+  printf '{"colorScheme":"dark","permissions":{"allow":["command(make)"],"deny":["command(sudo)"]}}' >"$(agy_settings)"
+  run bash "$INSTALL"
+  [ "$status" -eq 0 ]
+  jq -e '.colorScheme == "dark" and .permissions.deny == ["command(sudo)"]
+    and .permissions.allow[0] == "command(make)"
+    and (.permissions.allow | index("command(git status)") and index("command(gh pr view)"))' "$(agy_settings)"
+  jq -e --arg d "$HOME/.local/state/autopilot" '.permissions.allow | index("write_file(\($d))")' "$(agy_settings)"
+  [ "$(stat -f %Lp "$(agy_settings)" 2>/dev/null || stat -c %a "$(agy_settings)")" = 600 ]
+  run bash "$INSTALL"
+  [ "$(jq '[.permissions.allow[] | select(. == "command(git status)")] | length' "$(agy_settings)")" -eq 1 ]
+}
+
+@test "agy rules: check fails when a rule is missing, uninstall removes only ours" {
+  mkdir -p "$HOME/.gemini/antigravity-cli"
+  printf '{"permissions":{"allow":["command(make)"]}}' >"$(agy_settings)"
+  bash "$INSTALL" >/dev/null
+  run bash "$INSTALL" --check
+  [ "$status" -eq 0 ]
+  jq '.permissions.allow -= ["command(git commit)"]' "$(agy_settings)" >"$TMP/s" && mv "$TMP/s" "$(agy_settings)"
+  run bash "$INSTALL" --check
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"MISSING"*"command(git commit)"* ]]
+  run bash "$INSTALL" --uninstall
+  [ "$status" -eq 0 ]
+  [ "$(jq -c '.permissions.allow' "$(agy_settings)")" = '["command(make)"]' ]
+}
+
+@test "agy rules: a settings file that is not a JSON object is left alone" {
+  mkdir -p "$HOME/.gemini/antigravity-cli"
+  printf 'not json' >"$(agy_settings)"
+  run bash "$INSTALL"
+  [ "$status" -ne 0 ]
+  [ "$(cat "$(agy_settings)")" = "not json" ]
+}
+
+@test "agy rules: without Antigravity no settings file is created" {
+  if command -v agy >/dev/null; then skip "agy is on PATH"; fi
+  run bash "$INSTALL"
+  [ "$status" -eq 0 ]
+  [ ! -e "$(agy_settings)" ]
+}
