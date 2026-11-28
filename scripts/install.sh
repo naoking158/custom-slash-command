@@ -21,6 +21,20 @@
 # ~/.claude/my-toolkit/orca.conf) and exists. Without `orca`, nothing about
 # the Orca layer is done or printed.
 #
+# When Antigravity is present (`agy` on PATH or $HOME/.gemini/antigravity-cli),
+# install also adds the allow rules of orca/settings/agy.permissions.json to
+# permissions.allow in $HOME/.gemini/antigravity-cli/settings.json, keeping the
+# rules already there, so ordinary commands (git status, tests, gh pr view) run
+# without an approval prompt. Some rules depend on the machine and are added
+# with them: write access to autopilot's state directory and to agy's own
+# conversation folders (brain/, where it keeps scratch files such as a PR
+# body), and on a nix machine read access to the nix store, where the shell
+# the terminal sandbox starts lives. Without that grant every command fails in
+# the sandbox and asks to run outside it. --check reports missing rules and
+# --uninstall removes these rules, also when the user had added one of them by
+# hand. Commands the rules do not cover still go to Antigravity's own check,
+# and the outbound guard hook still denies what it denies.
+#
 # Also cleans up symlinks from the pre-plugin layout when they point into
 # this repo:
 #   $HOME/.prompts, $HOME/.claude/commands, $HOME/.claude/agents
@@ -46,6 +60,8 @@ PLUGIN_LINK="$CLAUDE_DIR/skills/my"
 ANTIGRAVITY_PLUGIN_LINK="$HOME/.gemini/config/plugins/my"
 ANTIGRAVITY_AGENTS_LINK="$HOME/.gemini/config/plugins/my-agents"
 RULES_DIR="$CLAUDE_DIR/rules"
+AGY_SETTINGS="$HOME/.gemini/antigravity-cli/settings.json"
+AGY_PERMISSIONS="$REPO_ROOT/orca/settings/agy.permissions.json"
 ORCA_DOCTOR="$REPO_ROOT/orca/bin/doctor"
 ORCA_PROFILE_LIB="$REPO_ROOT/orca/lib/profile.sh"
 
@@ -74,6 +90,12 @@ Creates these symlinks (idempotent):
 
 and removes legacy symlinks ($HOME/.prompts, $HOME/.claude/commands,
 $HOME/.claude/agents) when they point into this repo.
+
+When Antigravity is present, install adds the allow rules of
+orca/settings/agy.permissions.json (and, per machine, autopilot's state
+directory and the nix store) to $HOME/.gemini/antigravity-cli/settings.json;
+--check reports missing ones and --uninstall removes them (also a rule of the
+same text the user added by hand).
 
 When an `orca` command is on PATH, install and --check also confirm that
 orca/bin/doctor is executable (run it from an Orca terminal yourself) and that
@@ -314,6 +336,70 @@ check_legacy() {
   return 0
 }
 
+# agy_rules — print the allow rules this toolkit adds to Antigravity, as a
+# JSON array.
+agy_rules() {
+  local extra=("write_file($HOME/.local/state/autopilot)" "write_file($HOME/.gemini/antigravity-cli/brain)")
+  if [ -d /nix/store ]; then
+    extra+=("read_file(/nix/store)" "read_file(/run/current-system)" "read_file(/etc/profiles)")
+  fi
+  jq -c '.permissions.allow + $ARGS.positional' "$AGY_PERMISSIONS" --args "${extra[@]}" </dev/null
+}
+
+# Usage: agy_permissions <install|check|uninstall> — keep the toolkit's allow
+# rules in Antigravity's settings when Antigravity is present.
+agy_permissions() {
+  command -v agy >/dev/null 2>&1 || [ -d "$(parent_dir "$AGY_SETTINGS")" ] || return 0
+  if ! command -v jq >/dev/null 2>&1; then
+    printf '  ERROR  jq is required to update %s\n' "$AGY_SETTINGS" >&2
+    return 1
+  fi
+  local rules current missing
+  rules="$(agy_rules)" || return 1
+  current='{}'
+  if [ -f "$AGY_SETTINGS" ]; then
+    if ! jq -e 'type == "object" and ((.permissions.allow // []) | type == "array")' "$AGY_SETTINGS" >/dev/null 2>&1; then
+      printf '  ERROR  %s is not a JSON object with an allow array; not touching it\n' "$AGY_SETTINGS" >&2
+      return 1
+    fi
+    current="$(cat "$AGY_SETTINGS")"
+  fi
+  missing="$(printf '%s' "$current" | jq -c --argjson r "$rules" '$r - (.permissions.allow // [])')"
+  case "$1" in
+    check)
+      if [ "$missing" != '[]' ]; then
+        printf '  MISSING   Antigravity allow rules in %s: %s\n' "$AGY_SETTINGS" "$(printf '%s' "$missing" | jq -r 'join(" ")')"
+        return 1
+      fi
+      printf '  OK        Antigravity allow rules in %s\n' "$AGY_SETTINGS"
+      ;;
+    install)
+      if [ "$missing" = '[]' ]; then
+        printf '  OK     already allowed: Antigravity rules in %s\n' "$AGY_SETTINGS"
+        return 0
+      fi
+      mkdir -p "$(parent_dir "$AGY_SETTINGS")"
+      printf '%s' "$current" | jq --argjson add "$missing" \
+        '.permissions = ((.permissions // {}) + {allow: ((.permissions.allow // []) + $add)})' \
+        >"$AGY_SETTINGS.tmp" && chmod 600 "$AGY_SETTINGS.tmp" && mv "$AGY_SETTINGS.tmp" "$AGY_SETTINGS" || {
+        printf '  ERROR  cannot write %s\n' "$AGY_SETTINGS" >&2
+        return 1
+      }
+      printf '  OK     added %s Antigravity allow rules to %s\n' "$(printf '%s' "$missing" | jq length)" "$AGY_SETTINGS"
+      ;;
+    uninstall)
+      [ -f "$AGY_SETTINGS" ] || return 0
+      printf '%s' "$current" | jq --argjson r "$rules" \
+        'if .permissions.allow then .permissions.allow -= $r else . end' \
+        >"$AGY_SETTINGS.tmp" && chmod 600 "$AGY_SETTINGS.tmp" && mv "$AGY_SETTINGS.tmp" "$AGY_SETTINGS" || {
+        printf '  ERROR  cannot write %s\n' "$AGY_SETTINGS" >&2
+        return 1
+      }
+      printf '  OK     removed the Antigravity allow rules from %s\n' "$AGY_SETTINGS"
+      ;;
+  esac
+}
+
 # orca_problem MODE TEXT — report a missing piece of the Orca layer.
 orca_problem() {
   if [ "$1" = install ]; then
@@ -338,7 +424,7 @@ orca_layer() {
   local name
   name="$(orca_profile_name)"
   if [ -z "$name" ]; then
-    orca_problem "$1" "Orca profile not selected: write 'profile <name>' in $ORCA_CONF or set MY_ORCA_PROFILE (choices: $(orca_profile_choices)). Without it, Antigravity stops at every step that launches an agent"
+    orca_problem "$1" "Orca profile not selected: write 'profile <name>' in $ORCA_CONF or set MY_ORCA_PROFILE (choices: $(orca_profile_choices)). Without it, start-goal cannot pick the harness and model of a goal"
     return 1
   fi
   if ! orca_profile_file "$name" >/dev/null; then
@@ -367,12 +453,14 @@ case "$MODE" in
       cleanup_legacy "$legacy"
     done
     orca_layer install || failed=1
+    agy_permissions install || failed=1
     ;;
   uninstall)
     uninstall_plugin_link "$PLUGIN_LINK" "$REPO_ROOT" || failed=1
     uninstall_plugin_link "$ANTIGRAVITY_PLUGIN_LINK" "$REPO_ROOT" || failed=1
     uninstall_plugin_link "$ANTIGRAVITY_AGENTS_LINK" "$REPO_ROOT/antigravity-agents" || failed=1
     for_each_rule uninstall || failed=1
+    agy_permissions uninstall || failed=1
     for legacy in "${LEGACY_LINKS[@]}"; do
       cleanup_legacy "$legacy"
     done
@@ -386,6 +474,7 @@ case "$MODE" in
       check_legacy "$legacy" || failed=1
     done
     orca_layer check || failed=1
+    agy_permissions check || failed=1
     ;;
 esac
 

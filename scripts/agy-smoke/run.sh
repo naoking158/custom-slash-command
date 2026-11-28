@@ -25,9 +25,10 @@
 #     copies of orca.conf and autonomy.conf and a draft-only PdM config whose
 #     workspace is <out>/pdm-workspace;
 #   - an `orca` on PATH that always fails, so nothing starts Orca workers;
-#   - --settings that deny MCP tools, pushes, PR/issue creation and gh api,
-#     and, on a nix machine, let the terminal sandbox read the nix store (its
-#     shell lives there; without the grant every command leaves the sandbox).
+#   - --settings with the allow rules scripts/install.sh adds to agy (the
+#     plugin's orca/settings/agy.permissions.json, autopilot's state, and on a
+#     nix machine the nix store, where the sandbox's shell lives), and denies
+#     for MCP tools, pushes, PR/issue creation and gh api, which win over them.
 #
 # Output: <out>/summary.tsv (one line per case) and, per case,
 # <out>/cases/<skill>/{stream.jsonl,stderr.txt,transcript.jsonl,summary.json}.
@@ -52,10 +53,15 @@ CC_TERMS='\$\{?CLAUDE_(?:SKILL_DIR|PLUGIN_ROOT)|\.claude/skills/my|subagent_type
 usage() { sed -n '2,/^# Dependencies/s/^# \{0,1\}//p' "$0"; }
 die() { printf 'agy-smoke: %s\n' "$*" >&2; exit 2; }
 
-# settings_json — the --settings object each case runs with.
+# settings_json OUT PLUGIN — the --settings object each case runs with: the
+# allow rules install.sh gives agy (PLUGIN's orca/settings/agy.permissions.json,
+# autopilot's state under OUT's home, the nix store), and the smoke's denies.
 settings_json() {
-  local allow='[]'
-  [ -d /nix/store ] && allow='["read_file(/nix/store)","read_file(/run/current-system)","read_file(/etc/profiles)"]'
+  local rules="$2/orca/settings/agy.permissions.json" allow='[]'
+  [ -f "$rules" ] && allow="$(jq -c '.permissions.allow' "$rules")"
+  allow="$(jq -cn --argjson a "$allow" --arg s "$1/home/.local/state/autopilot" --arg b "$HOME/.gemini/antigravity-cli/brain" \
+    '$a + ["write_file(\($s))", "write_file(\($b))"]')"
+  [ -d /nix/store ] && allow="$(jq -cn --argjson a "$allow" '$a + ["read_file(/nix/store)","read_file(/run/current-system)","read_file(/etc/profiles)"]')"
   jq -cn --argjson allow "$allow" '{permissions: {allow: $allow, deny: [
     "mcp(*)", "command(git push)", "command(gh pr create)", "command(gh pr merge)",
     "command(gh pr ready)", "command(gh issue create)", "command(gh api)"]}}'
@@ -172,7 +178,7 @@ printf '# PdM Config\nupdated: %s\n\n## workspace\npath: %s\n\n## backlog\ndesti
 printf '#!/bin/sh\necho "orca: disabled by agy-smoke" >&2\nexit 1\n' >"$out/stub/orca"
 chmod +x "$out/stub/orca"
 make_home "$out/home" "$plugin" "$out/data"
-settings_json >"$out/settings.json"
+settings_json "$out" "$plugin" >"$out/settings.json"
 
 printf 'agy-smoke: plugin %s (%s), agy %s, %s case(s), output %s\n' "$plugin" \
   "$(git -C "$plugin" rev-parse --short HEAD 2>/dev/null)" "$(agy --version 2>/dev/null)" \
