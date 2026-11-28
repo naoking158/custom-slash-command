@@ -178,12 +178,13 @@ func (g *guard) run(payload []byte) {
 	}
 	commands := parseCommands(g.cmd, cwd, g.env.Home)
 	g.labelCheck()
-	textDir, apiDir := "", ""
+	textDir := ""
+	var apiDirs []string
 	for _, c := range commands {
 		switch c.Kind {
 		case "pr":
-			if strings.HasPrefix(c.Rest, "gh api") && !globMatch(`gh api*:\?*`, c.Rest+":"+c.Dir) && apiDir == "" {
-				apiDir = c.Dir
+			if strings.HasPrefix(c.Rest, "gh api") {
+				apiDirs = append(apiDirs, c.Dir)
 			}
 			g.judgePR(c.Dir, c.Rest, c.Repos)
 		case "push":
@@ -206,7 +207,7 @@ func (g *guard) run(payload []byte) {
 		}
 	}
 	g.textCheck(textDir)
-	g.apiCheck(apiDir)
+	g.apiCheck(apiDirs)
 	if g.pendingAsk != "" {
 		decide("ask", g.pendingAsk)
 	}
@@ -614,27 +615,38 @@ var (
 )
 
 // apiCheck applies the leak and label checks to what `gh api` writes send.
-func (g *guard) apiCheck(apiDir string) {
-	api := shellOut(apiWrites(g.cmd))
-	if api == "" {
-		return
-	}
-	text := shellOut(strings.Join(grepLines(api, "\x02", false), "\n"))
-	for _, f := range grepLines(api, "\x02", true) {
-		f = g.tilde(f[1:])
-		if !strings.HasPrefix(f, "/") && apiDir != "" {
-			f = apiDir + "/" + f
+// dirs are the directories the parser followed for each `gh api` on the line;
+// a relative file is read from its own call's directory.
+func (g *guard) apiCheck(dirs []string) {
+	calls := apiCalls(g.cmd)
+	for i, c := range calls {
+		if !c.writes {
+			continue
 		}
-		if !readable(f) {
-			decide("deny", "gh api が送るファイル "+basename(f)+" を読めない。ファイルを書くコマンドと gh api を別の Bash 呼び出しに分け、パスを直接書く")
+		dir := ""
+		if len(dirs) == len(calls) && !strings.HasPrefix(dirs[i], "?") {
+			dir = dirs[i]
 		}
-		text += "\n" + readBody(f) + "\n" + jsonStrings(f)
-	}
-	if anyLine(text, labelAPI) {
-		decide("deny", "gh api で label を書き換えない。human-approved 以外の label は gh pr edit --add-label で付ける")
-	}
-	if r := g.leakReason(shellOut(jsonEscapeNL.ReplaceAllString(text, " ")), apiDir); r != "" {
-		decide("deny", r)
+		text := shellOut(c.text)
+		for _, f := range c.files {
+			f = g.tilde(f)
+			if !strings.HasPrefix(f, "/") {
+				if dir == "" {
+					decide("deny", "gh api が送るファイル "+basename(f)+" の directory を判定できない。cd <絶対パス> で始めるか、パスを絶対パスで書く")
+				}
+				f = dir + "/" + f
+			}
+			if !readable(f) {
+				decide("deny", "gh api が送るファイル "+basename(f)+" を読めない。ファイルを書くコマンドと gh api を別の Bash 呼び出しに分け、パスを直接書く")
+			}
+			text += "\n" + readBody(f) + "\n" + jsonStrings(f)
+		}
+		if anyLine(text, labelAPI) {
+			decide("deny", "gh api で label を書き換えない。human-approved 以外の label は gh pr edit --add-label で付ける")
+		}
+		if r := g.leakReason(shellOut(jsonEscapeNL.ReplaceAllString(text, " ")), dir); r != "" {
+			decide("deny", r)
+		}
 	}
 }
 

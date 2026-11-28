@@ -798,6 +798,15 @@ var guardTests = []struct {
 		f.write("body.md", "fixed H001\n")
 		f.guard("gh api repos/o/r/issues/1/comments -F body=@- <" + f.tmp + "/body.md").deny()
 	}},
+	{"api: a relative input file is read from the directory its own gh api runs in", func(f *fx) {
+		f.write("a/body.json", `{"body":"fixed H001"}`)
+		f.write("b/body.json", `{"body":"fixed in abc123"}`)
+		f.in("/", "cd "+f.tmp+"/b && gh api repos/o/r/pulls/1; cd "+f.tmp+"/a && gh api --method POST repos/o/r/issues/1/comments --input body.json").deny()
+		f.in("/", "cd "+f.tmp+"/a && gh api repos/o/r/pulls/1; cd "+f.tmp+"/b && gh api --method POST repos/o/r/issues/1/comments --input body.json").allow()
+		f.in(f.tmp+"/b", `cd "$(mktemp -d)" && gh api --method POST repos/o/r/issues/1/comments --input body.json`).deny()
+		f.in("/", "cd "+f.tmp+"/a && gh api repos/o/r/pulls/1; cd "+f.tmp+"/b && gh api --method POST repos/o/r/issues/1/comments --input body.json -f who=$(gh api user -q .login)").allow()
+		f.in("/", "cd "+f.tmp+"/b && gh api repos/o/r/pulls/1; cd "+f.tmp+"/a && gh api --method POST repos/o/r/issues/1/comments --input body.json -f who=$(gh api user -q .login)").deny()
+	}},
 	{"api: an output redirection is not part of what is sent", func(f *fx) {
 		f.guard(`gh api graphql -f query='{ viewer { login } }' > /Users/alice/out.json`).allow()
 		f.guard(`gh api --method POST repos/o/r/issues/1/comments -f body="fixed in abc123" >/Users/alice/out.json 2>> /Users/alice/err.log`).allow()

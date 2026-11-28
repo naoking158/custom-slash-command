@@ -322,62 +322,77 @@ func cpOrMv(s string) ([]string, bool) {
 	return nil, false
 }
 
-// apiWrites describes each `gh api` that writes: a line "\x02<file>" per file
-// it sends, then its text (the stages piping into it and its own arguments)
-// without the arguments that name those files.
-func apiWrites(cmd string) string {
-	var out strings.Builder
+// apiCall is one `gh api` on the line. For a call that writes, files are the
+// files it sends and text its text (the stages piping into it and its own
+// arguments) without the arguments that name those files.
+type apiCall struct {
+	writes bool
+	files  []string
+	text   string
+}
+
+// apiCalls lists every `gh api` on the line, in the order it appears.
+func apiCalls(cmd string) []apiCall {
+	var calls []apiCall
 	s, h := holdLine(cmd)
 	for _, seg := range splitOn(s, listSep(false, "<>|")) {
 		stages := splitOn(seg, pipeSep(false))
 		for k, st := range stages {
-			start, _, ok := findGh(st, 0, ghAPI)
-			if !ok {
-				continue
-			}
-			gh := st[start:]
-			if !apiWrites1(gh, h) {
-				continue
-			}
-			stdin := false
-			for _, m := range findAll(gh, optionAt([]string{"--input"}, true)) {
-				f := h.put(gh[m.wordStart:m.end], true)
-				if f == "-" {
-					stdin = true
-				} else {
-					out.WriteString("\x02" + f + "\n")
+			for from := 0; ; {
+				start, end, ok := findGh(st, from, ghAPI)
+				if !ok {
+					break
 				}
+				from = end
+				calls = append(calls, apiCallAt(stages[:k], st[start:], h))
 			}
-			for _, m := range findAll(gh, optionAt([]string{"--field", "-F"}, false)) {
-				v := h.put(gh[m.wordStart:m.end], true)
-				if f, ok := fieldFile(v); ok {
-					if f == "-" {
-						stdin = true
-					} else {
-						out.WriteString("\x02" + f + "\n")
-					}
-				}
-			}
-			if stdin {
-				in := findAll(gh, stdinAt("0123456789"))
-				for _, m := range in {
-					out.WriteString("\x02" + h.put(gh[m.wordStart:m.end], true) + "\n")
-				}
-				gh = removeSpans(gh, in)
-			}
-			gh = removeSpans(gh, findAll(gh, optionAt([]string{"--input"}, true)))
-			var sent []span
-			for _, m := range findAll(gh, optionAt([]string{"--field", "-F"}, false)) {
-				v := h.put(gh[m.wordStart:m.end], true)
-				if eq := strings.IndexByte(v, '='); eq >= 0 && eq+1 < len(v) && v[eq+1] == '@' {
-					sent = append(sent, m)
-				}
-			}
-			gh = removeSpans(gh, sent)
-			out.WriteString(h.put(dropWrites(append(append([]string{}, stages[:k]...), gh)), false) + "\n")
 		}
 	}
-	return out.String()
+	return calls
+}
+
+func apiCallAt(feed []string, gh string, h *held) apiCall {
+	if !apiWrites1(gh, h) {
+		return apiCall{}
+	}
+	c := apiCall{writes: true}
+	stdin := false
+	for _, m := range findAll(gh, optionAt([]string{"--input"}, true)) {
+		f := h.put(gh[m.wordStart:m.end], true)
+		if f == "-" {
+			stdin = true
+		} else {
+			c.files = append(c.files, f)
+		}
+	}
+	for _, m := range findAll(gh, optionAt([]string{"--field", "-F"}, false)) {
+		v := h.put(gh[m.wordStart:m.end], true)
+		if f, ok := fieldFile(v); ok {
+			if f == "-" {
+				stdin = true
+			} else {
+				c.files = append(c.files, f)
+			}
+		}
+	}
+	if stdin {
+		in := findAll(gh, stdinAt("0123456789"))
+		for _, m := range in {
+			c.files = append(c.files, h.put(gh[m.wordStart:m.end], true))
+		}
+		gh = removeSpans(gh, in)
+	}
+	gh = removeSpans(gh, findAll(gh, optionAt([]string{"--input"}, true)))
+	var sent []span
+	for _, m := range findAll(gh, optionAt([]string{"--field", "-F"}, false)) {
+		v := h.put(gh[m.wordStart:m.end], true)
+		if eq := strings.IndexByte(v, '='); eq >= 0 && eq+1 < len(v) && v[eq+1] == '@' {
+			sent = append(sent, m)
+		}
+	}
+	gh = removeSpans(gh, sent)
+	c.text = h.put(dropWrites(append(append([]string{}, feed...), gh)), false)
+	return c
 }
 
 // apiWrites1: a --method / -X other than GET or HEAD, or, without one, any
