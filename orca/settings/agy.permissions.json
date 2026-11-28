@@ -22,6 +22,7 @@
       "command(gh pr checks)",
       "command(gh pr status)",
       "command(gh pr create --draft)",
+      "command(gh pr merge)",
       "command(gh run view)",
       "command(gh run list)",
       "command(gh issue view)",
