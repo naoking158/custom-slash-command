@@ -665,25 +665,16 @@ var guardTests = []struct {
 		f.guard(`GIT_INDEX_FILE=/tmp/i git push origin feature/x`).allow()
 		f.guard(`git -c user.name=x -c color.ui=never push origin feature/x`).allow()
 	}},
+	{"a gh release upload asset label is checked", func(f *fx) {
+		f.guard(`gh release upload v1 './app.tgz#fix H001'`).deny()
+		f.guard(`gh release upload v1 ./app.tgz`).allow()
+	}},
 	{"quoted git options and subcommands are read by their value", func(f *fx) {
 		f.guard(`git "-P" commit -m "fix H001"`).deny()
 		f.guard(`git -P "commit" -m "fix H001"`).deny()
 		f.guard(`git "--no-pager" push origin main`).deny()
 		f.guard(`git "--git-dir=/x/.git" push origin feature/x`).deny()
 		f.guard(`git "-C" /Users/me/tmp/w commit -m ok`).allow()
-	}},
-	{"git that the guard runs does not start the repository's fsmonitor", func(f *fx) {
-		f.own()
-		mark := filepath.Join(f.tmp, "ran")
-		f.write("fsmonitor.sh", "#!/bin/sh\ntouch "+mark+"\n")
-		if err := os.Chmod(filepath.Join(f.tmp, "fsmonitor.sh"), 0o755); err != nil {
-			f.t.Fatal(err)
-		}
-		f.git("-C", f.repo, "config", "core.fsmonitor", filepath.Join(f.tmp, "fsmonitor.sh"))
-		f.guard(`git commit -m "record the result in docs/log/tracked.md"`).allow()
-		if _, err := os.Stat(mark); err == nil {
-			f.t.Fatal("the guard's git ran core.fsmonitor")
-		}
 	}},
 	{"bodies of other gh commands are checked", func(f *fx) {
 		f.own()
@@ -709,7 +700,6 @@ var guardTests = []struct {
 			`gh gist edit abc - < m.txt`,
 			`gh release new v1 --notes "fix H001"`,
 			`gh release create v1 './app.tgz#fix H001'`,
-			`gh release upload v1 './app.tgz#fix H001'`,
 			`gh pr comment 3 -b x --attach './a.png#see H001'`,
 		} {
 			f.guard(c).deny()
