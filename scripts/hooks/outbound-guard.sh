@@ -13,9 +13,10 @@
 #     pushes whose destination is the default branch (main, master, origin/HEAD).
 #   - Outbound text must not cite local working artifacts: review finding IDs
 #     (C001, H012 ...), docs/reviews/ paths, absolute local paths, or docs/
-#     paths that git does not track. Outbound text is a commit message, a PR /
-#     issue body, comment or review, a merge commit's subject and body, a
-#     close / reopen comment, release notes and asset labels, and gist files.
+#     paths that git does not track. Outbound text is a `git commit` message,
+#     a PR / issue body, comment or review, the subject and body of
+#     `gh pr merge`, a close / reopen comment, release notes and asset labels,
+#     and gist files (not `git merge -m` or `git tag -m`).
 #     The files the body options name (-F, --file, --body-file, --notes-file,
 #     the files of `gh gist`) are read and checked too; a body file the hook
 #     cannot read, or one the same line writes, is denied. --attach images are
@@ -34,11 +35,13 @@
 # runs in: the session cwd, moved by the `cd`s before the command (with the
 # NAME=value assignments made earlier on the line expanded) and by its own
 # `git -C`. A git that the line may point at another repository, work tree or
-# push target runs in a directory the line does not show: --git-dir,
-# --work-tree, --namespace, env -C, a -c / --config-env key other than
-# credential.*, user.*, color.*, advice.*, http.* and core.pager, or a value
-# given on the line to GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR, GIT_NAMESPACE,
-# GIT_CONFIG*, HOME or XDG_CONFIG_HOME.
+# push target runs in a directory the line does not show, so such a push is
+# denied and such a commit is checked without the git-tracked test:
+# --git-dir, --work-tree, --namespace, env -C / --chdir, a -c / --config-env
+# key other than credential.*, user.*, color.*, advice.*, http.* and
+# core.pager (one with $ or ` in it included), or a value given on the line
+# to GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR, GIT_NAMESPACE, GIT_CONFIG*, HOME
+# or XDG_CONFIG_HOME.
 # A push or PR command whose directory or arguments the line does not
 # show (`cd "$(mktemp -d)"`, a refspec from a command substitution) is denied
 # with the way to rewrite it: judging it in the session cwd would apply another
