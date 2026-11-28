@@ -443,10 +443,18 @@ Design rules the repo follows:
 
 ## Development
 
+The tests come in two parts. The bats suites under `tests/` test the scripts and hooks as processes. The Go tests in `internal/outboundguard/` test the rules of outbound-guard in process; those rules have no bats tests, so a run of bats alone does not check them. The tools (bats, Go, shellcheck) are pinned in `mise.toml`.
+
 ```bash
-bats -r tests/         # all suites
+tests/all-parallel.sh       # every test once: bats suites in parallel and go test at the same time
+tests/run.sh                # the CI gate: bats under the bash on PATH and under /bin/bash, then go test
+tests/parallel.sh [FILE]... # bats suites only, in parallel (default: tests/)
+go test ./...               # Go tests only
+mise run lint               # shellcheck, go vet, gofmt, and a check that bin/ is built from the source
 ./scripts/install.sh --check
 ```
+
+`tests/all-parallel.sh` is for iterating; it uses only the bash on PATH. Run `tests/run.sh` (or `mise run test`) before a pull request: macOS hooks run under `/bin/bash` 3.2, and only that script runs the bats suites under it. After changing `cmd/` or `internal/`, rebuild the committed binaries with `scripts/build-bin.sh`.
 
 ## License
 
