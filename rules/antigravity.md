@@ -22,54 +22,37 @@ read its Claude Code terms as follows.
   Command exited with code <n>.` arrives when it ends; `<n>` is its exit
   status. `manage_task` with `status` or `kill` acts on the running task.
 - A step that starts a Claude Code agent (`Agent`, `Task`, `my:reviewer`,
-  `my:diff-reviewer`, `my:verifier`, `my:adversary`, `my:trail-auditor`) or a skill marked `context: fork` (the
-  `review` skill runs as `reviewer`): when an `orca` command is on PATH, run
-  it in its own context with run-role, from your Orca terminal, with absolute
-  paths:
+  `my:diff-reviewer`, `my:verifier`, `my:adversary`, `my:trail-auditor`) or a
+  skill marked `context: fork` (the `review` skill runs as `reviewer`): start
+  the subagent of the same name without `my:` with `invoke_subagent`. The
+  `my-agents` plugin provides them; each one reads its `agents/<name>.md` in
+  the plugin root. Give it, in its task, the inputs the skill gives the agent,
+  with absolute paths, and wait for its message: that message is the agent's
+  result. Start several at once when the skill runs agents in parallel.
 
-  ```
-  $HOME/.gemini/config/plugins/my/orca/bin/run-role <name> --out <result file> [--cwd <checkout>] -- <inputs>
-  ```
-
-  Without `orca` on PATH, handle the step as for exit 3 below.
-
-  `<name>` is the agent without `my:`. If your own task came from run-role
-  (it is an agent's instructions followed by a `## Reporting` section), you
-  are that agent already: do its steps yourself, and use run-role only for a
-  different agent it starts, such as `diff-reviewer` from `reviewer`.
+  If your own instructions are an `agents/<name>.md` file, you are that agent
+  already: do its steps yourself, and start a subagent only for a different
+  agent it starts, such as `diff-reviewer` from `reviewer`.
 
   The inputs are what the skill gives the agent:
-  - `diff-reviewer`: `--patch <patch> --hunks <hunks.tsv> --checklist <file>`
-    (once per checklist), with the `pass1.json` path as `--out`. Never pass the
-    plan or spec, neither its path nor its content.
-  - `verifier`: the checkout path and the completion criteria. Put
-    `--cwd <checkout>` before `--` when the checkout is an Orca workspace other
-    than yours.
+  - `diff-reviewer`: the patch file, the hunks file, each checklist file and
+    the `pass1.json` path to write. Never pass the plan or spec, neither its
+    path nor its content.
+  - `verifier`: the checkout path and the completion criteria.
   - `reviewer`: the review target and its options.
-  - `adversary`: the target, the intent and the throwaway worktree, each as an
-    input (`"target: <range>" "intent: <text>" "worktree: <path>"`). The
-    throwaway worktree is not an Orca workspace: never pass it as `--cwd`.
-  - `trail-auditor`: the run's state directory (`"state: <path>"`) and,
-    when there is one, the repository checkout.
+  - `adversary`: the target, the intent and the throwaway worktree.
+  - `trail-auditor`: the run's state directory and, when there is one, the
+    repository checkout.
 
-  The last line of the output is `[run-role] <name> exit=<n> <result file>`.
-  Act on the exit code:
-  - 0: read the result file and continue.
-  - 1: run it once more. If it fails again, treat it as exit 4.
-  - 2: stop and report it; the profile or the inputs are wrong.
-  - 3: Orca is not usable. For `diff-reviewer`, skip the plan-blind first
-    pass: review in one pass and say in the report that the first pass was
-    skipped because it could not be isolated. For the other agents, do the
-    step yourself in this conversation, following `agents/<name>.md` in the
-    plugin root, keep its return contract, and add a line `非隔離` (not
-    isolated) right after the first line of its result.
-  - 4: the worker timed out or waited for an approval and was stopped. For
-    `verifier`, return BLOCKED with that cause. For `diff-reviewer`, fall back
-    as for exit 3. For `reviewer`, stop and report that the review did not
-    finish. For `adversary` and `trail-auditor`, do the step yourself as for
-    exit 3, with the `非隔離` line.
+  When `invoke_subagent` cannot start it (no such agent, or it fails to
+  start), or it stops without a result: for `diff-reviewer`, skip the
+  plan-blind first pass, review in one pass and say in the report that the
+  first pass was skipped because it could not be isolated. For the other
+  agents, do the step yourself in this conversation, following
+  `agents/<name>.md`, keep its return contract, and add a line `非隔離` (not
+  isolated) right after the first line of its result.
 
-  For an agent with no file in `agents/`, such as `Explore`, do the step
-  yourself and follow the brief the skill gives it.
+  For an agent with no file in `agents/`, such as `Explore`, start the
+  built-in `research` subagent with the brief the skill gives it.
 - `CLAUDE.md`: also read `AGENTS.md` and `GEMINI.md`, which hold the same kind
   of instructions here.

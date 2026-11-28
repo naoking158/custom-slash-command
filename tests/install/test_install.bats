@@ -60,6 +60,14 @@ assert_links_to_repo() {
   assert_links_to_repo "$HOME/.gemini/config/plugins/my"
 }
 
+@test "install: links the Antigravity subagents plugin to antigravity-agents" {
+  run bash "$INSTALL"
+  [ "$status" -eq 0 ]
+  [ "$(cd "$HOME/.gemini/config/plugins/my-agents" && pwd -P)" = "$(cd "$REPO_ROOT/antigravity-agents" && pwd -P)" ]
+  bash "$INSTALL" --uninstall >/dev/null
+  [ ! -L "$HOME/.gemini/config/plugins/my-agents" ]
+}
+
 @test "check: a missing Antigravity plugin link fails the check" {
   bash "$INSTALL" >/dev/null
   rm "$HOME/.gemini/config/plugins/my"

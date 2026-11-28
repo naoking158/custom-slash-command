@@ -9,8 +9,9 @@
 #   --plugin   plugin checkout to test (default: the checkout holding this
 #              script). agy loads it as `my` from a throwaway HOME whose
 #              .gemini links to the real one except config/plugins, so the
-#              installed copy is not used and not changed. ~/.local/state
-#              (autopilot's state) stays inside <out>/home.
+#              installed copy is not used and not changed. Its
+#              antigravity-agents/ is loaded as `my-agents` the same way.
+#              ~/.local/state (autopilot's state) stays inside <out>/home.
 #   --out      output directory (default: a new mktemp directory).
 #   --jobs     cases run in parallel (default 4).
 #   --timeout  agy --print-timeout per case, in seconds (default 900).
@@ -23,8 +24,7 @@
 #     Stop hook and the skills do not write the real toolkit data; it holds
 #     copies of orca.conf and autonomy.conf and a draft-only PdM config whose
 #     workspace is <out>/pdm-workspace;
-#   - an `orca` on PATH that always fails, so run-role answers exit 3 and the
-#     skill takes its in-conversation fallback instead of starting workers;
+#   - an `orca` on PATH that always fails, so nothing starts Orca workers;
 #   - --settings that deny MCP tools, pushes, PR/issue creation and gh api,
 #     and, on a nix machine, let the terminal sandbox read the nix store (its
 #     shell lives there; without the grant every command leaves the sandbox).
@@ -75,6 +75,7 @@ make_home() {
     [ "$b" = plugins ] || ln -s "$f" "$h/.gemini/config/$b"
   done
   ln -s "$plugin" "$h/.gemini/config/plugins/my"
+  [ -d "$plugin/antigravity-agents" ] && ln -s "$plugin/antigravity-agents" "$h/.gemini/config/plugins/my-agents"
   for b in Library .gitconfig .config .local/bin .local/share .local/lib; do
     [ -e "$HOME/$b" ] || continue
     mkdir -p "$(dirname "$h/$b")"
@@ -104,8 +105,7 @@ summarize() {
        denied: ($denied + ([$errs[] | select(test("denied|permission"; "i"))] | length)),
        errors: ([$errs[] | select(test("denied|permission"; "i") | not)] | length),
        asked: ([$steps[] | select(.tool_name == "ask_question")] | length),
-       run_role: ([$steps[] | select(.step_type == "tool") | .tool_info.parameters.CommandLine // ""
-                   | select(test("run-role"))] | length),
+       subagents: ([$steps[] | select(.tool_name == "invoke_subagent")] | length),
        cc_terms: $found,
        first_error: ($errs | first // "" | .[0:160]),
        answer: (($r.response // "") | gsub("\\s+"; " ") | .[0:160])}
@@ -196,10 +196,10 @@ printf '%s\n' "$selected" | xargs -P "$jobs" -I{} "$0" --case "$out" "$timeout" 
 
 status=0
 {
-  printf 'skill\tflags\tstatus\tseconds\ttools\tdenied\terrors\tasked\trun_role\tcc_terms\tfirst_error\tanswer\n'
+  printf 'skill\tflags\tstatus\tseconds\ttools\tdenied\terrors\tasked\tsubagents\tcc_terms\tfirst_error\tanswer\n'
   for s in $selected; do
     jq -r '[.skill, ((.flags // []) | if length == 0 then "OK" else join(",") end), .status, .seconds,
-            .tools, .denied, .errors, .asked, .run_role, ((.cc_terms // []) | join(" ")),
+            .tools, .denied, .errors, .asked, .subagents, ((.cc_terms // []) | join(" ")),
             (.first_error // "" | gsub("[\t\n]"; " ")), (.answer // "")] | map(tostring) | join("\t")' \
       "$out/cases/$s/summary.json" 2>/dev/null || printf '%s\tNO_SUMMARY\n' "$s"
   done

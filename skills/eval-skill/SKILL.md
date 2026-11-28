@@ -44,7 +44,7 @@ HOME=<variant home> claude -p "<the task>" --permission-mode acceptEdits \
   --output-format stream-json --verbose > <transcript file outside the working directory>
 ```
 
-`-p` denies every tool the flags do not allow, so pass the list from step 1, the same for every variant. Do not use `bypassPermissions`: the subject runs as you, on your machine, outside any sandbox. Give every run the same prompt, word for word. Keep each transcript and the final diff, new files included (`git -C <working directory> add -A -N && git -C <working directory> diff`). Do not run subjects as `Agent` subagents or through `orca/bin/run-role`: a subagent shares this session's toolkit, and run-role runs only its fixed roles.
+`-p` denies every tool the flags do not allow, so pass the list from step 1, the same for every variant. Do not use `bypassPermissions`: the subject runs as you, on your machine, outside any sandbox. Give every run the same prompt, word for word. Keep each transcript and the final diff, new files included (`git -C <working directory> add -A -N && git -C <working directory> diff`). Do not run subjects as `Agent` subagents: a subagent shares this session's toolkit.
 
 ## 4. Judge blind
 
