@@ -54,5 +54,12 @@ read its Claude Code terms as follows.
 
   For an agent with no file in `agents/`, such as `Explore`, start the
   built-in `research` subagent with the brief the skill gives it.
+- `~/.claude/skills/<name>/` (a personal skill): write a new one to
+  `~/.agents/skills/<name>/`, where Antigravity loads skills from; it does not
+  load `~/.claude/skills/`. When a step looks for a personal skill, look in
+  both folders.
+- A repository's `.claude/skills/<name>/`: Antigravity does not load it as a
+  skill. When a step uses one, such as a `verify-<app>` skill, read its
+  SKILL.md there with `view_file` and follow it.
 - `CLAUDE.md`: also read `AGENTS.md` and `GEMINI.md`, which hold the same kind
   of instructions here.
