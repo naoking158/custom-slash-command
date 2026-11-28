@@ -82,10 +82,7 @@ func parseCommands(cmd, cwd string, home *string) []command {
 		return marker(len(p.lit) - 1)
 	})
 	s = strings.ReplaceAll(s, "\\\n", " ")
-	for _, t := range fields(s) {
-		name, _, _ := strings.Cut(t, "=")
-		p.gitElsewhere = p.gitElsewhere || (allWord(name) && gitEnv(name))
-	}
+	p.gitElsewhere = setsGitEnv(p.literalText(s))
 	for _, seg := range splitOn(s, listSep(true, "<>|&")) {
 		p.segment(stripRedirections(seg))
 	}
@@ -484,7 +481,7 @@ func (p *commandParser) gitDir(at *string, before, opts string) *string {
 	env := false
 	for _, t := range fields(before) {
 		env = env || t == "env"
-		if env && (t == "-C" || strings.HasPrefix(t, "--chdir")) {
+		if env && (strings.HasPrefix(t, "--chdir") || (len(t) > 1 && t[0] == '-' && t[1] != '-' && strings.Contains(t, "C"))) {
 			return nil
 		}
 	}

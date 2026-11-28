@@ -1,6 +1,7 @@
 package outboundguard
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -401,11 +402,25 @@ func gitEnv(name string) bool {
 	return strings.HasPrefix(name, "GIT_CONFIG")
 }
 
+var (
+	gitEnvNames  = `(GIT_DIR|GIT_WORK_TREE|GIT_COMMON_DIR|GIT_NAMESPACE|GIT_CONFIG[A-Za-z0-9_]*|HOME|XDG_CONFIG_HOME)`
+	gitEnvAssign = regexp.MustCompile(`(^|[^A-Za-z0-9_$])` + gitEnvNames + `\+?=`)
+	gitEnvSet    = regexp.MustCompile(`(^|[^A-Za-z0-9_])(export|declare|typeset|readonly|local|read|for)[[:space:]]([^;&|\n]*[^A-Za-z0-9_$])?` + gitEnvNames + `([^A-Za-z0-9_]|$)`)
+)
+
+// setsGitEnv reports whether line, its quotes removed, gives a value to a
+// gitEnv variable: NAME=value anywhere (after ;, (, a quote ...), or NAME as
+// an argument of export, declare, read, for and the like. A line that only
+// reads one ($HOME) does not.
+func setsGitEnv(line string) bool {
+	return gitEnvAssign.MatchString(line) || gitEnvSet.MatchString(line)
+}
+
 // gitSafeKey reports whether a config key given with -c or --config-env
 // leaves alone where git works and where and what it pushes. Any other key,
 // one written with a variable and include.path among them, may change them.
 func gitSafeKey(key string) bool {
-	key = strings.ToLower(key)
+	key, _, _ = strings.Cut(strings.ToLower(key), "=")
 	if key == "core.pager" {
 		return true
 	}
