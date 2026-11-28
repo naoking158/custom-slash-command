@@ -131,7 +131,7 @@ run_case() {
   [ -n "$MODEL" ] && model_args=(--model "$MODEL")
   (cd "$d/fx/repo" && HOME="$OUT/home" MY_TOOLKIT_DATA="$OUT/data" PATH="$OUT/stub:$PATH" \
     agy -p "/my:$skill${args:+ $args}" --output-format stream-json \
-      --print-timeout "${TIMEOUT}s" --settings "$OUT/settings.json" "${model_args[@]}" \
+      --print-timeout "${TIMEOUT}s" --settings "$OUT/settings.json" ${model_args[@]+"${model_args[@]}"} \
       >"$d/stream.jsonl" 2>"$d/stderr.txt" </dev/null)
   cid="$(jq -r 'select(.event == "init") | .conversation_id' "$d/stream.jsonl" 2>/dev/null | head -n1)"
   [ -n "$cid" ] && cp "$HOME/.gemini/antigravity-cli/brain/$cid/.system_generated/logs/transcript_full.jsonl" \
