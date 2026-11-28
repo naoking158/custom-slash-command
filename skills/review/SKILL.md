@@ -64,11 +64,13 @@ passes its state directory.
 `--since <sha>` (`pr:` targets only) reviews only what the PR changed after
 `<sha>`, a head an earlier review already read: the diff is
 `git -c core.quotepath=false diff {sha} {head}` instead of `gh pr diff`. Run
-`git merge-base --is-ancestor {sha} {head}` first; when it fails (the branch
-was rebased, or the sha is not the PR's), stop and report that a full review
-is needed. Review only the lines this diff changes: what lies before `<sha>`
-was the earlier review's, so a test or plan item that it covers is not
-missing here.
+`git merge-base --is-ancestor {sha} {head}` and `git rev-list --merges
+{sha}..{head}` first; when the first fails (the branch was rebased, or the sha
+is not the PR's) or the second prints anything (a merge brought in other
+people's changes), stop and report that a full review is needed. Report
+findings only on the lines this diff changes, still checking them against
+their surroundings as Step 2 says: what lies before `<sha>` was the earlier
+review's, so a test or plan item that it covers is not missing here.
 
 ### Name the outputs
 
@@ -78,7 +80,8 @@ once, before writing anything, from
 lists the types), `--id {id}`, `--perspective {perspective}` when one was
 given, and `--report-dir <dir>` when one was given. For a `pr:` target also
 pass `--head {head}` (below) and, with `--since`, `--since <sha>`. Without
-`--report-dir`, `{out}` is `docs/reviews/{type}/{id}`; with it,
+`--report-dir`, `{out}` is `docs/reviews/{type}/{id}`, or
+`docs/reviews/{type}/{id}-{since7}..{head7}` for a delta review; with it,
 `<dir>/{type}/{id}-{head7}` for a PR, `{id}-{since7}..{head7}` for a delta
 review, and `-2`, `-3` … appended when that name is taken. Report `{out}` as
 the script printed it; do not rebuild it.

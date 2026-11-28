@@ -5,7 +5,8 @@
 #   - With --report-dir, a second review of the same PR never gets the name of
 #     an earlier one, whichever of .md / .json / .html that one left behind.
 #   - The name carries the head (and the start of a delta review) it read.
-#   - Without --report-dir the path is docs/reviews/<type>/<id>, every time.
+#   - Without --report-dir the path is docs/reviews/<type>/<id>, every time,
+#     except that a delta review gets its own name.
 
 bats_require_minimum_version 1.5.0
 
@@ -57,6 +58,12 @@ setup() {
   [ "$output" = "docs/reviews/prs/52" ]
   run -0 bash "$REPORT_PATH" --type plans --id auth --perspective be
   [ "$output" = "docs/reviews/plans/auth--be" ]
+}
+
+@test "without --report-dir a delta review does not replace the full one" {
+  cd "$BATS_TEST_TMPDIR"
+  run -0 bash "$REPORT_PATH" --type prs --id 52 --head "$NEXT" --since "$HEAD"
+  [ "$output" = "docs/reviews/prs/52-0123456..fedcba9" ]
 }
 
 @test "usage errors exit 2" {

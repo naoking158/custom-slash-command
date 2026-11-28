@@ -5,7 +5,9 @@
 #                  [--report-dir <dir>] [--head <sha>] [--since <sha>]
 #
 # Without --report-dir the path is docs/reviews/<type>/<id>[--<p>], the same
-# for every run, so a new review replaces the previous one.
+# for every run, so a new review replaces the previous one; a delta review
+# (--since) gets docs/reviews/<type>/<id>-<since7>..<head7>[--<p>] instead, so
+# that it never replaces the full one.
 #
 # With --report-dir every run gets its own name, so earlier rounds stay:
 #   <dir>/<type>/<id>[-<since7>..<head7> | -<head7>][-<k>][--<p>]
@@ -45,15 +47,16 @@ fi
 suffix=""
 [ -z "$perspective" ] || suffix="--$perspective"
 
+range=""
+[ -z "$since" ] || range="-${since:0:7}..${head:0:7}"
+
 if [ -z "$dir" ]; then
-  echo "docs/reviews/$type/$id$suffix"
+  echo "docs/reviews/$type/$id$range$suffix"
   exit 0
 fi
 
-base="$dir/$type/$id"
-if [ -n "$since" ]; then
-  base="$base-${since:0:7}..${head:0:7}"
-elif [ -n "$head" ]; then
+base="$dir/$type/$id$range"
+if [ -z "$range" ] && [ -n "$head" ]; then
   base="$base-${head:0:7}"
 fi
 
