@@ -79,16 +79,17 @@ picks the harness and model per role.
 
 | Role | Work machine (Claude Code) | Private machine (Antigravity) |
 |------|----------------------------|-------------------------------|
-| implement | `start-goal` session | Not supported yet: autopilot needs Claude Code |
-| verify, review | Subagents of the goal's session | Orca workers through `orca/bin/run-role` |
-| adversary, audit | Subagents (`my:adversary` for `/my:interrogate`, `my:trail-auditor` for autopilot's final report) | Orca workers through `orca/bin/run-role` |
+| implement | `start-goal` session | `start-goal` session |
+| verify, review | Subagents of the goal's session | Subagents from the `my-agents` plugin |
+| adversary, audit | Subagents (`my:adversary` for `/my:interrogate`, `my:trail-auditor` for autopilot's final report) | Subagents from the `my-agents` plugin |
 
 Guardrails:
 
 - The outbound guard denies pushes to the default branch and force-pushes, and
   keeps strict repositories to draft PRs ([Autonomy modes](#autonomy-modes)).
 - A goal's session cannot reach Slack or Notion: `start-goal` denies them in
-  the worktree's local settings.
+  the worktree's local settings, and for Antigravity also through a
+  PreToolUse hook in the worktree's `.agents/hooks.json`.
 - In a repository with a `verify-<app>` skill, start one goal at a time:
   verify runs one app stack, and nothing stops two goals from verifying at
   once.
@@ -225,11 +226,14 @@ The installer creates these symlinks and cleans up symlinks from the old
 |------|-------|
 | `~/.claude/skills/my` → `<repo>` | created (skills-directory plugin, referenced in place — repo edits apply live) |
 | `~/.gemini/config/plugins/my` → `<repo>` | created (Antigravity plugin, referenced in place) |
+| `~/.gemini/config/plugins/my-agents` → `<repo>/antigravity-agents` | created (the agents as Antigravity subagents) |
+| `~/.gemini/antigravity-cli/settings.json` | when Antigravity is present, the allow rules of `orca/settings/agy.permissions.json` added to `permissions.allow` (see [Antigravity](#antigravity)) |
 | `~/.claude/rules/<f>.md` → `<repo>/rules/<f>.md` | created, one per rules file except `AGENTS.md` and `antigravity.md` |
 | `~/.prompts`, `~/.claude/commands`, `~/.claude/agents` | removed if they point into this repo (legacy layout) |
 
 Restart Claude Code (or `/reload-plugins`) and start a new Antigravity
-conversation after installing. Verify with
+conversation after installing. After `git pull`, run `install.sh` again: a
+new link or rule takes effect only then. Verify with
 `./scripts/install.sh --check`; remove with `--uninstall`. The installer
 never overwrites real files or foreign symlinks (`--force` retargets a stray
 symlink).
@@ -245,13 +249,33 @@ it into `~/.gemini/config/plugins/`.
 | Skills | Load from `skills/`; `rules/antigravity.md` maps the Claude Code terms |
 | `rules/principles.md` | Always on, through `rules/AGENTS.md` |
 | Outbound guard | Root `hooks.json` → `antigravity-guard.sh` on `run_command` and on the input `manage_task` sends to a background command. The guard's `ask` becomes `force_ask`; the Notion write check is not wired |
-| Agents | Hidden (`mainAgent: false`, `subagent: false`): their tool lists use Claude Code tool names. With `orca` on PATH, a step that launches one runs it as an Orca worker through `orca/bin/run-role` (see [Orca](#orca)). Without `orca`, or when run-role exits 3 (Orca unreachable, or neither an Orca terminal nor an Orca agent session), verifier, reviewer, adversary and trail-auditor run in the same conversation with the result marked `非隔離`, and diff-reviewer is skipped (see the next row). `rules/antigravity.md` gives the handling of the other exit codes, including a timeout (4) |
-| `/my:autopilot`, `/my:retro`, `/my:eval-skill` | Not supported: they depend on Claude Code agents, background commands, `claude -p` sessions, or transcripts |
-| Two-pass diff review | With Orca, the plan-blind first pass runs as a separate `diff-reviewer` worker. Without Orca, the first pass is skipped and the review runs in one pass |
+| Agents | `agents/` keeps Claude Code tool names and stays hidden from Antigravity (`mainAgent: false`, `subagent: false`). `antigravity-agents/` (installed as the `my-agents` plugin) offers each one as an Antigravity subagent of the same name with Antigravity tool names, whose instructions are the `agents/` file; a step that launches an agent starts it with `invoke_subagent`. When the subagent cannot start, the step runs in the same conversation with the result marked `非隔離`, and diff-reviewer's plan-blind first pass is skipped |
+| `/my:autopilot` | Runs on Antigravity, started by `start-goal` with an `antigravity` implement line |
+| `/my:retro --deep` | `skills/retro/scripts/transcript-digest.sh` reads Antigravity transcripts as well as Claude Code ones |
+| `/my:eval-skill` | Runs its variants with `agy -p --settings <allow rules>` in homes made by `scripts/lib/agy-home.sh` |
+| Personal skills | Written to `~/.agents/skills/`, which Antigravity loads (it does not load `.claude/skills/`) |
 | `SessionEnd` / `UserPromptSubmit` capture | Root `hooks.json` → `antigravity-stop.sh` on `Stop`: it indexes the conversation on its first turn and passes each new input to `prompt-capture.sh` |
 
-The outbound guard and the `Stop` hook were checked with agy 1.5.17; the rest follows the Antigravity docs.
-To check it:
+Approvals. Antigravity asks before a command it cannot run inside its
+terminal sandbox and before writing outside the workspace, which stops
+unattended work. `install.sh` adds narrow allow rules for ordinary commands
+(git, gh queries, draft PRs, test runners, read-only commands), for
+autopilot's state directory and agy's own conversation folders, and on a nix
+machine for reading the nix store (the sandbox's shell lives there; without it
+every command leaves the sandbox). A hook's `allow` does not approve anything
+in Antigravity, so these are settings rules. The outbound guard's deny and
+`force_ask` still win over them, and commands outside the rules go to
+Antigravity's own check.
+
+Models. `orca/profiles/private.conf` gives the Antigravity models:
+gemini-4-neon-medium for implementing and checking, gemini-4-hydrogen-high
+for research and simple tasks (`scout`), and gemini-4-carbon-medium for a spot
+consultation on a hard task (`consult`).
+
+These were checked with agy 1.5.18 by running it.
+`scripts/agy-smoke/run.sh` runs every skill once with `agy -p` against a
+throwaway repository and lists the ones that stop, are denied a tool, or act
+on Claude Code terms. To check the installation:
 
 ```bash
 agy plugin validate ~/.gemini/config/plugins/my
@@ -268,20 +292,16 @@ otherwise.
 
 - `orca/bin/doctor`: run from an Orca terminal; checks that Orca is reachable
   and that both guards deny a push to `main`.
-- `orca/bin/run-role <verifier|reviewer|diff-reviewer|adversary|trail-auditor> --out <file> [--cwd <workspace>] -- <inputs>`:
-  starts the role as a worker with the body of `agents/<name>.md`, waits for it
-  from the shell, checks the result file against the role's contract, and
-  releases the worker. Exit codes:
-  0 result OK, 1 worker failed or bad result, 2 configuration error, 3 Orca
-  unusable, 4 timed out (worker stopped). `rules/antigravity.md` is its only
-  caller; Claude Code keeps using subagents.
-- `orca/bin/start-goal [--name <name>] <repo> "<goal>"`: creates an Orca
+- `orca/bin/start-goal [--name <name>] [--profile <profile>] <repo> "<goal>"`: creates an Orca
   worktree of `<repo>` from origin's default branch, adds the deny rules of
   `orca/settings/goal.deny.json` to its `.claude/settings.local.json` (the
   Slack and Notion MCP servers it names, and `orca slack`), marks it as the
   goal's worktree for autopilot, and then launches `/my:autopilot <goal>` there
-  with the profile's `implement` agent and model. The `implement` harness must
-  be `claude`, so it runs on the work machine's profile. Run one per goal to
+  with the profile's `implement` agent and model. The `implement` harness is
+  `claude` or `antigravity`; for Antigravity it also registers
+  `scripts/hooks/antigravity-goal-deny.sh`, which applies the same deny rules,
+  in the worktree's `.agents/hooks.json`. `--profile` picks the profile for
+  this goal only. Run one per goal to
   work on several goals at once. Start at most one goal at a time in a
   repository with a `verify-<app>` skill: verify runs one app stack, and
   nothing stops two goals from verifying at once. `<repo>` must be registered
@@ -291,21 +311,17 @@ otherwise.
   and stderr names the terminal handle and the command that sends the
   prompt by hand; in the others a worktree already made is removed.
 - `orca/profiles/<name>.conf`: the harness and model per role, one
-  `<role> <harness> <model>` line each. run-role reads the `verify` line for
-  `verifier`, the `review` line for `reviewer` and `diff-reviewer`, the
-  `adversary` line for `adversary` and the `audit` line for `trail-auditor`
-  (these two fall back to the `review` line); start-goal reads the
-  `implement` line. The values for each machine are in
-  `orca/profiles/work.conf` and `orca/profiles/private.conf`, and only
-  there; read the comments in each file before relying on a model choice.
-  For a cross-model check, point `adversary` or `audit` at a different
-  vendor's harness and model than `implement` on that machine.
+  `<role> <harness> <model>` line each. start-goal reads the `implement`
+  line; the agents run as subagents of the goal's session and use its model,
+  so the other lines record the intended model for each role. The values for
+  each machine are in `orca/profiles/work.conf` and
+  `orca/profiles/private.conf`; read the comments in each file before relying
+  on a model choice.
 - A profile must be selected on any machine with `orca` on PATH: set
   `MY_ORCA_PROFILE`, or write a `profile <name>` line in
   `~/.claude/my-toolkit/orca.conf` (`profile work` on the work machine,
-  `profile private` on the private one). Without one, run-role exits 2 and
-  Antigravity stops at every step that launches an agent; `install.sh --check`
-  reports it.
+  `profile private` on the private one). Without one, start-goal cannot pick
+  the harness and model of a goal; `install.sh --check` reports it.
 
 ## Usage
 
@@ -421,7 +437,7 @@ custom-slash-command/
 │                                  #   AGENTS.md, antigravity.md for Antigravity only
 ├── hooks/hooks.json               # PreToolUse guard, SessionEnd index, UserPromptSubmit capture
 ├── hooks.json                     # Antigravity: PreToolUse guard on run_command
-├── orca/                          # bin/doctor, bin/run-role, bin/start-goal, lib/profile.sh, profiles/ (work, private), settings/goal.deny.json
+├── orca/                          # bin/doctor, bin/start-goal, lib/profile.sh, profiles/ (work, private), settings/goal.deny.json
 ├── scripts/                       # install.sh, lib/, hooks/, pdm/ (scheduling)
 ├── tests/                         # bats: hooks / install / orca / redact / review-screen / toolkit
 └── docs/                          # design notes and reviews of this repo itself
