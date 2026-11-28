@@ -59,7 +59,8 @@ die() { printf 'agy-smoke: %s\n' "$*" >&2; exit 2; }
 settings_json() {
   local rules="$2/orca/settings/agy.permissions.json" allow='[]'
   [ -f "$rules" ] && allow="$(jq -c '.permissions.allow' "$rules")"
-  allow="$(jq -cn --argjson a "$allow" --arg s "$1/home/.local/state/autopilot" '$a + ["write_file(\($s))"]')"
+  allow="$(jq -cn --argjson a "$allow" --arg s "$1/home/.local/state/autopilot" --arg b "$HOME/.gemini/antigravity-cli/brain" \
+    '$a + ["write_file(\($s))", "write_file(\($b))"]')"
   [ -d /nix/store ] && allow="$(jq -cn --argjson a "$allow" '$a + ["read_file(/nix/store)","read_file(/run/current-system)","read_file(/etc/profiles)"]')"
   jq -cn --argjson allow "$allow" '{permissions: {allow: $allow, deny: [
     "mcp(*)", "command(git push)", "command(gh pr create)", "command(gh pr merge)",

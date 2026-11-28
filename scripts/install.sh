@@ -25,13 +25,15 @@
 # install also adds the allow rules of orca/settings/agy.permissions.json to
 # permissions.allow in $HOME/.gemini/antigravity-cli/settings.json, keeping the
 # rules already there, so ordinary commands (git status, tests, gh pr view) run
-# without an approval prompt. Two rules depend on the machine and are added
-# with them: write access to autopilot's state directory, and on a nix machine
-# read access to the nix store, where the shell the terminal sandbox starts
-# lives. Without that grant every command fails in the sandbox and asks to run
-# outside it. --check reports missing rules and --uninstall removes these
-# rules, also when the user had added one of them by hand. Commands the rules do not cover still go to Antigravity's own
-# check, and the outbound guard hook still denies what it denies.
+# without an approval prompt. Some rules depend on the machine and are added
+# with them: write access to autopilot's state directory and to agy's own
+# conversation folders (brain/, where it keeps scratch files such as a PR
+# body), and on a nix machine read access to the nix store, where the shell
+# the terminal sandbox starts lives. Without that grant every command fails in
+# the sandbox and asks to run outside it. --check reports missing rules and
+# --uninstall removes these rules, also when the user had added one of them by
+# hand. Commands the rules do not cover still go to Antigravity's own check,
+# and the outbound guard hook still denies what it denies.
 #
 # Also cleans up symlinks from the pre-plugin layout when they point into
 # this repo:
@@ -337,7 +339,7 @@ check_legacy() {
 # agy_rules — print the allow rules this toolkit adds to Antigravity, as a
 # JSON array.
 agy_rules() {
-  local extra=("write_file($HOME/.local/state/autopilot)")
+  local extra=("write_file($HOME/.local/state/autopilot)" "write_file($HOME/.gemini/antigravity-cli/brain)")
   if [ -d /nix/store ]; then
     extra+=("read_file(/nix/store)" "read_file(/run/current-system)" "read_file(/etc/profiles)")
   fi
