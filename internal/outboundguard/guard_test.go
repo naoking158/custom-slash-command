@@ -836,6 +836,10 @@ var guardTests = []struct {
 		f.guard(`echo x > ` + f.tmp + `/clean.md && gh pr comment 3 --body "$(cat ` + f.tmp + `/clean.md)"`).deny()
 		f.guard(`echo x > ` + f.tmp + `/clean.json && cat ` + f.tmp + `/clean.json | gh api --method POST repos/o/r/issues/1/comments --input -`).deny()
 		f.guard(`gh pr create --draft --title $(echo t) --body "$(git log -1 --format=%b)"`).allow()
+		f.guard(`gh pr comment 3 --body "run \$(cat nofile) to see it"`).allow()
+		f.guard("gh pr comment 3 --body \"run \\`cat nofile\\` to see it\"").allow()
+		f.guard(`gh pr comment 3 --body "$(cat '` + f.tmp + `/clean.md')"`).allow()
+		f.guard(`gh pr comment 3 --body "$(cat '` + f.tmp + `/leak.md')"`).deny()
 	}},
 	{"a clean body read through cat from a local path is allowed", func(f *fx) {
 		f.write("home/clean.md", "fixed in abc123\n")

@@ -85,7 +85,9 @@ func (h *held) takeReads(s string) (string, []string) {
 			continue
 		}
 		body, next := "", -1
+		escaped := i > 0 && s[i-1] == '\\'
 		switch {
+		case escaped:
 		case strings.HasPrefix(s[i:], "$(") && !strings.HasPrefix(s[i:], "$(("):
 			if k := strings.IndexByte(s[i:], ')'); k >= 0 {
 				body, next = s[i+2:i+k], i+k+1
@@ -103,7 +105,7 @@ func (h *held) takeReads(s string) (string, []string) {
 					continue
 				}
 			}
-		} else if strings.HasPrefix(s[i:], "$(cat") || strings.HasPrefix(s[i:], "$(<") || strings.HasPrefix(s[i:], "`cat") {
+		} else if !escaped && (strings.HasPrefix(s[i:], "$(cat") || strings.HasPrefix(s[i:], "$(<") || strings.HasPrefix(s[i:], "`cat")) {
 			files = append(files, "")
 		}
 		b.WriteByte(s[i])
@@ -143,6 +145,9 @@ func (h *held) reads(body string) ([]string, bool) {
 // or a substitution the line does not show.
 func (h *held) word(w string) string {
 	v := h.put(w, true)
+	if len(v) >= 2 && (v[0] == '\'' || v[0] == '"') && v[len(v)-1] == v[0] {
+		v = v[1 : len(v)-1]
+	}
 	if strings.ContainsAny(v, "$`") {
 		return ""
 	}
