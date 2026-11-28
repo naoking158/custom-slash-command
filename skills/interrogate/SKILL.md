@@ -40,9 +40,9 @@ A `pr:<n>` target: `git fetch origin pull/<n>/head`, then add the worktree at th
 Start `my:adversary` with the target, the intent and the worktree path `$T`:
 
 - Claude Code: `Agent` with `subagent_type: "my:adversary"`.
-- Antigravity: `orca/bin/run-role adversary --out <result file> -- "target: ..." "intent: ..." "worktree: $T"` (see `rules/antigravity.md`). Pass the worktree as an input, not as `--cwd`: run-role takes only an Orca workspace there.
+- Antigravity: `invoke_subagent` with the `adversary` subagent, the target, the intent and `$T` in its task (see `rules/antigravity.md`).
 
-For a large or risky change, start two or three breakers in parallel, each told to focus on one area (inputs and boundaries, state and concurrency, callers and contracts). Where the profile maps `adversary` to a different model than yours, prefer it: a different model misses different things.
+For a large or risky change, start two or three breakers in parallel, each told to focus on one area (inputs and boundaries, state and concurrency, callers and contracts).
 
 A breaker's result starts with `FINDINGS <n>`, or `BLOCKED` when it ran nothing. On `BLOCKED`, check the worktree path and start it again once; a second `BLOCKED` is reported as "not run", never as "no finding". A result that starts with neither failed: run it once more, then go on with what you have.
 

@@ -6,6 +6,9 @@
 #                                        in place, so repo edits apply live)
 #   $HOME/.gemini/config/plugins/my -> <repo>
 #                                       (the same repo as an Antigravity plugin)
+#   $HOME/.gemini/config/plugins/my-agents -> <repo>/antigravity-agents
+#                                       (the agents as Antigravity subagents;
+#                                        agents/ keeps Claude Code tool names)
 #   $HOME/.claude/rules/<f>.md -> <repo>/rules/<f>.md
 #                                       (plugins cannot ship rules, so each
 #                                        file except the Antigravity-only
@@ -41,6 +44,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 CLAUDE_DIR="$HOME/.claude"
 PLUGIN_LINK="$CLAUDE_DIR/skills/my"
 ANTIGRAVITY_PLUGIN_LINK="$HOME/.gemini/config/plugins/my"
+ANTIGRAVITY_AGENTS_LINK="$HOME/.gemini/config/plugins/my-agents"
 RULES_DIR="$CLAUDE_DIR/rules"
 ORCA_DOCTOR="$REPO_ROOT/orca/bin/doctor"
 ORCA_PROFILE_LIB="$REPO_ROOT/orca/lib/profile.sh"
@@ -63,6 +67,8 @@ Usage: scripts/install.sh [--check | --uninstall] [--force] [-h|--help]
 Creates these symlinks (idempotent):
   $HOME/.claude/skills/my -> <repo>
   $HOME/.gemini/config/plugins/my -> <repo>   (Antigravity plugin)
+  $HOME/.gemini/config/plugins/my-agents -> <repo>/antigravity-agents
+                                              (Antigravity subagents)
   $HOME/.claude/rules/<f>.md -> <repo>/rules/<f>.md   (one per rules file, except
                                                         AGENTS.md and antigravity.md)
 
@@ -355,6 +361,7 @@ case "$MODE" in
   install)
     install_plugin_link "$PLUGIN_LINK" "$REPO_ROOT" || failed=1
     install_plugin_link "$ANTIGRAVITY_PLUGIN_LINK" "$REPO_ROOT" || failed=1
+    install_plugin_link "$ANTIGRAVITY_AGENTS_LINK" "$REPO_ROOT/antigravity-agents" || failed=1
     for_each_rule install || failed=1
     for legacy in "${LEGACY_LINKS[@]}"; do
       cleanup_legacy "$legacy"
@@ -364,6 +371,7 @@ case "$MODE" in
   uninstall)
     uninstall_plugin_link "$PLUGIN_LINK" "$REPO_ROOT" || failed=1
     uninstall_plugin_link "$ANTIGRAVITY_PLUGIN_LINK" "$REPO_ROOT" || failed=1
+    uninstall_plugin_link "$ANTIGRAVITY_AGENTS_LINK" "$REPO_ROOT/antigravity-agents" || failed=1
     for_each_rule uninstall || failed=1
     for legacy in "${LEGACY_LINKS[@]}"; do
       cleanup_legacy "$legacy"
@@ -372,6 +380,7 @@ case "$MODE" in
   check)
     check_plugin_link "$PLUGIN_LINK" "$REPO_ROOT" || failed=1
     check_plugin_link "$ANTIGRAVITY_PLUGIN_LINK" "$REPO_ROOT" || failed=1
+    check_plugin_link "$ANTIGRAVITY_AGENTS_LINK" "$REPO_ROOT/antigravity-agents" || failed=1
     for_each_rule check || failed=1
     for legacy in "${LEGACY_LINKS[@]}"; do
       check_legacy "$legacy" || failed=1
