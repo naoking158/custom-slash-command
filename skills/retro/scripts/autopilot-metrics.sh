@@ -279,7 +279,7 @@ jq -rn --arg s "$since" --arg u "$until" --argjson p "$progress_json" --argjson 
   | ($r | map(select(.gh | not))) as $no_gh
   | ($r | map(select(.gh and (.git | not)))) as $no_git
   | "期間: \($s)..\($u)",
-    "進行の記録: ゴール \($p.goals | length)、タスク \($p.tasks | length)（Started が読めないゴール \($p.undated)、タスクの見出しがないゴール \($p.no_tasks)）",
+    "進行の記録: ゴール \($p.goals | length)、タスク \($p.tasks | length)（Started が読めないゴール \($p.undated)、タスクが読めないゴール \($p.no_tasks)）",
     "レビューの往復数: 読めた \($rounds | length)"
       + (if ($rounds | length) > 0 then
            "（" + ($rounds | group_by(.) | map("\(.[0])回 \(length)") | join("、"))
