@@ -56,8 +56,14 @@ resolve_toolkit_repo() {
 
 # When sourced, callers invoke `resolve_toolkit_repo`. When executed directly
 # (e.g. `bash scripts/lib/toolkit.sh`), run the function and exit with its
-# status so it can be used from non-bash callers too.
-if [ "${BASH_SOURCE[0]:-$0}" = "${0}" ]; then
-  resolve_toolkit_repo
-  exit $?
-fi
+# status so it can be used from non-bash callers too. Sourcing works from
+# bash and zsh.
+case "${ZSH_EVAL_CONTEXT:-}" in
+  *:file*) ;;
+  *)
+    if [ "${BASH_SOURCE[0]:-$0}" = "${0}" ]; then
+      resolve_toolkit_repo
+      exit $?
+    fi
+    ;;
+esac
