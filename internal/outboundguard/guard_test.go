@@ -290,10 +290,10 @@ var guardTests = []struct {
 		f.guard(`gh pr create -d=false --title t --body b`).deny()
 		f.guard(`gh pr create --draft=FALSE --title t --body b`).deny()
 		f.guard(`gh pr create -d --draft=0 --title t --body b`).deny()
+		f.guard(`gh pr create --draft=false -d --title t --body b`).deny()
 	}},
 	{"gh pr create -d bundled with other short options is a draft", func(f *fx) {
 		f.guard(`gh pr create -fd --title t`).allow()
-		f.guard(`gh pr create --draft=false -d --title t --body b`).allow()
 	}},
 	{"gh pr ready is denied", func(f *fx) {
 		f.guard(`gh pr ready 12`).deny()
@@ -832,6 +832,7 @@ var guardTests = []struct {
 		f.guard(`gh api repos/o/r/issues/1/comments -iFbody=H001`).deny()
 		f.guard(`gh api repos/o/r/issues/1/comments -if body=H001`).deny()
 		f.guard(`gh api -X GET -XPOST repos/o/r/issues/1/comments -f body=H001`).deny()
+		f.guard(`gh api -XPOST -X GET repos/o/r/issues/1/comments -f body=H001`).deny()
 		f.write("clean.md", "fixed in abc123\n")
 		f.guard("gh api repos/o/r/issues/1/comments -iF body=@" + f.tmp + "/clean.md").allow()
 	}},

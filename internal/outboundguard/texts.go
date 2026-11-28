@@ -627,18 +627,21 @@ func apiCallAt(feed []string, before, gh string, args int, h *held) apiCall {
 	return c
 }
 
-// apiWrites: the last --method / -X is not GET or HEAD, or, without one, an
+// apiWrites: a --method / -X is not GET or HEAD, or, without one, an
 // --input / --field / --raw-field / -f / -F is given.
 func apiWrites(opts []option) bool {
-	method, given := "", false
+	given := false
 	for _, o := range opts {
 		if o.is("X", "method") && o.hasValue {
-			method, given = o.value, true
+			given = true
+			m := strings.TrimSuffix(o.value, "\n")
+			if !strings.EqualFold(m, "GET") && !strings.EqualFold(m, "HEAD") {
+				return true
+			}
 		}
 	}
 	if given {
-		method = strings.TrimSuffix(method, "\n")
-		return !strings.EqualFold(method, "GET") && !strings.EqualFold(method, "HEAD")
+		return false
 	}
 	for _, o := range opts {
 		if o.is("input", "field", "raw-field", "f", "F") {

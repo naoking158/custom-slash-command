@@ -274,27 +274,26 @@ var (
 	apiReady = regexp.MustCompile(`(?i)markPullRequestReadyForReview|"?draft"?[[:space:]]*[:=][[:space:]]*false`)
 )
 
-// draftReason returns why a gh pr create does not open a draft, or "": its
-// last -d / --draft decides, and pflag reads -d=false and --draft=0 as false.
+// draftReason returns why a gh pr create may not open a draft, or "": it
+// needs a -d / --draft and none that pflag reads as false (-d=false,
+// --draft=0).
 func draftReason(gh string) string {
 	var words []word
 	for _, t := range fields(gh)[3:] {
 		words = append(words, word{text: t})
 	}
-	draft, off := false, false
+	draft := false
 	for _, o := range ghGrammars["pr create"].options(words) {
 		if !o.is("d", "draft") {
 			continue
 		}
-		b, err := strconv.ParseBool(o.value)
-		draft = !o.hasValue || (err == nil && b)
-		off = off || !draft
+		if b, err := strconv.ParseBool(o.value); o.hasValue && (err != nil || !b) {
+			return "PR は draft で作る（--draft=false は使わない）"
+		}
+		draft = true
 	}
-	switch {
-	case draft:
+	if draft {
 		return ""
-	case off:
-		return "PR は draft で作る（--draft=false は使わない）"
 	}
 	return "PR は draft で作る。gh pr create に --draft を付ける"
 }
