@@ -697,6 +697,81 @@ var guardTests = []struct {
 		f.guard(`echo "wait for HOME to load"; git push origin feature/x`).allow()
 		f.guard(`export PATH=${HOME}/bin:$PATH; git push origin feature/x`).allow()
 	}},
+	{"words in a message or an argument are not taken for setting a variable that points git elsewhere", func(f *fx) {
+		for _, c := range []string{
+			`git commit -m "fix local HOME lookup" && git push origin feature/x`,
+			`git commit -m "read the HOME page"; git push origin feature/x`,
+			`git commit -m "doc HOME=/x"; git push origin feature/x`,
+			`git commit -m "export GIT_DIR before the build"; git push origin feature/x`,
+			`git commit -m 'set GIT_CONFIG_COUNT=1 in CI'; git push origin feature/x`,
+			`echo 'HOME=x'; git push origin feature/x`,
+			`printf '%s\n' "for HOME in list"; git push origin feature/x`,
+			`gh pr comment 3 --body "declare HOME is fine" && git push origin feature/x`,
+			`echo ${HOME[0]}; git push origin feature/x`,
+			`env -uLC_ALL git push origin feature/x`,
+			`env -u LC_ALL git push origin feature/x`,
+			`env -S true git push origin feature/x`,
+		} {
+			f.guard(c).allow()
+		}
+	}},
+	{"a quoted assignment after a wrapper or in a function is still read", func(f *fx) {
+		for _, c := range []string{
+			`env -u LC_ALL 'GIT_DIR=/x/.git' git push origin feature/x`,
+			`stdbuf -o0 env 'GIT_DIR=/x/.git' git push origin feature/x`,
+			`nice -n 5 env "GIT_DIR=/x/.git" git push origin feature/x`,
+			`sudo -u root env "HOME=/x" git push origin feature/x`,
+			`timeout 10 env "HOME=/x" git push origin feature/x`,
+			`exec -a n env "GIT_DIR=/x/.git" git push origin feature/x`,
+			`f() { export "GIT_DIR=/x/.git"; }; f; git push origin feature/x`,
+			`command -p env "GIT_DIR=/x/.git" git push origin feature/x`,
+			`unset HOME; : ${HOME[0]:=/x}; git push origin feature/x`,
+			`printf -v HOME '%s' /x; git push origin feature/x`,
+			`git () { export "GIT_DIR=/x/.git"; command git "$@"; }; git push origin feature/x`,
+			`echo() { export "GIT_DIR=/x/.git"; }; echo; git push origin feature/x`,
+			`function echo { export "GIT_DIR=/x/.git"; }; echo; git push origin feature/x`,
+			`echo "$[HOME=1]"; git push origin feature/x`,
+			`echo 'export GIT_DIR=/x/.git' > /tmp/f; . /tmp/f; git push origin feature/x`,
+			`echo 'export GIT_DIR=/x/.git' > /tmp/f; source /tmp/f; git push origin feature/x`,
+			`env -S-C/x git push origin feature/x`,
+			`env -iS-C/x git push origin feature/x`,
+			`env -S'-C /x' git push origin feature/x`,
+			`echo 'GIT_DIR=/x/.git' > /tmp/f; eval "$(cat /tmp/f)"; git push origin feature/x`,
+			`echo 'GIT_DIR=/x/.git' > /tmp/f; export $(cat /tmp/f); git push origin feature/x`,
+			`echo 'GIT_DIR=/x/.git' > /tmp/e; env $(cat /tmp/e) git push origin feature/x`,
+			`alias echo=export; echo "GIT_DIR=/x/.git"; git push origin feature/x`,
+			`echo ${ export 'GIT_DIR=/x/.git'; }; git push origin feature/x`,
+			`echo ${| export 'GIT_DIR=/x/.git'; }; git push origin feature/x`,
+			`env -S '-uX -C/x' git push origin feature/x`,
+			`env -S '-u X -C /x' git push origin feature/x`,
+			`env -S "-aY -C/x" git push origin feature/x`,
+			`export {HOME=/x,A=b}; git push origin feature/x`,
+			`declare {GIT_DIR=/x/.git,A=b}; git push origin feature/x`,
+			`env {GIT_DIR=/x/.git,A=b} git push origin feature/x`,
+			`echo hi; export {GIT_DIR=/x/.git,A=1}; git push origin feature/x`,
+			`unset HOME; : ${HOME[a[0]]:=/x}; git push origin feature/x`,
+			`unset HOME; : ${HOME[${i}]:=/x}; git push origin feature/x`,
+			`unset GIT_DIR; : ${GIT_DIR[${#a}]=/x/.git}; git push origin feature/x`,
+			`unset HOME; : ${HOME[0==1]:=/x}; git push origin feature/x`,
+			`>./echo export "GIT_DIR=/x/.git"; git push origin feature/x`,
+			`2>./cd export 'HOME=/x'; git push origin feature/x`,
+			`2>/tmp/git export "GIT_DIR=/x/.git"; git push origin feature/x`,
+			`echo $(env 'GIT_DIR=/x/.git' git push origin HEAD)`,
+			`cat <(env "GIT_DIR=/x/.git" git push origin HEAD)`,
+			`git log $(env 'GIT_DIR=/x/.git' git push origin HEAD)`,
+			`echo $(export 'GIT_DIR=/x/.git'; git push origin HEAD)`,
+			`echo $(declare -x "HOME=/x"; git push origin HEAD)`,
+			"echo `export 'GIT_DIR=/x/.git'; git push origin HEAD`",
+		} {
+			f.guard(c).deny()
+		}
+	}},
+	{"a push denied for a git pointed elsewhere names the variable, not cd", func(f *fx) {
+		f.guard(`GIT_DIR=/x/.git git push origin feature/x`).deny()
+		if !strings.Contains(f.out, "GIT_DIR") || strings.Contains(f.out, "cd <絶対パス>") {
+			f.t.Fatalf("reason does not name what points git elsewhere: %q", f.out)
+		}
+	}},
 	{"a gh release upload asset label is checked", func(f *fx) {
 		f.guard(`gh release upload v1 './app.tgz#fix H001'`).deny()
 		f.guard(`gh release upload v1 ./app.tgz`).allow()

@@ -14,13 +14,15 @@ import (
 //	text: Rest is "git" or "gh", for a command that carries a message, or
 //	      "gh pr merge", whose directory the PR rules judge.
 //
-// Dir is "?" when the line does not show it and "?case" when a case statement
-// precedes the command. For pr, Repos are the repositories gh is told to use
-// instead of Dir's (-R or --repo with its value as the next word, GH_REPO
-// assigned just before gh) and Also the ones it may act on besides (an
-// attached -R<repo>, a pull request URL, a repos/OWNER/NAME path, any other
-// GH_REPO assignment); "" stands for one the line does not show. Args are the
-// words of a pr command with their quotes removed, unexpanded.
+// Dir is "?" when the line does not show it, "?case" when a case statement
+// precedes the command, and gitElsewhereDir for a git the line points at
+// another repository, work tree or push target. For pr, Repos are the
+// repositories gh is told to use instead of Dir's (-R or --repo with its value
+// as the next word, GH_REPO assigned just before gh) and Also the ones it may
+// act on besides (an attached -R<repo>, a pull request URL, a repos/OWNER/NAME
+// path, any other GH_REPO assignment); "" stands for one the line does not
+// show. Args are the words of a pr command with their quotes removed,
+// unexpanded.
 type command struct {
 	Kind, Dir, Rest string
 	Repos, Also     []string
@@ -82,7 +84,7 @@ func parseCommands(cmd, cwd string, home *string) []command {
 		return marker(len(p.lit) - 1)
 	})
 	s = strings.ReplaceAll(s, "\\\n", " ")
-	p.gitElsewhere = setsGitEnv(p.wordValue(s))
+	p.gitElsewhere = setsGitEnv(p.envText(s))
 	for _, seg := range splitOn(s, listSep(true, "<>|&")) {
 		p.segment(stripRedirections(seg))
 	}
@@ -267,7 +269,7 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 		at = nil
 	}
 	if start, opts, end, ok := gitSub(text, "push", 0, p.wordValue); ok {
-		in := p.gitDir(at, text[:start], opts)
+		where := p.gitWhere(at, text[:start], opts, unknown)
 		argEnd := strings.IndexByte(text[end:], ')')
 		if argEnd < 0 {
 			argEnd = len(text) - end
@@ -280,7 +282,7 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 			}
 			args = append(args, v)
 		}
-		p.out = append(p.out, command{"push", orUnknown(in, unknown), strings.Join(args, " "), nil, nil, nil})
+		p.out = append(p.out, command{"push", where, strings.Join(args, " "), nil, nil, nil})
 	}
 	for from := 0; ; {
 		start, end, ok := findGh(text, from, ghPRSend)
@@ -309,8 +311,7 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 		p.out = append(p.out, command{"pr", orUnknown(at, unknown), gh, repos, also, words})
 	}
 	if start, opts, _, ok := gitSub(text, "commit", 0, p.wordValue); ok {
-		in := p.gitDir(at, text[:start], opts)
-		p.out = append(p.out, command{"text", orUnknown(in, unknown), "git", nil, nil, nil})
+		p.out = append(p.out, command{"text", p.gitWhere(at, text[:start], opts, unknown), "git", nil, nil, nil})
 	} else if start, end, ok := findGh(text, 0, ghPRText); ok {
 		rest := "gh"
 		if isCmd(strings.Join(fields(text[start:end]), " "), "gh pr merge") {
@@ -470,14 +471,120 @@ func (p *commandParser) emptyQuotes(s string) string {
 }
 
 // envChdir reports whether t is an option of env that changes the directory:
-// -C, alone or with other short options (-iC), or --chdir and the
-// abbreviations GNU env takes (--c).
+// -C, alone or after other short options (-iC) but not in the value of -u
+// or -a (-uLC_ALL), -S with a C in its value (env reads it as options again),
+// a word that starts with - and has whitespace and a C in it (the value of -S
+// given as its own word), or --chdir and the abbreviations GNU env takes
+// (--c).
 func envChdir(t string) bool {
 	if strings.HasPrefix(t, "--") {
 		name, _, _ := strings.Cut(t[2:], "=")
 		return name != "" && strings.HasPrefix("chdir", name)
 	}
-	return len(t) > 1 && t[0] == '-' && strings.Contains(t, "C")
+	if len(t) < 2 || t[0] != '-' {
+		return false
+	}
+	if strings.ContainsAny(t, " \t\n") {
+		return strings.Contains(t, "C")
+	}
+	for _, c := range t[1:] {
+		switch c {
+		case 'C':
+			return true
+		case 'S':
+			return strings.Contains(t, "C")
+		case 'u', 'a':
+			return false
+		}
+	}
+	return false
+}
+
+var (
+	shellKeywords = map[string]bool{"if": true, "then": true, "elif": true, "else": true, "fi": true,
+		"while": true, "until": true, "do": true, "done": true, "{": true, "}": true, "!": true}
+	// quietCommands set none of gitEnvNames in the shell that runs them,
+	// whatever their arguments say (printf only without -v).
+	quietCommands = map[string]bool{"git": true, "gh": true, "echo": true, "printf": true,
+		"cat": true, "grep": true, "jq": true, "true": true, "cd": true}
+	// runsCommand matches a command, process or bash 5.3 ${ cmd; }
+	// substitution: $( ), <( ), >( ), ` `, ${ cmd; } and ${| cmd; }.
+	runsCommand = regexp.MustCompile("\\$\\(|[<>]\\(|`|\\$\\{[[:space:]|]")
+	// definesFunction matches `name()`, `name ()` and `function name`.
+	definesFunction = regexp.MustCompile(`[A-Za-z0-9_.:-][[:space:]]*\([[:space:]]*\)|(^|[^A-Za-z0-9_])function[[:space:]]`)
+	assignWord      = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?\+?=`)
+)
+
+// envText is the command line s as setsGitEnv reads it, one command a line,
+// with quotes and backslashes removed.
+//
+// When every command of the line is one of quietCommands (printf without
+// -v), the line runs no other command inside one ($( ), <( ), ` `, ${ cmd; })
+// and it defines no function, the quoted arguments of its commands become a
+// space unless they expand something ($ or ` in double quotes). A word in a
+// commit message or a PR body is then not taken for an assignment.
+//
+// A line with any other command (export, eval, env, alias, source ...) is
+// read whole: such a command can turn a quoted string, or a file a quiet
+// command wrote, into an assignment.
+func (p *commandParser) envText(s string) string {
+	segs := splitOn(s, listSep(true, "<>|&"))
+	words := make([][]string, len(segs))
+	at := make([]int, len(segs))
+	quiet := !definesFunction.MatchString(p.wordValue(s)) && !runsCommand.MatchString(p.argText(s))
+	for n, seg := range segs {
+		words[n], at[n] = fields(stripRedirections(seg)), -1
+		for i, t := range words[n] {
+			v := strings.TrimLeft(p.wordValue(t), "({!")
+			if v != "" && !shellKeywords[v] && !assignWord.MatchString(v) {
+				at[n] = i
+				break
+			}
+		}
+		if at[n] < 0 {
+			continue
+		}
+		name := basename(p.wordValue(words[n][at[n]]))
+		quiet = quiet && quietCommands[name]
+		for _, t := range words[n][at[n]+1:] {
+			quiet = quiet && !(name == "printf" && strings.HasPrefix(p.wordValue(t), "-v"))
+		}
+	}
+	var lines []string
+	for n, toks := range words {
+		var out []string
+		for i, t := range toks {
+			if quiet && at[n] >= 0 && i > at[n] {
+				out = append(out, p.argText(t))
+			} else {
+				out = append(out, p.wordValue(t))
+			}
+		}
+		lines = append(lines, strings.Join(out, " "))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// argText is an argument word of one of quietCommands: its quoted strings
+// become a space unless they expand something ($ or ` in double quotes), and
+// its backslashes are removed.
+func (p *commandParser) argText(w string) string {
+	var b strings.Builder
+	for i := 0; i < len(w); {
+		if idx, end, ok := markerAt(w, i); ok && idx < len(p.lit) {
+			c := p.lit[idx].content
+			if p.lit[idx].expand && strings.ContainsAny(c, "$`") {
+				b.WriteString(c)
+			} else {
+				b.WriteByte(' ')
+			}
+			i = end
+			continue
+		}
+		b.WriteByte(w[i])
+		i++
+	}
+	return strings.ReplaceAll(b.String(), "\\", "")
 }
 
 // wordValue is the value of a word as git reads it: its quotes and
@@ -486,21 +593,35 @@ func (p *commandParser) wordValue(w string) string {
 	return strings.ReplaceAll(p.literalText(w), "\\", "")
 }
 
+// gitElsewhereDir is the directory recorded for a git that the line points at
+// another repository, work tree or push target.
+const gitElsewhereDir = "?git"
+
+// gitWhere is the Dir of a git command run from at: gitDir's, unknown when the
+// line does not show it, gitElsewhereDir when the line points git elsewhere.
+func (p *commandParser) gitWhere(at *string, before, opts, unknown string) string {
+	in, elsewhere := p.gitDir(at, before, opts)
+	if elsewhere {
+		return gitElsewhereDir
+	}
+	return orUnknown(in, unknown)
+}
+
 // gitDir is the directory git runs in from at, given the words before it
-// (before) and its options: moved by each -C, and unknown when the line may
-// point git at another repository, work tree or push target (--git-dir,
+// (before) and its options: moved by each -C. elsewhere is set when the line
+// may point git at another repository, work tree or push target (--git-dir,
 // --work-tree, --namespace, a config key that is not gitSafeKey, a value
 // given to one of gitEnvNames on the line, env -C / --chdir).
-func (p *commandParser) gitDir(at *string, before, opts string) *string {
+func (p *commandParser) gitDir(at *string, before, opts string) (dir *string, elsewhere bool) {
 	if p.gitElsewhere {
-		return nil
+		return nil, true
 	}
 	env := false
 	for _, w := range fields(before) {
 		t := p.wordValue(w)
 		env = env || basename(t) == "env"
 		if env && envChdir(t) {
-			return nil
+			return nil, true
 		}
 	}
 	words := fields(opts)
@@ -514,12 +635,12 @@ func (p *commandParser) gitDir(at *string, before, opts string) *string {
 		case strings.HasPrefix(w, "--git-dir"), strings.HasPrefix(w, "--work-tree"), strings.HasPrefix(w, "--namespace"),
 			(w == "-c" || w == "--config-env") && !gitSafeKey(next),
 			strings.HasPrefix(w, "--config-env=") && !gitSafeKey(w[len("--config-env="):]):
-			return nil
+			return nil, true
 		case w == "-C" && n+1 < len(words):
 			at = p.enter(at, words[n+1])
 		}
 	}
-	return at
+	return at, false
 }
 
 // pushArgUnreadable: whitespace, a redirection, a ( ) or a {a,b} brace list.
