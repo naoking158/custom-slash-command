@@ -671,6 +671,13 @@ var guardTests = []struct {
 		f.guard("git commit -qF" + f.tmp + "/tmp/claude-x/clean.txt").allow()
 		f.guard("gh api repos/o/r/issues/1/comments -Fbody=@" + f.tmp + "/tmp/claude-x/clean.txt").allow()
 	}},
+	{"quoted gh options are read by their value", func(f *fx) {
+		f.guard(`gh pr create -d "--draft=false" --title t --body b`).deny()
+		f.own()
+		f.shipRepo()
+		f.guard(`gh pr merge 3 "-R" work/app`).deny()
+		f.guard(`gh pr merge 3 "-R" me/app`).allow()
+	}},
 	{"file flags quoted inside a message are message text, not body files", func(f *fx) {
 		f.guard(`git commit -q -m 'read config with --file $CONFIG or -F /etc/nothere'`).allow()
 		f.guard(`git commit -q --allow-empty -F /dev/null`).allow()

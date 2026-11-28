@@ -186,7 +186,7 @@ func (g *guard) run(payload []byte) {
 			if strings.HasPrefix(c.Rest, "gh api") {
 				apiDirs = append(apiDirs, c.Dir)
 			}
-			g.judgePR(c.Dir, c.Rest, c.Repos, c.Also)
+			g.judgePR(c.Dir, c.Rest, c.Args, c.Repos, c.Also)
 		case "push":
 			g.judgePush(c.Dir, c.Rest)
 		case "text":
@@ -277,9 +277,9 @@ var (
 // draftReason returns why a gh pr create may not open a draft, or "": it
 // needs a -d / --draft and none that pflag reads as false (-d=false,
 // --draft=0).
-func draftReason(gh string) string {
+func draftReason(args []string) string {
 	var words []word
-	for _, t := range fields(gh)[3:] {
+	for _, t := range args[min(3, len(args)):] {
 		words = append(words, word{text: t})
 	}
 	draft := false
@@ -303,7 +303,7 @@ func isCmd(gh, name string) bool { return gh == name || strings.HasPrefix(gh, na
 // judgePR denies what a strict repository does not allow. The repositories
 // judged are those gh is told to use, or dir's when it is told none, and
 // every other one it may act on: all of them must be ship.
-func (g *guard) judgePR(dir, gh string, repos, also []string) {
+func (g *guard) judgePR(dir, gh string, args, repos, also []string) {
 	reason, cut := "", false
 	hint := "-R <owner/name> を付けるか cd <絶対パス> で始める"
 	if strings.HasSuffix(gh, " ?") {
@@ -315,7 +315,7 @@ func (g *guard) judgePR(dir, gh string, repos, also []string) {
 	case isCmd(gh, "gh pr ready"):
 		reason = "PR を ready にしない。ready への変更は本人がセルフレビュー後に行う"
 	case isCmd(gh, "gh pr create"), isCmd(gh, "gh pr new"):
-		reason = draftReason(gh)
+		reason = draftReason(args)
 	case isCmd(gh, "gh api"):
 		hint = "cd <絶対パス> で始める"
 		if anyLine(g.cmd, apiMerge) {
