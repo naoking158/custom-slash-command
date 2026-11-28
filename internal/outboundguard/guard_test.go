@@ -756,6 +756,12 @@ var guardTests = []struct {
 			`>./echo export "GIT_DIR=/x/.git"; git push origin feature/x`,
 			`2>./cd export 'HOME=/x'; git push origin feature/x`,
 			`2>/tmp/git export "GIT_DIR=/x/.git"; git push origin feature/x`,
+			`echo $(env 'GIT_DIR=/x/.git' git push origin HEAD)`,
+			`cat <(env "GIT_DIR=/x/.git" git push origin HEAD)`,
+			`git log $(env 'GIT_DIR=/x/.git' git push origin HEAD)`,
+			`echo $(export 'GIT_DIR=/x/.git'; git push origin HEAD)`,
+			`echo $(declare -x "HOME=/x"; git push origin HEAD)`,
+			"echo `export 'GIT_DIR=/x/.git'; git push origin HEAD`",
 		} {
 			f.guard(c).deny()
 		}

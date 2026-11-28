@@ -506,28 +506,31 @@ var (
 	// whatever their arguments say (printf only without -v).
 	quietCommands = map[string]bool{"git": true, "gh": true, "echo": true, "printf": true,
 		"cat": true, "grep": true, "jq": true, "true": true, "cd": true}
-	// runsInShell matches a bash 5.3 ${ cmd; } or ${| cmd; } substitution,
-	// which runs cmd in the current shell.
-	runsInShell = regexp.MustCompile(`\$\{[[:space:]|]`)
+	// runsCommand matches a command, process or bash 5.3 ${ cmd; }
+	// substitution: $( ), <( ), >( ), ` `, ${ cmd; } and ${| cmd; }.
+	runsCommand = regexp.MustCompile("\\$\\(|[<>]\\(|`|\\$\\{[[:space:]|]")
 	// definesFunction matches `name()`, `name ()` and `function name`.
 	definesFunction = regexp.MustCompile(`[A-Za-z0-9_.:-][[:space:]]*\([[:space:]]*\)|(^|[^A-Za-z0-9_])function[[:space:]]`)
 	assignWord      = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?\+?=`)
 )
 
 // envText is the command line s as setsGitEnv reads it, one command a line,
-// with quotes and backslashes removed. When every command of the line is one
-// of quietCommands (printf without -v), and the line neither defines a
-// function nor runs a command in the current shell through ${ cmd; }, their
-// quoted arguments become a space unless they expand something ($ or ` in
-// double quotes), so a word in a commit message or a PR body is not taken for
-// an assignment. A line with any other command (export, eval, env, alias,
-// source ...) is read whole: such a command can turn a quoted string, or a
-// file a quiet command wrote, into an assignment.
+// with quotes and backslashes removed.
+//
+// When every command of the line is one of quietCommands (printf without
+// -v), the line runs no other command inside one ($( ), <( ), ` `, ${ cmd; })
+// and it defines no function, the quoted arguments of its commands become a
+// space unless they expand something ($ or ` in double quotes). A word in a
+// commit message or a PR body is then not taken for an assignment.
+//
+// A line with any other command (export, eval, env, alias, source ...) is
+// read whole: such a command can turn a quoted string, or a file a quiet
+// command wrote, into an assignment.
 func (p *commandParser) envText(s string) string {
 	segs := splitOn(s, listSep(true, "<>|&"))
 	words := make([][]string, len(segs))
 	at := make([]int, len(segs))
-	quiet := !definesFunction.MatchString(p.wordValue(s)) && !runsInShell.MatchString(p.argText(s))
+	quiet := !definesFunction.MatchString(p.wordValue(s)) && !runsCommand.MatchString(p.argText(s))
 	for n, seg := range segs {
 		words[n], at[n] = fields(stripRedirections(seg)), -1
 		for i, t := range words[n] {
