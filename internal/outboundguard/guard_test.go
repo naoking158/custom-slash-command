@@ -632,6 +632,31 @@ var guardTests = []struct {
 		f.guard(`git --work-tree /x push origin feature/x`).deny()
 		f.guard(`git --attr-source HEAD commit -mH001`).deny()
 	}},
+	{"a git pointed at another repository by the environment or config is judged as unknown", func(f *fx) {
+		for _, c := range []string{
+			`GIT_DIR=/x/.git git push origin feature/x`,
+			`env GIT_WORK_TREE=/x git push origin feature/x`,
+			`export GIT_DIR=/x/.git; git push origin feature/x`,
+			`GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.worktree GIT_CONFIG_VALUE_0=/x git push origin feature/x`,
+			`git -c core.worktree=/x push origin feature/x`,
+			`git -c Core.WorkTree=/x push origin feature/x`,
+			`git --config-env core.worktree=W push origin feature/x`,
+		} {
+			f.guard(c).deny()
+			if !strings.Contains(f.out, "directory を判定できない") {
+				f.t.Fatalf("command %q: reason is not the unknown directory: %q", c, f.out)
+			}
+		}
+		f.guard(`GIT_INDEX_FILE=/tmp/i git push origin feature/x`).allow()
+		f.guard(`git -c x.y=z push origin feature/x`).allow()
+	}},
+	{"quoted git options and subcommands are read by their value", func(f *fx) {
+		f.guard(`git "-P" commit -m "fix H001"`).deny()
+		f.guard(`git -P "commit" -m "fix H001"`).deny()
+		f.guard(`git "--no-pager" push origin main`).deny()
+		f.guard(`git "--git-dir=/x/.git" push origin feature/x`).deny()
+		f.guard(`git "-C" /Users/me/tmp/w commit -m ok`).allow()
+	}},
 	{"git that the guard runs does not start the repository's fsmonitor", func(f *fx) {
 		f.own()
 		mark := filepath.Join(f.tmp, "ran")

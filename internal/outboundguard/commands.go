@@ -48,6 +48,7 @@ type commandParser struct {
 	home   *string
 	out    []command
 	ghMay  []string
+	gitEnv bool // the line assigns a variable that points git elsewhere
 }
 
 func strPtr(s string) *string { return &s }
@@ -264,8 +265,8 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 	if p.opaque {
 		at = nil
 	}
-	if _, opts, end, ok := gitSub(text, "push", 0); ok {
-		in := p.gitDir(at, opts)
+	if start, opts, end, ok := gitSub(text, "push", 0, p.literalText); ok {
+		in := p.gitDir(at, text[:start], opts)
 		argEnd := strings.IndexByte(text[end:], ')')
 		if argEnd < 0 {
 			argEnd = len(text) - end
@@ -306,8 +307,8 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 		gh = strings.TrimSuffix(gh, " ")
 		p.out = append(p.out, command{"pr", orUnknown(at, unknown), gh, repos, also, words})
 	}
-	if _, opts, _, ok := gitSub(text, "commit", 0); ok {
-		in := p.gitDir(at, opts)
+	if start, opts, _, ok := gitSub(text, "commit", 0, p.literalText); ok {
+		in := p.gitDir(at, text[:start], opts)
 		p.out = append(p.out, command{"text", orUnknown(in, unknown), "git", nil, nil, nil})
 	} else if start, end, ok := findGh(text, 0, ghPRText); ok {
 		rest := "gh"
@@ -467,36 +468,41 @@ func (p *commandParser) emptyQuotes(s string) string {
 	return b.String()
 }
 
-// gitDir is the directory git runs in from at: moved by -C, and unknown when
-// --git-dir or --work-tree points it elsewhere.
-func (p *commandParser) gitDir(at *string, opts string) *string {
-	if gitElsewhere(opts) {
+// gitDir is the directory git runs in from at, given the words before it
+// (before) and its options: moved by each -C, and unknown when the line points
+// git at another repository or work tree (--git-dir, --work-tree, the
+// core.worktree config, a GIT_DIR / GIT_WORK_TREE / GIT_CONFIG* variable).
+func (p *commandParser) gitDir(at *string, before, opts string) *string {
+	if p.gitEnv {
 		return nil
 	}
-	if c, found := optionC(opts); found {
-		return p.enter(at, c)
-	}
-	return at
-}
-
-// optionC returns the value of the first -C in git's options.
-func optionC(opts string) (string, bool) {
-	for i := 0; i+2 < len(opts); i++ {
-		if isSpace(opts[i]) && opts[i+1] == '-' && opts[i+2] == 'C' {
-			p := skipSpaces(opts, i+3)
-			if p == i+3 {
-				continue
-			}
-			q := p
-			for q < len(opts) && !isSpace(opts[q]) {
-				q++
-			}
-			if q > p {
-				return opts[p:q], true
-			}
+	toks := fields(before)
+	for k := len(toks) - 1; k >= 0 && toks[k] != "env"; k-- {
+		eq := strings.IndexByte(toks[k], '=')
+		if eq < 1 || !allWord(toks[k][:eq]) {
+			break
+		}
+		if gitEnv(toks[k][:eq]) {
+			return nil
 		}
 	}
-	return "", false
+	words := fields(opts)
+	for n := 0; n < len(words); n++ {
+		w := p.literalText(words[n])
+		next := ""
+		if n+1 < len(words) {
+			next = strings.ToLower(p.literalText(words[n+1]))
+		}
+		switch {
+		case strings.HasPrefix(w, "--git-dir"), strings.HasPrefix(w, "--work-tree"),
+			(w == "-c" || w == "--config-env") && strings.HasPrefix(next, "core.worktree"),
+			strings.HasPrefix(strings.ToLower(w), "--config-env=core.worktree"):
+			return nil
+		case w == "-C" && n+1 < len(words):
+			at = p.enter(at, words[n+1])
+		}
+	}
+	return at
 }
 
 // pushArgUnreadable: whitespace, a redirection, a ( ) or a {a,b} brace list.
@@ -537,6 +543,7 @@ func (p *commandParser) command(text string) {
 			if a[:eq] == "GH_REPO" {
 				p.ghMay = append(p.ghMay, p.known(a[eq+1:]))
 			}
+			p.gitEnv = p.gitEnv || gitEnv(a[:eq])
 			if v, ok := p.value(a[eq+1:]); ok {
 				p.vars[a[:eq]] = v
 			} else {

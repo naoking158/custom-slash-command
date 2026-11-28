@@ -1,6 +1,7 @@
 package outboundguard
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -318,9 +319,10 @@ func pipeSep(afterGt bool) func(string, int) int {
 }
 
 // gitSub matches `git [global option]... SUB` with git not inside a longer
-// word and SUB not followed by a word byte or -. It returns where git starts,
-// the option text between them and where SUB ends.
-func gitSub(s, sub string, from int) (start int, opts string, end int, ok bool) {
+// word and SUB not followed by a word byte or -; val gives the value of a word
+// (its quotes removed). It returns where git starts, the option text between
+// them and where SUB ends.
+func gitSub(s, sub string, from int, val func(string) string) (start int, opts string, end int, ok bool) {
 	for i := from; ; i++ {
 		k := strings.Index(s[i:], "git")
 		if k < 0 {
@@ -331,17 +333,20 @@ func gitSub(s, sub string, from int) (start int, opts string, end int, ok bool) 
 			continue
 		}
 		ends := []int{i + 3}
-		for _, o := range gitGlobals(s, i+3) {
+		for _, o := range gitGlobals(s, i+3, val) {
 			ends = append(ends, o.end)
 		}
 		for n := len(ends) - 1; n >= 0; n-- {
-			q := skipSpaces(s, ends[n])
-			if q == ends[n] || !strings.HasPrefix(s[q:], sub) {
+			q, e, ok := wordAfter(s, ends[n])
+			if !ok || q == ends[n] {
 				continue
 			}
-			e := q + len(sub)
-			if e < len(s) && wordOrDash(s[e]) {
+			w := val(s[q:e])
+			if !strings.HasPrefix(w, sub) || (len(w) > len(sub) && wordOrDash(w[len(sub)])) {
 				continue
+			}
+			if w == s[q:e] {
+				e = q + len(sub)
 			}
 			return i, s[i+3 : ends[n]], e, true
 		}
@@ -350,24 +355,23 @@ func gitSub(s, sub string, from int) (start int, opts string, end int, ok bool) 
 
 // gitValued are git's global options that take the next word as their value
 // when they are not written --name=value.
-var gitValued = []string{"--git-dir", "--work-tree", "--namespace", "--config-env", "--attr-source"}
+var gitValued = []string{"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--attr-source"}
 
-// gitGlobals returns the options git is given from p, before its subcommand:
-// -C and -c with the next word, the gitValued ones with theirs, and any other
-// word that starts with - (--no-pager, -P, --bare ...).
-func gitGlobals(s string, p int) []span {
+// gitGlobals returns the options git is given from p, before its subcommand,
+// read by their value (val): the gitValued ones with the next word, and any
+// other word that starts with - (--no-pager, -P, --bare ...).
+func gitGlobals(s string, p int, val func(string) string) []span {
 	var out []span
 	for {
 		ws, e, ok := wordAfter(s, p)
-		if !ok || ws == p || s[ws] != '-' {
+		if !ok || ws == p {
 			return out
 		}
-		w := s[ws:e]
-		valued := w == "-C" || w == "-c"
-		for _, name := range gitValued {
-			valued = valued || w == name
+		w := val(s[ws:e])
+		if !strings.HasPrefix(w, "-") || w == "-" || w == "--" {
+			return out
 		}
-		if valued {
+		if slices.Contains(gitValued, w) {
 			vs, ve, ok := wordAfter(s, e)
 			if !ok || vs == e {
 				return out
@@ -376,23 +380,15 @@ func gitGlobals(s string, p int) []span {
 			p = ve
 			continue
 		}
-		if w == "-" || w == "--" {
-			return out
-		}
 		out = append(out, span{ws, e, e})
 		p = e
 	}
 }
 
-// gitElsewhere reports whether git's options point it at a repository or
-// work tree other than the directory it runs in.
-func gitElsewhere(opts string) bool {
-	for _, w := range fields(opts) {
-		if strings.HasPrefix(w, "--git-dir") || strings.HasPrefix(w, "--work-tree") {
-			return true
-		}
-	}
-	return false
+// gitEnv reports whether an environment variable named name points git at
+// another repository or work tree, or sets its config (core.worktree).
+func gitEnv(name string) bool {
+	return name == "GIT_DIR" || name == "GIT_WORK_TREE" || strings.HasPrefix(name, "GIT_CONFIG")
 }
 
 // ghWords matches `gh <first> <one of second>` (second empty: first alone)
