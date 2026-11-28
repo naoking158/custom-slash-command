@@ -765,6 +765,19 @@ var guardTests = []struct {
 		f.guard(`gh pr merge 3 "--repo" work/app`).deny()
 		f.guard(`gh pr merge 3 "--repo=work/app"`).deny()
 	}},
+	{"git that the guard runs does not start the repository's fsmonitor", func(f *fx) {
+		f.own()
+		mark := filepath.Join(f.tmp, "ran")
+		f.write("fsmonitor.sh", "#!/bin/sh\ntouch "+mark+"\n")
+		if err := os.Chmod(filepath.Join(f.tmp, "fsmonitor.sh"), 0o755); err != nil {
+			f.t.Fatal(err)
+		}
+		f.git("-C", f.repo, "config", "core.fsmonitor", filepath.Join(f.tmp, "fsmonitor.sh"))
+		f.guard(`git commit -m "record the result in docs/log/tracked.md"`).allow()
+		if _, err := os.Stat(mark); err == nil {
+			f.t.Fatal("the guard's git ran core.fsmonitor")
+		}
+	}},
 	{"file flags quoted inside a message are message text, not body files", func(f *fx) {
 		f.guard(`git commit -q -m 'read config with --file $CONFIG or -F /etc/nothere'`).allow()
 		f.guard(`git commit -q --allow-empty -F /dev/null`).allow()
