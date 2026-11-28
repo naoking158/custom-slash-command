@@ -505,35 +505,46 @@ var (
 	// quietCommands set no shell variable, whatever their arguments say.
 	quietCommands = map[string]bool{"git": true, "gh": true, "echo": true, "printf": true,
 		"cat": true, "grep": true, "jq": true, "true": true}
-	assignWord = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?\+?=`)
+	// definesFunction matches `name()`, `name ()` and `function name`.
+	definesFunction = regexp.MustCompile(`[A-Za-z0-9_.:-][[:space:]]*\([[:space:]]*\)|(^|[^A-Za-z0-9_])function[[:space:]]`)
+	assignWord      = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?\+?=`)
 )
 
 // envText is the command line s as setsGitEnv reads it, one command a line,
 // with quotes and backslashes removed. When a command's command word (after
 // its assignments) is one of quietCommands (printf without -v), its quoted
-// arguments become a space unless they expand something ($( ), ` `, ${ }),
-// so a word in a commit message or a PR body is not taken for an assignment.
-// Every other command, a wrapper such as env or nice among them, is read
-// whole.
+// arguments become a space unless they expand something ($), so a word in a
+// commit message or a PR body is not taken for an assignment. Every other
+// command, a wrapper such as env or nice among them, is read whole, and so
+// is every command of a line that defines a function (which may take the
+// name of a quiet command) or sources a file (which a quiet command may have
+// written).
 func (p *commandParser) envText(s string) string {
-	var lines []string
-	for _, seg := range splitOn(s, listSep(true, "<>|&")) {
-		toks := fields(seg)
-		at := -1
-		for i, t := range toks {
+	segs := splitOn(s, listSep(true, "<>|&"))
+	words := make([][]string, len(segs))
+	names := make([]string, len(segs))
+	at := make([]int, len(segs))
+	quietLine := !definesFunction.MatchString(p.wordValue(s))
+	for n, seg := range segs {
+		words[n], at[n] = fields(seg), -1
+		for i, t := range words[n] {
 			v := strings.TrimLeft(p.wordValue(t), "({!")
 			if v != "" && !shellKeywords[v] && !assignWord.MatchString(v) {
-				at = i
+				at[n], names[n] = i, basename(v)
 				break
 			}
 		}
-		quiet := at >= 0 && quietCommands[basename(p.wordValue(toks[at]))]
+		quietLine = quietLine && names[n] != "." && names[n] != "source"
+	}
+	var lines []string
+	for n, toks := range words {
+		quiet := quietLine && quietCommands[names[n]]
 		var out []string
 		for i, t := range toks {
-			if quiet && i > at && strings.HasPrefix(p.wordValue(t), "-v") && basename(p.wordValue(toks[at])) == "printf" {
+			if names[n] == "printf" && i > at[n] && strings.HasPrefix(p.wordValue(t), "-v") {
 				quiet = false
 			}
-			if quiet && i > at {
+			if quiet && i > at[n] {
 				out = append(out, p.argText(t))
 			} else {
 				out = append(out, p.wordValue(t))
@@ -544,15 +555,16 @@ func (p *commandParser) envText(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-// argText is an argument word of one of quietCommands: its
-// quoted strings become a space unless they expand something, and its
+// argText is an argument word of one of quietCommands: its quoted strings
+// become a space unless they expand something ($ or ` in double quotes), and
+// its
 // backslashes are removed.
 func (p *commandParser) argText(w string) string {
 	var b strings.Builder
 	for i := 0; i < len(w); {
 		if idx, end, ok := markerAt(w, i); ok && idx < len(p.lit) {
 			c := p.lit[idx].content
-			if p.lit[idx].expand && (strings.Contains(c, "$(") || strings.Contains(c, "`") || strings.Contains(c, "${")) {
+			if p.lit[idx].expand && strings.ContainsAny(c, "$`") {
 				b.WriteString(c)
 			} else {
 				b.WriteByte(' ')
@@ -572,8 +584,8 @@ func (p *commandParser) wordValue(w string) string {
 	return strings.ReplaceAll(p.literalText(w), "\\", "")
 }
 
-// gitElsewhereDir is the directory of a git the line points at another
-// repository, work tree or push target.
+// gitElsewhereDir is the directory recorded for a git that the line points at
+// another repository, work tree or push target.
 const gitElsewhereDir = "?git"
 
 // gitDir is the directory git runs in from at, given the words before it

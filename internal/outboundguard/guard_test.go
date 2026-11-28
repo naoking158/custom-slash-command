@@ -727,6 +727,12 @@ var guardTests = []struct {
 			`command -p env "GIT_DIR=/x/.git" git push origin feature/x`,
 			`unset HOME; : ${HOME[0]:=/x}; git push origin feature/x`,
 			`printf -v HOME '%s' /x; git push origin feature/x`,
+			`git () { export "GIT_DIR=/x/.git"; command git "$@"; }; git push origin feature/x`,
+			`echo() { export "GIT_DIR=/x/.git"; }; echo; git push origin feature/x`,
+			`function echo { export "GIT_DIR=/x/.git"; }; echo; git push origin feature/x`,
+			`echo "$[HOME=1]"; git push origin feature/x`,
+			`echo 'export GIT_DIR=/x/.git' > /tmp/f; . /tmp/f; git push origin feature/x`,
+			`echo 'export GIT_DIR=/x/.git' > /tmp/f; source /tmp/f; git push origin feature/x`,
 		} {
 			f.guard(c).deny()
 		}
