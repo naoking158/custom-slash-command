@@ -444,7 +444,7 @@ func (g *guard) autonomyMode(slug string) string {
 // pushRefused reports whether a git push long option, possibly abbreviated as
 // git allows, forces, deletes or pushes more than one branch.
 func pushRefused(name string) bool {
-	for _, o := range []string{"force", "force-with-lease", "force-if-includes", "mirror", "all", "delete", "prune"} {
+	for _, o := range []string{"force", "force-with-lease", "force-if-includes", "mirror", "all", "branches", "delete", "prune"} {
 		if strings.HasPrefix(o, name) {
 			return true
 		}

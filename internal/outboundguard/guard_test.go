@@ -342,6 +342,7 @@ var guardTests = []struct {
 			`git push --del origin feature/x`,
 			`git push --forc origin feature/x`,
 			`git push --mir origin`,
+			`git push --branches origin`,
 		} {
 			f.guard(c).deny()
 		}
@@ -351,6 +352,7 @@ var guardTests = []struct {
 		f.own()
 		f.git("-C", f.repo, "checkout", "-q", "main")
 		f.guard(`git push -o ci.skip origin`).deny()
+		f.guard(`git push --recurse-submodules check origin`).deny()
 	}},
 	{"plus refspec is denied", func(f *fx) {
 		f.guard(`git push origin +feature/x`).deny()
