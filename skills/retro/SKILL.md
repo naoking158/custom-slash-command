@@ -191,10 +191,12 @@ plain conversation otherwise). `--dry-run` stops here.
   from `{base}`, never from the checkout and never by editing the checkout:
 
   ```bash
-  git -C {toolkit_repo} worktree add -b retro/<slug> {toolkit_repo}-retro-<slug> {base}
+  git -C {toolkit_repo} worktree add --no-track -b retro/<slug> {toolkit_repo}-retro-<slug> {base}
   ```
 
-  Edit there, keeping edits minimal and in the style of the file.
+  `--no-track` keeps the branch from tracking the default branch; push it
+  with `git push -u origin retro/<slug>`. Edit there, keeping edits
+  minimal and in the style of the file.
   `~/.claude/CLAUDE.md`, when that rung was approved, is outside the repo:
   edit it directly.
 - **Test in the worktree** with the repository's own tasks (run
@@ -205,9 +207,10 @@ plain conversation otherwise). `--dry-run` stops here.
 - **Open the pull request** following the user's rules for pull requests
   (`~/.claude/CLAUDE.md`: draft unless the repository is in ship mode),
   staging files by name. Merge it yourself only when those rules allow.
-- **Guardrails**: list them with
-  `git -C <worktree> diff --name-only {base}...HEAD | {toolkit_repo}/scripts/ci/guardrail.sh paths`
-  (hooks, `scripts/hooks/`, CI, `skills/autopilot/SKILL.md` and others). A
+- **Guardrails** (hooks, `scripts/hooks/`, CI, `skills/autopilot/SKILL.md`
+  and others): list them with the worktree's copy of the script, since the
+  checkout's may be behind:
+  `git -C <worktree> diff --name-only {base}...HEAD | <worktree>/scripts/ci/guardrail.sh paths`. A
   pull request that changes one waits in CI until a person adds the
   `human-approved` label. Never add the label, never merge it, and say in
   the report that it waits for that label.
