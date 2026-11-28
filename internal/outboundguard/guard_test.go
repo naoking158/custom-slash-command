@@ -663,6 +663,12 @@ var guardTests = []struct {
 			`export 'GIT_DIR'=/x/.git; git push origin feature/x`,
 			`env -C/x git push origin feature/x`,
 			`env -iC /x git push origin feature/x`,
+			`env "-C" /x git push origin feature/x`,
+			`"env" -C /x git push origin feature/x`,
+			`/usr/bin/env -C /x git push origin feature/x`,
+			`env --ch /x git push origin feature/x`,
+			`env GIT\_DIR=/x/.git git push origin feature/x`,
+			`eval GIT\_DIR=/x/.git; git push origin feature/x`,
 		} {
 			f.guard(c).deny()
 			if !strings.Contains(f.out, "directory を判定できない") {
@@ -673,6 +679,8 @@ var guardTests = []struct {
 		f.guard(`git -c user.name=x -c color.ui=never push origin feature/x`).allow()
 		f.guard(`git -c core.pager=less push origin feature/x`).allow()
 		f.guard(`cd "$HOME" && git push origin feature/x; echo HOME`).allow()
+		f.guard(`echo "wait for HOME to load"; git push origin feature/x`).allow()
+		f.guard(`git commit -m "doc HOME=/x"; git push origin feature/x`).allow()
 	}},
 	{"a gh release upload asset label is checked", func(f *fx) {
 		f.guard(`gh release upload v1 './app.tgz#fix H001'`).deny()

@@ -48,7 +48,7 @@ type commandParser struct {
 	home         *string
 	out          []command
 	ghMay        []string
-	gitElsewhere bool // the line names a variable that may point git elsewhere
+	gitElsewhere bool // the line sets a variable that may point git elsewhere
 }
 
 func strPtr(s string) *string { return &s }
@@ -82,7 +82,7 @@ func parseCommands(cmd, cwd string, home *string) []command {
 		return marker(len(p.lit) - 1)
 	})
 	s = strings.ReplaceAll(s, "\\\n", " ")
-	p.gitElsewhere = setsGitEnv(p.literalText(s))
+	p.gitElsewhere = setsGitEnv(p.wordsText(s))
 	for _, seg := range splitOn(s, listSep(true, "<>|&")) {
 		p.segment(stripRedirections(seg))
 	}
@@ -469,19 +469,53 @@ func (p *commandParser) emptyQuotes(s string) string {
 	return b.String()
 }
 
+// envChdir reports whether t is an option of env that changes the directory:
+// -C, alone or with other short options (-iC), or --chdir and the
+// abbreviations GNU env takes (--ch).
+func envChdir(t string) bool {
+	if strings.HasPrefix(t, "--") {
+		name, _, _ := strings.Cut(t[2:], "=")
+		return len(name) >= 2 && strings.HasPrefix("chdir", name)
+	}
+	return len(t) > 1 && t[0] == '-' && strings.Contains(t, "C")
+}
+
+// wordsText is s with each quoted string written as its content when it is
+// one word ("GIT_DIR=x"), and as a space when it holds whitespace (a message),
+// and with backslashes dropped (GIT\_DIR).
+func (p *commandParser) wordsText(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if idx, end, ok := markerAt(s, i); ok && idx < len(p.lit) {
+			c := p.lit[idx].content
+			if len(fields(c)) == 1 && trimSpace(c) == c {
+				b.WriteString(c)
+			} else {
+				b.WriteByte(' ')
+			}
+			i = end
+			continue
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return strings.ReplaceAll(b.String(), "\\", "")
+}
+
 // gitDir is the directory git runs in from at, given the words before it
 // (before) and its options: moved by each -C, and unknown when the line may
 // point git at another repository, work tree or push target (--git-dir,
-// --work-tree, --namespace, a config key that is not gitSafeKey, a gitEnv
-// variable named anywhere on the line, `env -C`).
+// --work-tree, --namespace, a config key that is not gitSafeKey, a value
+// given to one of gitEnvNames on the line, env -C / --chdir).
 func (p *commandParser) gitDir(at *string, before, opts string) *string {
 	if p.gitElsewhere {
 		return nil
 	}
 	env := false
-	for _, t := range fields(before) {
-		env = env || t == "env"
-		if env && (strings.HasPrefix(t, "--chdir") || (len(t) > 1 && t[0] == '-' && t[1] != '-' && strings.Contains(t, "C"))) {
+	for _, w := range fields(before) {
+		t := strings.ReplaceAll(p.literalText(w), "\\", "")
+		env = env || basename(t) == "env"
+		if env && envChdir(t) {
 			return nil
 		}
 	}

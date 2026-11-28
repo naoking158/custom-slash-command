@@ -389,29 +389,21 @@ func gitGlobals(s string, p int, val func(string) string) []span {
 	}
 }
 
-// gitEnv reports whether an environment variable named name may point git at
-// another repository, work tree or push target, or change the config it
-// reads: GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR, GIT_NAMESPACE, every
-// GIT_CONFIG* (GIT_CONFIG_KEY_n sets any key), and HOME and XDG_CONFIG_HOME,
-// which choose the global config.
-func gitEnv(name string) bool {
-	switch name {
-	case "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_NAMESPACE", "HOME", "XDG_CONFIG_HOME":
-		return true
-	}
-	return strings.HasPrefix(name, "GIT_CONFIG")
-}
-
+// gitEnvNames are the environment variables that may point git at another
+// repository, work tree or push target, or change the config it reads:
+// GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR, GIT_NAMESPACE, every GIT_CONFIG*
+// (GIT_CONFIG_KEY_n sets any key), and HOME and XDG_CONFIG_HOME, which choose
+// the global config.
 var (
 	gitEnvNames  = `(GIT_DIR|GIT_WORK_TREE|GIT_COMMON_DIR|GIT_NAMESPACE|GIT_CONFIG[A-Za-z0-9_]*|HOME|XDG_CONFIG_HOME)`
 	gitEnvAssign = regexp.MustCompile(`(^|[^A-Za-z0-9_$])` + gitEnvNames + `\+?=`)
 	gitEnvSet    = regexp.MustCompile(`(^|[^A-Za-z0-9_])(export|declare|typeset|readonly|local|read|for)[[:space:]]([^;&|\n]*[^A-Za-z0-9_$])?` + gitEnvNames + `([^A-Za-z0-9_]|$)`)
 )
 
-// setsGitEnv reports whether line, its quotes removed, gives a value to a
-// gitEnv variable: NAME=value anywhere (after ;, (, a quote ...), or NAME as
-// an argument of export, declare, read, for and the like. A line that only
-// reads one ($HOME) does not.
+// setsGitEnv reports whether line gives a value to one of gitEnvNames:
+// NAME=value anywhere (after ;, (, a quote ...), or NAME as an argument of
+// export, declare, read, for and the like. A line that only reads one ($HOME)
+// does not. line is the command line as wordsText gives it.
 func setsGitEnv(line string) bool {
 	return gitEnvAssign.MatchString(line) || gitEnvSet.MatchString(line)
 }
