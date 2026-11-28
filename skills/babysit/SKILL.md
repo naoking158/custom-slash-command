@@ -53,10 +53,16 @@ git log --oneline <headRefOid>..origin/<base>
 
 ### 2. Review threads
 
-List the unresolved threads with their comments:
+List the unresolved threads with their comments, one JSON object per thread:
 
 ```bash
-gh api graphql -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{id isResolved path line comments(first:20){nodes{databaseId author{login} body}}}}}}}' -F o=<owner> -F r=<repo> -F n=<n>
+gh api graphql --paginate -f query='query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor} nodes{id isResolved path line comments(first:100){totalCount nodes{databaseId author{login} body}}}}}}}' -f o=<owner> -f r=<repo> -F n=<n> --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)'
+```
+
+Pass the owner and the repository with `-f`: `-F` sends an all-digit name as a number, and the query rejects it. `--paginate` follows the threads' cursor only, so a thread whose `comments.totalCount` is larger than the comments it came with has more: read all of them with
+
+```bash
+gh api graphql --paginate -f query='query($id:ID!,$endCursor:String){node(id:$id){... on PullRequestReviewThread{comments(first:100,after:$endCursor){pageInfo{hasNextPage endCursor} nodes{databaseId author{login} body}}}}}' -f id=<thread id> --jq '.data.node.comments.nodes[]'
 ```
 
 Triage each unresolved thread with [references/bot-triage.md](references/bot-triage.md): **fix**, **dismiss** or **ask**. Human and bot threads get the same evidence bar; a human's thread is never dismissed without a reply that shows the evidence.
@@ -66,7 +72,7 @@ Triage each unresolved thread with [references/bot-triage.md](references/bot-tri
   - **fix**: reproduce the problem first (a failing test or command), fix it, run the tests, commit, push. Reply after the push, citing the commit sha.
   - **dismiss**: reply with the evidence (the command and its output, the line that already handles it, the later commit that fixed it).
   - **ask**: do not change the code. Collect it for the report; in **drive**, the PR is not merge-ready while an **ask** is open.
-  - Resolve a thread only when it is a bot's and you replied to it, with the thread's `id` from the listing: `gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -F id=<thread id>`. Leave human reviewers' threads for them to resolve.
+  - Resolve a thread only when it is a bot's and you replied to it, with the thread's `id` from the listing: `gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -f id=<thread id>`. Leave human reviewers' threads for them to resolve.
 
 #### Replying
 
