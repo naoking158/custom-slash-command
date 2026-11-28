@@ -119,10 +119,7 @@ label_approved() {
   local repo="$1" pr="$2" labels approved head pushed
   labels="$(gh api "repos/$repo/issues/$pr/labels" --paginate --jq '.[].name')" \
     || fail "cannot read the labels of $repo#$pr"
-  if ! printf '%s\n' "$labels" | grep -qix "$LABEL"; then
-    echo "guardrail: a person has to review these changes and add the label $LABEL in the GitHub UI"
-    return 1
-  fi
+  printf '%s\n' "$labels" | grep -qix "$LABEL" || return 1
   approved="$(gh api "repos/$repo/issues/$pr/events" --paginate \
     --jq ".[] | select(.event == \"labeled\" and (.label.name | ascii_downcase) == \"$LABEL\") | .created_at")" \
     || fail "cannot read the label events of $repo#$pr"
@@ -256,6 +253,7 @@ case "${1:-}" in
 
     label_approved "$repo" "$pr" && exit 0
     only_tightens "$repo" "$pr" "$files" && exit 0
+    echo "guardrail: a person has to review these changes and add the label $LABEL in the GitHub UI"
     exit 1
     ;;
   tighten)

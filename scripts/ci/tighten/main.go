@@ -231,13 +231,22 @@ func casesOf(src []byte) (cases, error) {
 // only report. f.git is not among them: its arguments can run any command
 // and change the repository the cases share.
 var fixtureNames = map[string]bool{
+	"tmp": true, "repo": true, "wt": true, "out": true, "lastCommand": true,
+	"env": true, "Now": true, "Home": true, "t": true,
+}
+
+// fixtureMethods are the methods an added case may call on the fixture and
+// on what it holds. A case may only call them, not take them as values.
+var fixtureMethods = map[string]bool{
 	"guard": true, "in": true, "own": true, "write": true,
 	"shipRepo": true, "mainAndWorktree": true, "newRepo": true, "runPayload": true,
 	"deny": true, "allow": true, "ask": true, "decision": true,
-	"tmp": true, "repo": true, "wt": true, "out": true, "lastCommand": true,
-	"env": true, "Now": true, "Home": true,
-	"t": true, "Fatal": true, "Fatalf": true, "Error": true, "Errorf": true, "Log": true, "Logf": true,
+	"Fatal": true, "Fatalf": true, "Error": true, "Errorf": true, "Log": true, "Logf": true,
 }
+
+// fixedFields are the fields of the fixture that name its directories; a
+// case may not assign them.
+var fixedFields = map[string]bool{"tmp": true, "repo": true, "wt": true, "t": true}
 
 // pureFuncs are the package functions an added case may call.
 var pureFuncs = map[string]bool{
@@ -380,7 +389,7 @@ func local(e ast.Expr, s scope) bool {
 	case *ast.Ident:
 		return s[e.Name] && e.Name != "f"
 	case *ast.SelectorExpr:
-		return fixtureNames[e.Sel.Name] && e.Sel.Name != "t" && (isIdent(e.X, "f") || local(e.X, s))
+		return fixtureNames[e.Sel.Name] && !fixedFields[e.Sel.Name] && (isIdent(e.X, "f") || local(e.X, s))
 	}
 	return false
 }
@@ -410,6 +419,9 @@ func plainExpr(e ast.Expr, s scope) string {
 		if id, ok := e.X.(*ast.Ident); ok && isPackage(id.Name) {
 			return "uses " + id.Name + "." + e.Sel.Name + " other than in a call"
 		}
+		if fixtureMethods[e.Sel.Name] {
+			return "uses ." + e.Sel.Name + " other than in a call"
+		}
 		if !fixtureNames[e.Sel.Name] {
 			return "uses ." + e.Sel.Name
 		}
@@ -426,7 +438,9 @@ func plainExpr(e ast.Expr, s scope) string {
 				if !pureFuncs[id.Name+"."+sel.Sel.Name] {
 					return "calls " + id.Name + "." + sel.Sel.Name
 				}
-			} else if p := plainExpr(e.Fun, s); p != "" {
+			} else if !fixtureMethods[sel.Sel.Name] {
+				return "calls ." + sel.Sel.Name
+			} else if p := plainExpr(sel.X, s); p != "" {
 				return p
 			}
 		} else if p := plainExpr(e.Fun, s); p != "" {
@@ -474,24 +488,22 @@ func plainExpr(e ast.Expr, s scope) string {
 	return fmt.Sprintf("uses %T", e)
 }
 
-// fixturePath reports whether e is a relative path literal, or one appended
-// to f.tmp, f.repo or f.wt, with no ".." in it.
+// fixturePath reports whether e is one string literal holding a relative
+// path, or f.tmp or f.repo followed by one literal starting with "/", with
+// no ".." in the literal. f.repo is the read-only template until the case
+// calls f.own, so a write there fails rather than reaching another case.
 func fixturePath(e ast.Expr) bool {
 	switch e := e.(type) {
 	case *ast.BasicLit:
 		return e.Kind == token.STRING && !strings.Contains(e.Value, "..") && !strings.HasPrefix(e.Value[1:], "/")
 	case *ast.BinaryExpr:
-		if e.Op != token.ADD {
-			return false
-		}
 		lit, ok := e.Y.(*ast.BasicLit)
-		if !ok || lit.Kind != token.STRING || strings.Contains(lit.Value, "..") {
+		if e.Op != token.ADD || !ok || lit.Kind != token.STRING || strings.Contains(lit.Value, "..") ||
+			!strings.HasPrefix(lit.Value[1:], "/") {
 			return false
 		}
-		if sel, ok := e.X.(*ast.SelectorExpr); ok && isIdent(sel.X, "f") {
-			return sel.Sel.Name == "tmp" || sel.Sel.Name == "repo" || sel.Sel.Name == "wt"
-		}
-		return fixturePath(e.X)
+		sel, ok := e.X.(*ast.SelectorExpr)
+		return ok && isIdent(sel.X, "f") && (sel.Sel.Name == "tmp" || sel.Sel.Name == "repo")
 	}
 	return false
 }

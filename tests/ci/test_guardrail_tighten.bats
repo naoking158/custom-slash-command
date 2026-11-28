@@ -109,7 +109,7 @@ append_case() {
   commit_head
   run bash "$GUARDRAIL" tighten "$BASE" "$HEAD_COMMIT"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"uses .Skip"* ]]
+  [[ "$output" == *"calls .Skip"* ]]
 }
 
 @test "tighten: an added case that runs git or writes outside its fixture is held" {
@@ -117,14 +117,32 @@ append_case() {
   commit_head
   run bash "$GUARDRAIL" tighten "$BASE" "$HEAD_COMMIT"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"uses .git"* ]]
+  [[ "$output" == *"calls .git"* ]]
+
+  local body
+  for body in 'f.write("/tmp/elsewhere.txt", "x")' 'f.write(f.tmp+"/."+"./x", "x")' \
+    'f.write(f.wt+"/tmp/elsewhere.txt", "x")' 'f.newRepo("../r", "u")'; do
+    git reset -q --hard "$BASE"
+    append_case "writes outside" "$body"
+    commit_head
+    run bash "$GUARDRAIL" tighten "$BASE" "$HEAD_COMMIT"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"a path that may be outside the fixture's directory"* ]]
+  done
 
   git reset -q --hard "$BASE"
-  append_case "writes outside" 'f.write("/tmp/elsewhere.txt", "x")'
+  append_case "moves the fixture" 'f.tmp = "/tmp"'
   commit_head
   run bash "$GUARDRAIL" tighten "$BASE" "$HEAD_COMMIT"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"passes write a path that may be outside the fixture's directory"* ]]
+  [[ "$output" == *"assigns to something other than a local or the fixture"* ]]
+
+  git reset -q --hard "$BASE"
+  append_case "takes a helper" 'w := f.write'
+  commit_head
+  run bash "$GUARDRAIL" tighten "$BASE" "$HEAD_COMMIT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"uses .write other than in a call"* ]]
 }
 
 @test "tighten: a binary that is not built from the head's source is held" {
@@ -224,7 +242,7 @@ STUB
   gate_fixture
   run bash "$GUARDRAIL" gate me/app 7
   [ "$status" -eq 0 ]
-  [[ "$output" == *"add the label human-approved"* ]]
+  [[ "$output" != *"add the label human-approved"* ]]
   [[ "$output" == *"only tightens outbound-guard: CI's tests pass on the head"* ]]
 }
 
