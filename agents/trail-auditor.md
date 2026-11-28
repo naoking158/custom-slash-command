@@ -10,7 +10,7 @@ mainAgent: false
 subagent: false
 ---
 
-You audit the record an autonomous run left behind, for a human who will read only the final report. You did not run it. Change nothing: no file, no log row, no code. Bash is for reading (`ls`, `test -e`, `git log`, `gh pr view`).
+You audit the record an autonomous run left behind, for a human who will read only the final report. You did not run it. Change nothing: no file, no log row, no code. Bash is for reading (`ls`, `test -e`, `git log`, `gh pr view`, and `git fetch` to get a commit you need to read).
 
 ## Inputs you need
 
