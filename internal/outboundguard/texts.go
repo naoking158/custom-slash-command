@@ -1,6 +1,9 @@
 package outboundguard
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // held keeps the quoted strings and heredoc bodies of a line set aside: whole
 // is the text as written (quotes included), content what it stands for, and
@@ -143,8 +146,11 @@ func (h *held) reads(body string) ([]string, bool) {
 
 // word is the value of a word that names a file: "" when it holds a variable
 // or a substitution the line does not show.
-func (h *held) word(w string) string {
-	v := h.put(w, true)
+func (h *held) word(w string) string { return fileValue(h.put(w, true)) }
+
+// fileValue is the file a word's value names: "" when it holds a variable or
+// a substitution the line does not show.
+func fileValue(v string) string {
 	if len(v) >= 2 && (v[0] == '\'' || v[0] == '"') && v[len(v)-1] == v[0] {
 		v = v[1 : len(v)-1]
 	}
@@ -152,6 +158,76 @@ func (h *held) word(w string) string {
 		return ""
 	}
 	return v
+}
+
+// attachText is what gh puts in the body for an --attach value FILE#ALT: the
+// alt text, or the file's name when there is none. The file is an image or a
+// video, uploaded as it is.
+func attachText(v string) string {
+	if file, alt, ok := strings.Cut(v, "#"); ok {
+		return alt + "\n" + basename(file)
+	}
+	return basename(v)
+}
+
+// arguments returns the indexes of the words that are neither options nor
+// their values.
+func arguments(words []word, opts []option) []int {
+	taken := make([]bool, len(words))
+	for _, o := range opts {
+		for i := o.first; i <= o.last; i++ {
+			taken[i] = true
+		}
+	}
+	var out []int
+	dashes := false
+	for i, w := range words {
+		switch {
+		case taken[i]:
+		case w.text == "--" && !dashes:
+			dashes = true
+		case !dashes && len(w.text) > 1 && w.text[0] == '-':
+		default:
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+func sortSpans(s []span) []span {
+	sort.Slice(s, func(a, b int) bool { return s[a].start < s[b].start })
+	return s
+}
+
+// withoutSubstitutions drops the $( ) and ` ` command substitutions from v:
+// the text of the command they run is not what they put in its place, and
+// the files a cat in them reads are checked where the line is read.
+func withoutSubstitutions(v string) string {
+	var b strings.Builder
+	for i := 0; i < len(v); i++ {
+		switch {
+		case strings.HasPrefix(v[i:], "$("):
+			depth := 0
+			for i++; i < len(v); i++ {
+				if v[i] == '(' {
+					depth++
+				} else if v[i] == ')' {
+					if depth--; depth == 0 {
+						break
+					}
+				}
+			}
+		case v[i] == '`':
+			if k := strings.IndexByte(v[i+1:], '`'); k >= 0 {
+				i += k + 1
+			} else {
+				i = len(v)
+			}
+		default:
+			b.WriteByte(v[i])
+		}
+	}
+	return b.String()
 }
 
 // takeFed removes from a stage that pipes into an outbound command the files
@@ -218,37 +294,6 @@ func wordAfter(s string, p int) (int, int, bool) {
 	q := skipSpaces(s, p)
 	e := wordEnd(s, q)
 	return q, e, e > q
-}
-
-// bodyFileAt: --body-file / --file (space or =) WORD, or -F[space]WORD, at the
-// start of a word.
-func bodyFileAt(s string, i int) (span, bool) {
-	if prevIs(s, i, notSpace) {
-		return span{}, false
-	}
-	for _, opt := range []string{"--body-file", "--file"} {
-		if !strings.HasPrefix(s[i:], opt) {
-			continue
-		}
-		p := i + len(opt)
-		if p < len(s) && s[p] == '=' {
-			p++
-		} else if q := skipSpaces(s, p); q > p {
-			p = q
-		} else {
-			continue
-		}
-		if e := wordEnd(s, p); e > p {
-			return span{i, e, p}, true
-		}
-		return span{}, false
-	}
-	if strings.HasPrefix(s[i:], "-F") {
-		if ws, e, ok := wordAfter(s, i+2); ok {
-			return span{i, e, ws}, true
-		}
-	}
-	return span{}, false
 }
 
 // stdinAt: < WORD that is not <<, <(, <& and not after < or the given digits.
@@ -343,24 +388,28 @@ func commandWordAt(s, name string, min int) ([]string, bool) {
 	return nil, false
 }
 
-// outboundTextAt finds the first git commit or gh pr/issue text command.
-func outboundTextAt(s string) (int, bool) {
-	best := -1
-	if start, _, _, ok := gitSub(s, "commit", 0); ok {
-		best = start
+// outboundTextAt finds the first git commit or gh pr/issue text command: where
+// it starts, where its arguments start and how it reads its options.
+func outboundTextAt(s string) (start, args int, g grammar, ok bool) {
+	start = -1
+	if at, _, end, found := gitSub(s, "commit", 0); found {
+		start, args, g = at, end, gitCommitGrammar
 	}
-	if start, _, ok := findGh(s, 0, ghPRText); ok && (best < 0 || start < best) {
-		best = start
+	if at, end, found := findGh(s, 0, ghPRText); found && (start < 0 || at < start) {
+		start, args = at, end
+		g, _ = ghGrammarOf(s[at:end])
 	}
-	return best, best >= 0
+	return start, args, g, start >= 0
 }
 
 // outboundText describes what the outbound commands of cmd send, one line
 // each: "\x03<file>" for every file a command on the line writes (>, >>, >|,
 // n>, &>, tee, the last argument of cp / mv); then for each outbound command
-// "\x02<file>" per body file its own --body-file / --file / -F arguments name
-// (for `-`, its < redirect), and its text without those arguments, together
-// with the pipeline stages that feed it.
+// "\x02<file>" per body file its own -F / --file / --body-file options name,
+// read as the command reads them (for `-`, its < redirect), the value of each
+// option written in the same word as its letter (-mTEXT), and its text
+// without the body file options, together with the pipeline stages that feed
+// it.
 func outboundText(cmd string) string {
 	var out []string
 	s, h := holdLine(cmd)
@@ -368,10 +417,11 @@ func outboundText(cmd string) string {
 	written := writtenFiles(segs, h)
 	for _, seg := range segs {
 		stages := splitOn(seg, pipeSep(true))
-		k, start := -1, 0
+		k, start, args := -1, 0, 0
+		var g grammar
 		for n, st := range stages {
-			if at, ok := outboundTextAt(st); ok {
-				k, start = n, at
+			if at, a, gr, ok := outboundTextAt(st); ok {
+				k, start, args, g = n, at, a, gr
 				break
 			}
 		}
@@ -380,16 +430,49 @@ func outboundText(cmd string) string {
 		}
 		own := stages[k][start:]
 		stdin := false
-		matches := findAll(own, bodyFileAt)
-		for _, m := range matches {
-			f := h.put(own[m.wordStart:m.end], true)
-			if f == "-" || f == "/dev/stdin" {
+		words := lineWords(own, args-start, h)
+		var files, cut []span
+		readFile := func(v string) {
+			if f := fileValue(v); f == "-" || f == "/dev/stdin" {
 				stdin = true
 			} else {
 				out = append(out, "\x02"+f)
 			}
 		}
-		own = removeSpans(own, matches)
+		opts := g.options(words)
+		for _, o := range opts {
+			at := span{words[o.first].start, words[o.last].end, 0}
+			switch {
+			case o.hasValue && o.is(g.files...):
+				files = append(files, at)
+				readFile(o.value)
+			case o.hasValue && o.is("attach"):
+				cut = append(cut, at)
+				out = append(out, attachText(o.value))
+			case o.attached:
+				out = append(out, withoutSubstitutions(o.value))
+			}
+		}
+		if g.args != argsText {
+			args := arguments(words, opts)
+			if g.args == argsFiles && len(args) == 0 {
+				stdin = true
+			}
+			for n, i := range args {
+				cut = append(cut, span{words[i].start, words[i].end, 0})
+				switch v := words[i].text; {
+				case g.args == argsFiles, g.args == argsGist && n > 0:
+					readFile(v)
+				case g.args == argsAssets && n > 0:
+					if _, label, ok := strings.Cut(v, "#"); ok {
+						out = append(out, label)
+					}
+				default:
+					out = append(out, v)
+				}
+			}
+		}
+		own = removeSpans(own, sortSpans(append(files, cut...)))
 		if stdin {
 			for _, f := range stdinFiles(stages[k][:start], h) {
 				out = append(out, "\x02"+f)
@@ -468,6 +551,7 @@ func (h *held) takeSent(feed []string, own string) ([]string, []string) {
 	sent := append([]string{}, feed...)
 	sent = append(sent, own)
 	for i := range sent {
+		sent[i] = removeSpans(sent[i], gitOptionSpans(sent[i]))
 		var fs []string
 		if i < len(feed) {
 			sent[i], fs = h.takeFed(sent[i])
@@ -477,6 +561,32 @@ func (h *held) takeSent(feed []string, own string) ([]string, []string) {
 		files = append(files, fs...)
 	}
 	return sent, files
+}
+
+// gitOptionSpans returns the options given to git before its subcommand (-C
+// <dir>, -c <name=value>, --no-pager ...), when git is the command s runs
+// (after any ( or { and NAME=value words): they say where and how git runs,
+// not what it sends.
+// A git written anywhere else in s is text and is left as it is.
+func gitOptionSpans(s string) []span {
+	i := 0
+	for {
+		i = skipSpaces(s, i)
+		if i < len(s) && (s[i] == '(' || s[i] == '{') {
+			i++
+			continue
+		}
+		e := wordEnd(s, i)
+		if eq := strings.IndexByte(s[i:e], '='); eq > 0 && allWord(s[i:i+eq]) {
+			i = e
+			continue
+		}
+		break
+	}
+	if !strings.HasPrefix(s[i:], "git") || (i+3 < len(s) && !isSpace(s[i+3])) {
+		return nil
+	}
+	return gitGlobals(s, i+3)
 }
 
 // cpOrMv returns the words after the first cp or mv that has two or more.
@@ -518,35 +628,42 @@ func apiCalls(cmd string) ([]apiCall, []string) {
 					break
 				}
 				from = end
-				calls = append(calls, apiCallAt(stages[:k], st[:start], st[start:], h))
+				calls = append(calls, apiCallAt(stages[:k], st[:start], st[start:], end-start, h))
 			}
 		}
 	}
 	return calls, writtenFiles(segs, h)
 }
 
-func apiCallAt(feed []string, before, gh string, h *held) apiCall {
-	if !apiWrites1(gh, h) {
+func apiCallAt(feed []string, before, gh string, args int, h *held) apiCall {
+	words := lineWords(gh, args, h)
+	opts := ghAPIGrammar.options(words)
+	if !apiWrites(opts) {
 		return apiCall{}
 	}
 	c := apiCall{writes: true}
 	stdin := false
-	for _, m := range findAll(gh, optionAt([]string{"--input"}, true)) {
-		f := h.put(gh[m.wordStart:m.end], true)
+	var cut []span
+	var attached []string
+	for _, o := range opts {
+		if !o.hasValue {
+			continue
+		}
+		f, isFile := o.value, o.is("input")
+		if ff, ok := fieldFile(o.value); ok && o.is("F", "field") {
+			f, isFile = ff, true
+		}
+		if !isFile {
+			if o.attached {
+				attached = append(attached, withoutSubstitutions(o.value))
+			}
+			continue
+		}
+		cut = append(cut, span{words[o.first].start, words[o.last].end, 0})
 		if f == "-" {
 			stdin = true
 		} else {
 			c.files = append(c.files, f)
-		}
-	}
-	for _, m := range findAll(gh, optionAt([]string{"--field", "-F"}, false)) {
-		v := h.put(gh[m.wordStart:m.end], true)
-		if f, ok := fieldFile(v); ok {
-			if f == "-" {
-				stdin = true
-			} else {
-				c.files = append(c.files, f)
-			}
 		}
 	}
 	if stdin {
@@ -555,74 +672,37 @@ func apiCallAt(feed []string, before, gh string, h *held) apiCall {
 		for _, m := range in {
 			c.files = append(c.files, h.put(gh[m.wordStart:m.end], true))
 		}
-		gh = removeSpans(gh, in)
+		cut = append(cut, in...)
+		sort.Slice(cut, func(a, b int) bool { return cut[a].start < cut[b].start })
 	}
-	gh = removeSpans(gh, findAll(gh, optionAt([]string{"--input"}, true)))
-	var sent []span
-	for _, m := range findAll(gh, optionAt([]string{"--field", "-F"}, false)) {
-		v := h.put(gh[m.wordStart:m.end], true)
-		if eq := strings.IndexByte(v, '='); eq >= 0 && eq+1 < len(v) && v[eq+1] == '@' {
-			sent = append(sent, m)
-		}
-	}
-	gh = removeSpans(gh, sent)
-	stages, read := h.takeSent(feed, gh)
+	stages, read := h.takeSent(feed, removeSpans(gh, cut))
 	c.files = append(c.files, read...)
-	c.text = h.put(dropWrites(stages), false)
+	c.text = strings.Join(append([]string{h.put(dropWrites(stages), false)}, attached...), "\n")
 	return c
 }
 
-// apiWrites1: a --method / -X other than GET or HEAD, or, without one, any
-// --input / --field / --raw-field / -f / -F.
-func apiWrites1(gh string, h *held) bool {
-	if m := findAll(gh, optionAt([]string{"--method", "-X"}, false)); len(m) > 0 {
-		v := strings.TrimSuffix(h.put(gh[m[0].wordStart:m[0].end], true), "\n")
-		return !strings.EqualFold(v, "GET") && !strings.EqualFold(v, "HEAD")
-	}
-	for i := 0; i < len(gh); i++ {
-		if prevIs(gh, i, notSpace) {
-			continue
-		}
-		for _, o := range []string{"--input", "--field", "--raw-field", "-f", "-F"} {
-			if strings.HasPrefix(gh[i:], o) {
+// apiWrites: a --method / -X is not GET or HEAD, or, without one, an
+// --input / --field / --raw-field / -f / -F is given.
+func apiWrites(opts []option) bool {
+	given := false
+	for _, o := range opts {
+		if o.is("X", "method") && o.hasValue {
+			given = true
+			m := strings.TrimSuffix(o.value, "\n")
+			if !strings.EqualFold(m, "GET") && !strings.EqualFold(m, "HEAD") {
 				return true
 			}
 		}
 	}
-	return false
-}
-
-// optionAt matches an option at the start of a word followed by its value:
-// with sepRequired, after whitespace or =; otherwise also directly.
-func optionAt(names []string, sepRequired bool) func(string, int) (span, bool) {
-	return func(s string, i int) (span, bool) {
-		if prevIs(s, i, notSpace) {
-			return span{}, false
-		}
-		for _, name := range names {
-			if !strings.HasPrefix(s[i:], name) {
-				continue
-			}
-			p := i + len(name)
-			if q := skipSpaces(s, p); q > p {
-				if e := wordEnd(s, q); e > q {
-					return span{i, e, q}, true
-				}
-			}
-			if p < len(s) && s[p] == '=' {
-				if e := wordEnd(s, p+1); e > p+1 {
-					return span{i, e, p + 1}, true
-				}
-			}
-			if !sepRequired {
-				if e := wordEnd(s, p); e > p {
-					return span{i, e, p}, true
-				}
-			}
-			return span{}, false
-		}
-		return span{}, false
+	if given {
+		return false
 	}
+	for _, o := range opts {
+		if o.is("input", "field", "raw-field", "f", "F") {
+			return true
+		}
+	}
+	return false
 }
 
 // fieldFile returns FILE for a field value key=@FILE.

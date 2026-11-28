@@ -317,9 +317,9 @@ func pipeSep(afterGt bool) func(string, int) int {
 	}
 }
 
-// gitSub matches `git (-C|-c X)* SUB` with git not inside a longer word and
-// SUB not followed by a word byte or -. It returns where git starts, the
-// option text between them and where SUB ends.
+// gitSub matches `git [global option]... SUB` with git not inside a longer
+// word and SUB not followed by a word byte or -. It returns where git starts,
+// the option text between them and where SUB ends.
 func gitSub(s, sub string, from int) (start int, opts string, end int, ok bool) {
 	for i := from; ; i++ {
 		k := strings.Index(s[i:], "git")
@@ -331,25 +331,8 @@ func gitSub(s, sub string, from int) (start int, opts string, end int, ok bool) 
 			continue
 		}
 		ends := []int{i + 3}
-		p := i + 3
-		for {
-			q := skipSpaces(s, p)
-			if q == p || q+1 >= len(s) || s[q] != '-' || (s[q+1] != 'C' && s[q+1] != 'c') {
-				break
-			}
-			r := skipSpaces(s, q+2)
-			if r == q+2 {
-				break
-			}
-			t := r
-			for t < len(s) && !isSpace(s[t]) {
-				t++
-			}
-			if t == r {
-				break
-			}
-			p = t
-			ends = append(ends, p)
+		for _, o := range gitGlobals(s, i+3) {
+			ends = append(ends, o.end)
 		}
 		for n := len(ends) - 1; n >= 0; n-- {
 			q := skipSpaces(s, ends[n])
@@ -363,6 +346,53 @@ func gitSub(s, sub string, from int) (start int, opts string, end int, ok bool) 
 			return i, s[i+3 : ends[n]], e, true
 		}
 	}
+}
+
+// gitValued are git's global options that take the next word as their value
+// when they are not written --name=value.
+var gitValued = []string{"--git-dir", "--work-tree", "--namespace", "--config-env", "--attr-source"}
+
+// gitGlobals returns the options git is given from p, before its subcommand:
+// -C and -c with the next word, the gitValued ones with theirs, and any other
+// word that starts with - (--no-pager, -P, --bare ...).
+func gitGlobals(s string, p int) []span {
+	var out []span
+	for {
+		ws, e, ok := wordAfter(s, p)
+		if !ok || ws == p || s[ws] != '-' {
+			return out
+		}
+		w := s[ws:e]
+		valued := w == "-C" || w == "-c"
+		for _, name := range gitValued {
+			valued = valued || w == name
+		}
+		if valued {
+			vs, ve, ok := wordAfter(s, e)
+			if !ok || vs == e {
+				return out
+			}
+			out = append(out, span{ws, ve, vs})
+			p = ve
+			continue
+		}
+		if w == "-" || w == "--" {
+			return out
+		}
+		out = append(out, span{ws, e, e})
+		p = e
+	}
+}
+
+// gitElsewhere reports whether git's options point it at a repository or
+// work tree other than the directory it runs in.
+func gitElsewhere(opts string) bool {
+	for _, w := range fields(opts) {
+		if strings.HasPrefix(w, "--git-dir") || strings.HasPrefix(w, "--work-tree") {
+			return true
+		}
+	}
+	return false
 }
 
 // ghWords matches `gh <first> <one of second>` (second empty: first alone)
@@ -419,15 +449,21 @@ func findGh(s string, from int, alts [][2][]string) (start, end int, ok bool) {
 }
 
 var (
-	ghPRSend   = [][2][]string{{{"pr"}, {"create", "new", "merge", "ready"}}, {{"api"}, nil}}
-	ghPRText   = [][2][]string{{{"pr", "issue"}, {"create", "new", "comment", "edit", "review"}}}
-	ghAPI      = [][2][]string{{{"api"}, nil}}
-	moveWords  = []string{"cd", "pushd", "popd"}
-	declWords  = map[string]bool{"export": true, "declare": true, "local": true, "readonly": true, "typeset": true}
-	leadWords  = []string{"if", "then", "elif", "else", "while", "until", "do", "time", "!", "{", "builtin", "command"}
-	cdFlags    = map[string]bool{"-L": true, "-P": true, "--": true}
-	notTarget  = " \t\n\r\f\v()<>&|;"
-	redirectOp = []string{">>", ">|", ">&", ">", "<<<", "<<-", "<<", "<&", "<>", "<"}
+	ghPRSend = [][2][]string{{{"pr"}, {"create", "new", "merge", "ready"}}, {{"api"}, nil}}
+	ghPRText = [][2][]string{
+		{{"pr", "issue"}, {"create", "new", "comment", "edit", "review", "close", "reopen"}},
+		{{"pr"}, {"merge"}},
+		{{"release"}, {"create", "new", "edit"}},
+		{{"gist"}, {"create", "new", "edit"}},
+	}
+	ghAPI       = [][2][]string{{{"api"}, nil}}
+	ghLabelCmds = [][2][]string{{{"pr", "issue"}, {"create", "new", "edit"}}}
+	moveWords   = []string{"cd", "pushd", "popd"}
+	declWords   = map[string]bool{"export": true, "declare": true, "local": true, "readonly": true, "typeset": true}
+	leadWords   = []string{"if", "then", "elif", "else", "while", "until", "do", "time", "!", "{", "builtin", "command"}
+	cdFlags     = map[string]bool{"-L": true, "-P": true, "--": true}
+	notTarget   = " \t\n\r\f\v()<>&|;"
+	redirectOp  = []string{">>", ">|", ">&", ">", "<<<", "<<-", "<<", "<&", "<>", "<"}
 )
 
 // flattenParens replaces innermost (...) groups with a space until none is left.

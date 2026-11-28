@@ -39,6 +39,9 @@ decision_for() {
     $'gh pr edit 3 \\\n  --add-label human-approved' \
     'gh pr create --draft --title t --body b --label human-approved' \
     'gh pr create --draft --title t --body b -l human-approved' \
+    'gh pr create --draft --title t --body b -lhuman-approved' \
+    'gh pr create --title t --body b -dl human-approved' \
+    'gh issue create --title t --body b -wl human-approved' \
     'gh issue edit 3 --add-label human-approved'; do
     [ "$(decision_for "$command")" = "deny" ]
   done
