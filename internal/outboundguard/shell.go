@@ -1,7 +1,6 @@
 package outboundguard
 
 import (
-	"slices"
 	"strconv"
 	"strings"
 )
@@ -371,7 +370,11 @@ func gitGlobals(s string, p int, val func(string) string) []span {
 		if !strings.HasPrefix(w, "-") || w == "-" || w == "--" {
 			return out
 		}
-		if slices.Contains(gitValued, w) {
+		valued := false
+		for _, v := range gitValued {
+			valued = valued || w == v
+		}
+		if valued {
 			vs, ve, ok := wordAfter(s, e)
 			if !ok || vs == e {
 				return out
