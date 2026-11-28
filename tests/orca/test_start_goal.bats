@@ -217,6 +217,15 @@ GOAL='README を直す。"引用" と `code` と $HOME
   [ -z "$(git -C "$TMP/wt/a1" status --porcelain)" ]
 }
 
+@test "antigravity without the goal deny hook in the checkout: exit 2 before creating a worktree" {
+  kit="$(make_kit)"
+  cp "$REPO_ROOT/orca/profiles/private.conf" "$kit/profiles/"
+  MY_ORCA_PROFILE=private run --separate-stderr "$kit/bin/start-goal" "$REPO" "$GOAL"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"goal deny hook is missing"* ]]
+  [ ! -f "$TMP/calls" ]
+}
+
 @test "antigravity: hooks already in .agents/hooks.json are kept" {
   printf '{"mine":{"Stop":[]}}' >"$TMP/existing-hooks.json"
   MY_ORCA_PROFILE=private run_start_goal --name a1 "$REPO" "$GOAL"

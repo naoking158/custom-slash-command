@@ -44,7 +44,8 @@
 #   2  usage or configuration error (arguments, repo, profile, an implement
 #      harness other than claude or antigravity, deny file, repo not
 #      registered in Orca, existing local settings that are not an object with
-#      a deny array, an existing .agents/hooks.json that is not an object)
+#      a deny array, an existing .agents/hooks.json that is not an object, or
+#      for antigravity a missing scripts/hooks/antigravity-goal-deny.sh)
 #   3  Orca unusable: no orca command, runtime unreachable, Orca failed to
 #      create the worktree or launch the agent, or no turn was seen to start
 #      (the worktree is kept only in this last case)
@@ -127,6 +128,9 @@ case "$harness" in
   claude|antigravity) ;;
   *) die 2 "profile $profile runs implement on $harness; start-goal needs claude or antigravity" ;;
 esac
+if [ "$harness" = antigravity ]; then
+  [ -x "$AGY_DENY_HOOK" ] || die 2 "the goal deny hook is missing or not executable: $AGY_DENY_HOOK"
+fi
 
 command -v orca >/dev/null 2>&1 || die 3 "orca command not found on PATH"
 status_json="$(orca status --json 2>/dev/null)"
