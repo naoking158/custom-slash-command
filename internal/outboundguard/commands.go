@@ -262,10 +262,7 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 		at = nil
 	}
 	if _, opts, end, ok := gitSub(text, "push", 0); ok {
-		in := at
-		if c, found := optionC(opts); found {
-			in = p.enter(at, c)
-		}
+		in := p.gitDir(at, opts)
 		argEnd := strings.IndexByte(text[end:], ')')
 		if argEnd < 0 {
 			argEnd = len(text) - end
@@ -303,10 +300,7 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 		p.out = append(p.out, command{"pr", orUnknown(at, unknown), gh, repos, also})
 	}
 	if _, opts, _, ok := gitSub(text, "commit", 0); ok {
-		in := at
-		if c, found := optionC(opts); found {
-			in = p.enter(at, c)
-		}
+		in := p.gitDir(at, opts)
 		p.out = append(p.out, command{"text", orUnknown(in, unknown), "git", nil, nil})
 	} else if _, _, ok := findGh(text, 0, ghPRText); ok {
 		p.out = append(p.out, command{"text", orUnknown(at, unknown), "gh", nil, nil})
@@ -460,6 +454,18 @@ func (p *commandParser) emptyQuotes(s string) string {
 		i++
 	}
 	return b.String()
+}
+
+// gitDir is the directory git runs in from at: moved by -C, and unknown when
+// --git-dir or --work-tree points it elsewhere.
+func (p *commandParser) gitDir(at *string, opts string) *string {
+	if gitElsewhere(opts) {
+		return nil
+	}
+	if c, found := optionC(opts); found {
+		return p.enter(at, c)
+	}
+	return at
 }
 
 // optionC returns the value of the first -C in git's options.

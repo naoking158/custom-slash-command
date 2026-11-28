@@ -619,6 +619,18 @@ var guardTests = []struct {
 			f.guard(c).allow()
 		}
 	}},
+	{"git options other than -C and -c before the subcommand do not hide it", func(f *fx) {
+		f.own()
+		f.write(f.repo+"/m.txt", "fix H001\n")
+		f.guard(`git --no-pager commit -m "fix H001"`).deny()
+		f.guard(`git -P commit -qF m.txt`).deny()
+		f.guard(`git --literal-pathspecs -c x.y=z commit -mH001`).deny()
+		f.guard(`git --no-pager -C /Users/me/tmp/w commit -m ok`).allow()
+		f.guard(`git --no-pager push origin main`).deny()
+		f.guard(`git --no-pager push origin feature/x`).allow()
+		f.guard(`git --git-dir=/x/.git push origin feature/x`).deny()
+		f.guard(`git --work-tree /x push origin feature/x`).deny()
+	}},
 	{"file flags quoted inside a message are message text, not body files", func(f *fx) {
 		f.guard(`git commit -q -m 'read config with --file $CONFIG or -F /etc/nothere'`).allow()
 		f.guard(`git commit -q --allow-empty -F /dev/null`).allow()

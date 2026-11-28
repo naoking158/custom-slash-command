@@ -498,9 +498,10 @@ func (h *held) takeSent(feed []string, own string) ([]string, []string) {
 	return sent, files
 }
 
-// gitOptionSpans returns the -C <dir> and -c <name=value> options given to
-// git before its subcommand, when git is the command s runs (after any ( or {
-// and NAME=value words): they say where and how git runs, not what it sends.
+// gitOptionSpans returns the options given to git before its subcommand (-C
+// <dir>, -c <name=value>, --no-pager ...), when git is the command s runs
+// (after any ( or { and NAME=value words): they say where and how git runs,
+// not what it sends.
 // A git written anywhere else in s is text and is left as it is.
 func gitOptionSpans(s string) []span {
 	i := 0
@@ -520,19 +521,7 @@ func gitOptionSpans(s string) []span {
 	if !strings.HasPrefix(s[i:], "git") || (i+3 < len(s) && !isSpace(s[i+3])) {
 		return nil
 	}
-	var out []span
-	for p := i + 3; ; {
-		q := skipSpaces(s, p)
-		if q == p || q+1 >= len(s) || s[q] != '-' || (s[q+1] != 'C' && s[q+1] != 'c') {
-			return out
-		}
-		ws, e, ok := wordAfter(s, q+2)
-		if !ok || ws == q+2 {
-			return out
-		}
-		out = append(out, span{q, e, ws})
-		p = e
-	}
+	return gitGlobals(s, i+3)
 }
 
 // cpOrMv returns the words after the first cp or mv that has two or more.
