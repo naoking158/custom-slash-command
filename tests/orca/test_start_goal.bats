@@ -9,6 +9,9 @@
 #   - The deny rules are in the worktree before the agent is launched, and
 #     existing local settings are kept.
 #   - A worktree whose agent could not start is removed again.
+#   - A prompt that started no turn is sent once more only when Claude Code is
+#     idle at an input box without it; otherwise, or when that also starts no
+#     turn, exit 3 keeps the worktree and names the handle.
 
 bats_require_minimum_version 1.5.0
 
@@ -40,6 +43,10 @@ setup() {
   unset ORCA_TERMINAL_HANDLE
   make_repo
   fake_orca
+  fake_bin "$FAKE_BIN/sleep" <<'SH'
+#!/bin/bash
+exit 0
+SH
 }
 
 # path_without_orca — $PATH minus every directory holding an orca executable.
@@ -65,6 +72,11 @@ make_repo() {
 # answers with its path, or with $FAKE/create.json when present. `agent launch`
 # saves its arguments and copies the worktree's local settings and autopilot
 # marker as they are at that moment, and answers with $FAKE/launch.json when present.
+# `agent list` shows a working agent, or, while $FAKE/idle exists
+# and nothing was sent (or $FAKE/send.json is used), one with no title, or none
+# while $FAKE/no-agent exists. `terminal read` answers with the lines of
+# $FAKE/screen.txt. `terminal send` saves its arguments and reports a started turn,
+# or $FAKE/send.json when present.
 fake_orca() {
   fake_bin "$FAKE_BIN/orca" <<'SH'
 #!/bin/bash
@@ -90,6 +102,18 @@ case "$1 $2" in
     cp "$(git -C "$wt" rev-parse --absolute-git-dir)/my-autopilot-worktree" "$FAKE/marker-at-launch" 2>/dev/null
     if [ -f "$FAKE/launch.json" ]; then cat "$FAKE/launch.json"; exit 1; fi
     echo '{"ok":true,"result":{"outcome":{"kind":"terminal","handle":"term_fake"}}}' ;;
+  "agent list")
+    if [ -f "$FAKE/no-agent" ]; then echo '{"ok":true,"result":{"agents":[]}}'
+    elif [ -f "$FAKE/idle" ] && { [ ! -f "$FAKE/send.args" ] || [ -f "$FAKE/send.json" ]; }; then
+      echo '{"ok":true,"result":{"agents":[{"agent":"claude","state":"done","title":null}]}}'
+    else echo '{"ok":true,"result":{"agents":[{"agent":"claude","state":"working","title":null}]}}'; fi ;;
+  "terminal read")
+    jq -Rn '{ok:true,result:{terminal:{tail:[inputs]}}}' <"$FAKE/screen.txt" ;;
+  "terminal send")
+    shift 2
+    printf '%s\n' "$@" >"$FAKE/send.args"
+    if [ -f "$FAKE/send.json" ]; then cat "$FAKE/send.json"; else
+      echo '{"ok":true,"result":{"send":{"accepted":true,"prompt":{"stages":["input_accepted","turn_started"]}}}}'; fi ;;
   "terminal close"|"worktree rm")
     echo '{"ok":true,"result":{}}' ;;
   *) exit 64 ;;
@@ -293,4 +317,59 @@ JSON
   [ "$(last_line)" = "[start-goal] exit=3 $TMP/wt/g1" ]
   called "terminal close --worktree path:$TMP/wt/g1 --all"
   called "worktree rm --worktree path:$TMP/wt/g1 --force --delete-branch"
+}
+
+# --- the prompt reaches the session ---
+
+# idle_screen INPUT — Claude Code idle with INPUT in its input box.
+idle_screen() {
+  touch "$TMP/idle"
+  printf '%s\n' ' ▐▛███▜▌   Claude Code' '────────' "❯ $1" '────────' '  ⏵⏵ auto mode on' >"$TMP/screen.txt"
+}
+
+@test "a prompt that started a turn is not sent again" {
+  run_start_goal --name g1 "$REPO" "$GOAL"
+  [ "$status" -eq 0 ]
+  run ! called "terminal send"
+}
+
+@test "a prompt that started no turn is sent once more to the idle session: exit 0" {
+  idle_screen 'Try "how does <filepath> work?"'
+  run_start_goal --name g1 "$REPO" "$GOAL"
+  [ "$status" -eq 0 ]
+  [ "$(last_line)" = "[start-goal] exit=0 $TMP/wt/g1" ]
+  [ "$(grep -c '^terminal send' "$TMP/calls")" -eq 1 ]
+  [ "$(arg_of send --terminal)" = "term_fake" ]
+  [ "$(sed -n '/^--text$/,/^--json$/p' "$TMP/send.args" | sed '1d;$d')" = "/my:autopilot $GOAL" ]
+}
+
+@test "a resent prompt that starts no turn either: exit 3, worktree kept, handle and recovery named" {
+  idle_screen ''
+  echo '{"ok":true,"result":{"send":{"accepted":true,"prompt":{"stages":["input_accepted"]}}}}' >"$TMP/send.json"
+  run_start_goal --name g1 "$REPO" "$GOAL"
+  [ "$status" -eq 3 ]
+  [ "$(last_line)" = "[start-goal] exit=3 $TMP/wt/g1" ]
+  [[ "$stderr" == *"orca terminal send --terminal term_fake --enter --wait-submit 20 --text "* ]]
+  orca() { while [ "$1" != --text ]; do shift; done; printf '%s' "$2"; }
+  [ "$(eval "${stderr#*send the prompt by hand with: }")" = "/my:autopilot $GOAL" ]
+  [ "$(grep -c '^terminal send' "$TMP/calls")" -eq 1 ]
+  run ! called "worktree rm"
+  [ -d "$TMP/wt/g1" ]
+}
+
+@test "the prompt already in the input box is not sent again: exit 3" {
+  idle_screen "/my:autopilot $GOAL"
+  run_start_goal --name g1 "$REPO" "$GOAL"
+  [ "$status" -eq 3 ]
+  run ! called "terminal send"
+  run ! called "worktree rm"
+}
+
+@test "Claude Code never came up: nothing is typed into the shell, exit 3" {
+  touch "$TMP/no-agent"
+  printf '%s\n' '~/orca/workspaces/repo/g1' '❯' >"$TMP/screen.txt"
+  run_start_goal --name g1 "$REPO" "$GOAL"
+  [ "$status" -eq 3 ]
+  run ! called "terminal send"
+  run ! called "worktree rm"
 }

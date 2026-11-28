@@ -19,7 +19,14 @@
 #   3. Launch the profile's `implement <harness> <model>` agent in the worktree
 #      as a terminal session with the prompt `/my:autopilot <goal>`. The harness
 #      must be claude: autopilot and the deny rules are Claude Code settings.
-# When step 2 or 3 fails, the worktree is removed again.
+#   4. Wait about two minutes, and at least 30 seconds after Claude Code is up,
+#      for the prompt to start a turn (the agent shows in `orca agent list` with
+#      the prompt as its title). When Claude Code is idle with no title and the
+#      prompt is not in its input box, send the prompt once with
+#      `orca terminal send`.
+# When step 2 or 3 fails, the worktree is removed again. When step 4 fails,
+# the worktree and the session are kept and stderr names the terminal handle
+# and the command that sends the prompt by hand.
 #
 # The profile is $MY_ORCA_PROFILE, else `profile <name>` in
 # ~/.claude/my-toolkit/orca.conf; it names orca/profiles/<name>.conf.
@@ -29,8 +36,9 @@
 #   2  usage or configuration error (arguments, repo, profile, an implement
 #      harness other than claude, deny file, repo not registered in Orca,
 #      existing local settings that are not an object with a deny array)
-#   3  Orca unusable: no orca command, runtime unreachable, or Orca failed to
-#      create the worktree or launch the agent
+#   3  Orca unusable: no orca command, runtime unreachable, Orca failed to
+#      create the worktree or launch the agent, or the prompt did not start a
+#      turn (the worktree is kept only in this last case)
 # The last line on stdout is `[start-goal] exit=<n> <worktree path or ->`.
 #
 # Environment: MY_ORCA_PROFILE.
@@ -144,12 +152,63 @@ if ! git -C "$WT" check-ignore -q .claude/settings.local.json; then
 fi
 printf '%s\n' "$goal" >"$git_dir/$MARKER" || discard_worktree 3 "cannot write $git_dir/$MARKER"
 
+# turn_state — "started" when an agent in the worktree has a title (its first
+# prompt) or is past "done" (a prompt sent later leaves the title empty), "idle"
+# when one is listed otherwise, "none" when none is.
+turn_state() {
+  orca agent list --worktree "path:$WT" --json 2>/dev/null | jq -r '
+    [.result.agents[]?] as $a
+    | if any($a[]; .title != null or .state != "done") then "started"
+      elif ($a | length) > 0 then "idle" else "none" end' 2>/dev/null
+}
+
+# resendable — true when Claude Code's input box (a ❯ line between two rules)
+# is on screen, does not hold the prompt, and no turn has started.
+resendable() {
+  [ "$(turn_state)" = idle ] || return 1
+  orca terminal read --terminal "$handle" --screen --json 2>/dev/null \
+    | jq -r '.result.terminal.tail[]?' 2>/dev/null \
+    | awk '/^(─)+$/ { if (box) found = 1; box = 0; rule = 1; next }
+           rule && /^❯/ { box = !index($0, "/my:autopilot"); rule = 0; next }
+           { rule = 0; box = 0 }
+           END { exit !found }'
+}
+
+# stuck MESSAGE — keep the worktree and its session, print how to recover, exit 3.
+stuck() {
+  printf 'start-goal: %s\n' "$1" >&2
+  printf 'start-goal: the session is %s in %s; check it with: orca terminal read --terminal %s --screen\n' \
+    "$handle" "$WT" "$handle" >&2
+  local sq="'"
+  printf 'start-goal: send the prompt by hand with: orca terminal send --terminal %s --enter --wait-submit 20 --text %s\n' \
+    "$handle" "$sq${prompt//$sq/$sq\\$sq$sq}$sq" >&2
+  finish 3
+}
+
+prompt="/my:autopilot $goal"
 launched="$(orca agent launch --agent "$harness" --worktree "path:$WT" --model "$model" \
-  --surface terminal --prompt "/my:autopilot $goal" --json 2>/dev/null)"
+  --surface terminal --prompt "$prompt" --json 2>/dev/null)"
 handle="$(printf '%s' "$launched" | jq -r 'select(.ok == true) | .result.outcome.handle // empty' 2>/dev/null)"
 if [ -z "$handle" ]; then
   printf '%s\n' "$launched" >&2
   discard_worktree 3 "orca agent launch failed ($harness, $model)"
 fi
 printf 'start-goal: %s (%s, %s, profile %s) in %s\n' "$handle" "$harness" "$model" "$profile" "$WT" >&2
-finish 0
+
+tries=0 idle=0
+while state="$(turn_state)"; [ "$state" != started ]; do
+  case "$state" in idle) idle=$((idle + 1)) ;; *) idle=0 ;; esac
+  tries=$((tries + 1))
+  if [ "$tries" -ge 60 ] && { [ "$state" != idle ] || [ "$idle" -ge 15 ]; }; then break; fi
+  sleep 2
+done
+[ "$state" = started ] && finish 0
+resendable && sleep 5 && resendable \
+  || stuck "the prompt did not start a turn within two minutes, and Claude Code is not idle at an empty prompt; nothing was resent"
+sent="$(orca terminal send --terminal "$handle" --enter --wait-submit 30 --text "$prompt" --json 2>/dev/null)"
+if printf '%s' "$sent" | jq -e '.result.send.prompt.stages | index("turn_started")' >/dev/null 2>&1 \
+  || [ "$(turn_state)" = started ]; then
+  printf 'start-goal: the prompt was resent and started a turn\n' >&2
+  finish 0
+fi
+stuck "the resent prompt did not start a turn either"
