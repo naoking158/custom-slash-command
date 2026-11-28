@@ -798,6 +798,14 @@ var guardTests = []struct {
 		f.write("body.md", "fixed H001\n")
 		f.guard("gh api repos/o/r/issues/1/comments -F body=@- <" + f.tmp + "/body.md").deny()
 	}},
+	{"api: an output redirection is not part of what is sent", func(f *fx) {
+		f.guard(`gh api graphql -f query='{ viewer { login } }' > /Users/alice/out.json`).allow()
+		f.guard(`gh api --method POST repos/o/r/issues/1/comments -f body="fixed in abc123" >/Users/alice/out.json 2>> /Users/alice/err.log`).allow()
+		f.guard(`gh pr comment 3 --body "fixed in abc123" &> /Users/alice/out.log`).allow()
+		f.guard(`gh api --method POST repos/o/r/issues/1/comments -f body="see /Users/alice/x" > out.json`).deny()
+		f.guard("gh pr comment 3 --body-file - > /Users/alice/out.log <<'EOF'\nsee /Users/me/notes.md\nEOF").deny()
+		f.guard(`gh api --method POST repos/o/r/issues/1/comments --input - <<< '{"body":"fixed H001"}' > /Users/alice/out.json`).deny()
+	}},
 	{"ship cwd: a repository named by an attached -R, a PR URL, GH_REPO or an API path is judged as that repo", func(f *fx) {
 		f.own()
 		f.shipRepo()

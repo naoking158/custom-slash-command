@@ -286,7 +286,7 @@ func outboundText(cmd string) string {
 			}
 			own = removeSpans(own, in)
 		}
-		out = append(out, h.put(strings.Join(append(append([]string{}, stages[:k]...), own), " | "), false))
+		out = append(out, h.put(dropWrites(append(append([]string{}, stages[:k]...), own)), false))
 	}
 	var b strings.Builder
 	for _, w := range written {
@@ -296,6 +296,15 @@ func outboundText(cmd string) string {
 		b.WriteString(l + "\n")
 	}
 	return b.String()
+}
+
+// dropWrites joins pipeline stages without their output redirections: where
+// a command writes its output is not part of what it sends.
+func dropWrites(stages []string) string {
+	for i, st := range stages {
+		stages[i] = removeSpans(st, findAll(st, writeAt))
+	}
+	return strings.Join(stages, " | ")
 }
 
 // cpOrMv returns the words after the first cp or mv that has two or more.
@@ -365,7 +374,7 @@ func apiWrites(cmd string) string {
 				}
 			}
 			gh = removeSpans(gh, sent)
-			out.WriteString(h.put(strings.Join(append(append([]string{}, stages[:k]...), gh), " | "), false) + "\n")
+			out.WriteString(h.put(dropWrites(append(append([]string{}, stages[:k]...), gh)), false) + "\n")
 		}
 	}
 	return out.String()
