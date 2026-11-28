@@ -355,9 +355,9 @@ func (g *guard) judgePR(dir, gh string, args, repos, also []string) {
 	}
 }
 
-// git runs git in dir. core.fsmonitor is turned off: it is the one setting
-// of the repository that makes the commands the guard runs (ls-files) start a
-// program of its choosing.
+// git runs git in dir with core.fsmonitor turned off: that setting of the
+// repository makes ls-files, which the guard runs, start a program of the
+// repository's choosing.
 func git(dir string, args ...string) (string, bool) {
 	cmd := exec.Command("git", append([]string{"-C", dir, "-c", "core.fsmonitor=false"}, args...)...)
 	out, err := cmd.Output()
