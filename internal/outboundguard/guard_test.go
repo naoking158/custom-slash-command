@@ -715,6 +715,22 @@ var guardTests = []struct {
 			f.guard(c).allow()
 		}
 	}},
+	{"a quoted assignment after a wrapper or in a function is still read", func(f *fx) {
+		for _, c := range []string{
+			`env -u LC_ALL 'GIT_DIR=/x/.git' git push origin feature/x`,
+			`stdbuf -o0 env 'GIT_DIR=/x/.git' git push origin feature/x`,
+			`nice -n 5 env "GIT_DIR=/x/.git" git push origin feature/x`,
+			`sudo -u root env "HOME=/x" git push origin feature/x`,
+			`timeout 10 env "HOME=/x" git push origin feature/x`,
+			`exec -a n env "GIT_DIR=/x/.git" git push origin feature/x`,
+			`f() { export "GIT_DIR=/x/.git"; }; f; git push origin feature/x`,
+			`command -p env "GIT_DIR=/x/.git" git push origin feature/x`,
+			`unset HOME; : ${HOME[0]:=/x}; git push origin feature/x`,
+			`printf -v HOME '%s' /x; git push origin feature/x`,
+		} {
+			f.guard(c).deny()
+		}
+	}},
 	{"a push denied for a git pointed elsewhere says what points it there", func(f *fx) {
 		f.guard(`GIT_DIR=/x/.git git push origin feature/x`).deny()
 		if !strings.Contains(f.out, "GIT_DIR") || strings.Contains(f.out, "cd <絶対パス>") {

@@ -270,7 +270,7 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 		in, elsewhere := p.gitDir(at, text[:start], opts)
 		where := orUnknown(in, unknown)
 		if elsewhere {
-			where = "?git"
+			where = gitElsewhereDir
 		}
 		argEnd := strings.IndexByte(text[end:], ')')
 		if argEnd < 0 {
@@ -316,7 +316,7 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 		in, elsewhere := p.gitDir(at, text[:start], opts)
 		where := orUnknown(in, unknown)
 		if elsewhere {
-			where = "?git"
+			where = gitElsewhereDir
 		}
 		p.out = append(p.out, command{"text", where, "git", nil, nil, nil})
 	} else if start, end, ok := findGh(text, 0, ghPRText); ok {
@@ -501,51 +501,50 @@ func envChdir(t string) bool {
 
 var (
 	shellKeywords = map[string]bool{"if": true, "then": true, "elif": true, "else": true, "fi": true,
-		"while": true, "until": true, "do": true, "done": true, "case": true, "esac": true, "{": true, "}": true, "!": true}
-	// envWrappers run the command that follows their options.
-	envWrappers = map[string]bool{"env": true, "command": true, "exec": true, "nohup": true, "nice": true,
-		"timeout": true, "time": true, "builtin": true, "sudo": true, "xargs": true}
-	// envSetters set the variables named in their arguments.
-	envSetters = map[string]bool{"export": true, "declare": true, "typeset": true, "readonly": true, "local": true, "read": true, "eval": true, "for": true}
+		"while": true, "until": true, "do": true, "done": true, "{": true, "}": true, "!": true}
+	// quietCommands set no shell variable, whatever their arguments say.
+	quietCommands = map[string]bool{"git": true, "gh": true, "echo": true, "printf": true,
+		"cat": true, "grep": true, "jq": true, "true": true}
 	assignWord = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?\+?=`)
 )
 
-// envText is the command line s as setsGitEnv reads it, one command a line:
-// the words that may set a variable (the assignments before the command
-// word, the words up to and including it, every argument of an envSetter or
-// of printf -v) with their quotes and backslashes removed. The quoted
-// arguments of any other command (a commit message, an echo) become a space
-// unless they expand something ($( ), ` `, ${ }), so a word in a message is
-// not taken for an assignment.
+// envText is the command line s as setsGitEnv reads it, one command a line,
+// with quotes and backslashes removed. When a command's command word (after
+// its assignments) is one of quietCommands (printf without -v), its quoted
+// arguments become a space unless they expand something ($( ), ` `, ${ }),
+// so a word in a commit message or a PR body is not taken for an assignment.
+// Every other command, a wrapper such as env or nice among them, is read
+// whole.
 func (p *commandParser) envText(s string) string {
 	var lines []string
 	for _, seg := range splitOn(s, listSep(true, "<>|&")) {
 		toks := fields(seg)
-		var out []string
-		head, sets := true, false
+		at := -1
 		for i, t := range toks {
-			if !head {
-				if sets {
-					out = append(out, p.wordValue(t))
-				} else {
-					out = append(out, p.argText(t))
-				}
-				continue
-			}
 			v := strings.TrimLeft(p.wordValue(t), "({!")
-			if v != "" && !shellKeywords[v] && !assignWord.MatchString(v) && !strings.HasPrefix(v, "-") {
-				name := basename(v)
-				head = envWrappers[name]
-				sets = envSetters[name] || (name == "printf" && i+1 < len(toks) && strings.HasPrefix(p.wordValue(toks[i+1]), "-v"))
+			if v != "" && !shellKeywords[v] && !assignWord.MatchString(v) {
+				at = i
+				break
 			}
-			out = append(out, p.wordValue(t))
+		}
+		quiet := at >= 0 && quietCommands[basename(p.wordValue(toks[at]))]
+		var out []string
+		for i, t := range toks {
+			if quiet && i > at && strings.HasPrefix(p.wordValue(t), "-v") && basename(p.wordValue(toks[at])) == "printf" {
+				quiet = false
+			}
+			if quiet && i > at {
+				out = append(out, p.argText(t))
+			} else {
+				out = append(out, p.wordValue(t))
+			}
 		}
 		lines = append(lines, strings.Join(out, " "))
 	}
 	return strings.Join(lines, "\n")
 }
 
-// argText is an argument word of a command that sets no variable: its
+// argText is an argument word of one of quietCommands: its
 // quoted strings become a space unless they expand something, and its
 // backslashes are removed.
 func (p *commandParser) argText(w string) string {
@@ -572,6 +571,10 @@ func (p *commandParser) argText(w string) string {
 func (p *commandParser) wordValue(w string) string {
 	return strings.ReplaceAll(p.literalText(w), "\\", "")
 }
+
+// gitElsewhereDir is the directory of a git the line points at another
+// repository, work tree or push target.
+const gitElsewhereDir = "?git"
 
 // gitDir is the directory git runs in from at, given the words before it
 // (before) and its options: moved by each -C. elsewhere is set when the line

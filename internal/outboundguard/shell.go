@@ -396,8 +396,8 @@ func gitGlobals(s string, p int, val func(string) string) []span {
 // the global config.
 var (
 	gitEnvNames = `(GIT_DIR|GIT_WORK_TREE|GIT_COMMON_DIR|GIT_NAMESPACE|GIT_CONFIG[A-Za-z0-9_]*|HOME|XDG_CONFIG_HOME)`
-	// NAME=, NAME+=, NAME[i]= and ${NAME:=v} / ${NAME=v}, wherever they are.
-	gitEnvAssign = regexp.MustCompile(`(^|[^A-Za-z0-9_${])` + gitEnvNames + `(\+?=|\[)|\$\{` + gitEnvNames + `:?=`)
+	// NAME=, NAME+=, NAME[i]= and ${NAME:=v} / ${NAME[i]:=v} / ${NAME=v}.
+	gitEnvAssign = regexp.MustCompile(`(^|[^A-Za-z0-9_${])` + gitEnvNames + `(\+?=|\[)|\$\{` + gitEnvNames + `(\[[^]]*\])?:?=`)
 	// NAME as an argument of a builtin that sets it, in the same command.
 	gitEnvSetter = regexp.MustCompile(`(^|[^A-Za-z0-9_-])(export|declare|typeset|readonly|local|read|printf[[:space:]]+-v)([[:space:]][^;&|\n]*[^A-Za-z0-9_${]|[[:space:]]|$)` + gitEnvNames + `([^A-Za-z0-9_]|$)`)
 	// printf -vNAME.

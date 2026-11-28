@@ -195,7 +195,7 @@ func (g *guard) run(payload []byte) {
 				if c.Rest == "gh" {
 					decide("deny", "case 文と同じ行では gh を実行する directory を判定できない。別のコマンドに分ける")
 				}
-			case "?", "?git":
+			case "?", gitElsewhereDir:
 				if c.Rest == "gh" {
 					decide("deny", "gh を実行する directory を判定できない。cd <絶対パス> で始める")
 				}
@@ -500,7 +500,7 @@ func (g *guard) judgePush(dir, args string) {
 		decide("deny", "case 文と同じ行では git push を実行する directory を判定できない。別のコマンドに分けるか git -C <絶対パス> push と書く")
 	case "?":
 		decide("deny", unknownDir)
-	case "?git":
+	case gitElsewhereDir:
 		decide("deny", "git push を実行する directory を判定できない。同じ行で git に別の repository・work tree・設定を指している（GIT_DIR や HOME などへの代入、--git-dir、--work-tree、-c の鍵、env -C）。それを外すか、push を別の Bash 呼び出しに分ける")
 	}
 	protected := []string{"main", "master"}
