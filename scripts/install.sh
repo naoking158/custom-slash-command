@@ -424,7 +424,7 @@ orca_layer() {
   local name
   name="$(orca_profile_name)"
   if [ -z "$name" ]; then
-    orca_problem "$1" "Orca profile not selected: write 'profile <name>' in $ORCA_CONF or set MY_ORCA_PROFILE (choices: $(orca_profile_choices)). Without it, Antigravity stops at every step that launches an agent"
+    orca_problem "$1" "Orca profile not selected: write 'profile <name>' in $ORCA_CONF or set MY_ORCA_PROFILE (choices: $(orca_profile_choices)). Without it, start-goal cannot pick the harness and model of a goal"
     return 1
   fi
   if ! orca_profile_file "$name" >/dev/null; then
