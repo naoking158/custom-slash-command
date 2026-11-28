@@ -14,8 +14,9 @@ import (
 //	text: Rest is "git" or "gh", for a command that carries a message, or
 //	      "gh pr merge", whose directory the PR rules judge.
 //
-// Dir is "?" when the line does not show it and "?case" when a case statement
-// precedes the command. For pr, Repos are the repositories gh is told to use
+// Dir is "?" when the line does not show it, "?case" when a case statement
+// precedes the command, and gitElsewhereDir for a git the line points at
+// another repository, work tree or push target. For pr, Repos are the repositories gh is told to use
 // instead of Dir's (-R or --repo with its value as the next word, GH_REPO
 // assigned just before gh) and Also the ones it may act on besides (an
 // attached -R<repo>, a pull request URL, a repos/OWNER/NAME path, any other
@@ -478,8 +479,9 @@ func (p *commandParser) emptyQuotes(s string) string {
 }
 
 // envChdir reports whether t is an option of env that changes the directory:
-// -C, alone or after other short options (-iC) but not in the value of -u,
-// -S or -a (-uLC_ALL), or --chdir and the abbreviations GNU env takes (--c).
+// -C, alone or after other short options (-iC) but not in the value of -u
+// or -a (-uLC_ALL), -S with a C in its value (env reads it as options again),
+// or --chdir and the abbreviations GNU env takes (--c).
 func envChdir(t string) bool {
 	if strings.HasPrefix(t, "--") {
 		name, _, _ := strings.Cut(t[2:], "=")
@@ -492,7 +494,9 @@ func envChdir(t string) bool {
 		switch c {
 		case 'C':
 			return true
-		case 'u', 'S', 'a':
+		case 'S':
+			return strings.Contains(t, "C")
+		case 'u', 'a':
 			return false
 		}
 	}
@@ -502,49 +506,51 @@ func envChdir(t string) bool {
 var (
 	shellKeywords = map[string]bool{"if": true, "then": true, "elif": true, "else": true, "fi": true,
 		"while": true, "until": true, "do": true, "done": true, "{": true, "}": true, "!": true}
-	// quietCommands set no shell variable, whatever their arguments say.
+	// quietCommands set no shell variable and run no code their arguments
+	// give, whatever those say.
 	quietCommands = map[string]bool{"git": true, "gh": true, "echo": true, "printf": true,
-		"cat": true, "grep": true, "jq": true, "true": true}
+		"cat": true, "grep": true, "jq": true, "true": true, "cd": true}
 	// definesFunction matches `name()`, `name ()` and `function name`.
 	definesFunction = regexp.MustCompile(`[A-Za-z0-9_.:-][[:space:]]*\([[:space:]]*\)|(^|[^A-Za-z0-9_])function[[:space:]]`)
 	assignWord      = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?\+?=`)
 )
 
 // envText is the command line s as setsGitEnv reads it, one command a line,
-// with quotes and backslashes removed. When a command's command word (after
-// its assignments) is one of quietCommands (printf without -v), its quoted
-// arguments become a space unless they expand something ($), so a word in a
-// commit message or a PR body is not taken for an assignment. Every other
-// command, a wrapper such as env or nice among them, is read whole, and so
-// is every command of a line that defines a function (which may take the
-// name of a quiet command) or sources a file (which a quiet command may have
-// written).
+// with quotes and backslashes removed. When every command of the line is one
+// of quietCommands (printf without -v) and the line defines no function,
+// their quoted arguments become a space unless they expand something ($ or `
+// in double quotes), so a word in a commit message or a PR body is not taken
+// for an assignment. A line with any other command (export, eval, env, alias,
+// source ...) is read whole: such a command can turn a quoted string, or a
+// file a quiet command wrote, into an assignment.
 func (p *commandParser) envText(s string) string {
 	segs := splitOn(s, listSep(true, "<>|&"))
 	words := make([][]string, len(segs))
-	names := make([]string, len(segs))
 	at := make([]int, len(segs))
-	quietLine := !definesFunction.MatchString(p.wordValue(s))
+	quiet := !definesFunction.MatchString(p.wordValue(s))
 	for n, seg := range segs {
 		words[n], at[n] = fields(seg), -1
 		for i, t := range words[n] {
 			v := strings.TrimLeft(p.wordValue(t), "({!")
 			if v != "" && !shellKeywords[v] && !assignWord.MatchString(v) {
-				at[n], names[n] = i, basename(v)
+				at[n] = i
 				break
 			}
 		}
-		quietLine = quietLine && names[n] != "." && names[n] != "source"
+		if at[n] < 0 {
+			continue
+		}
+		name := basename(p.wordValue(words[n][at[n]]))
+		quiet = quiet && quietCommands[name]
+		for _, t := range words[n][at[n]+1:] {
+			quiet = quiet && !(name == "printf" && strings.HasPrefix(p.wordValue(t), "-v"))
+		}
 	}
 	var lines []string
 	for n, toks := range words {
-		quiet := quietLine && quietCommands[names[n]]
 		var out []string
 		for i, t := range toks {
-			if names[n] == "printf" && i > at[n] && strings.HasPrefix(p.wordValue(t), "-v") {
-				quiet = false
-			}
-			if quiet && i > at[n] {
+			if quiet && at[n] >= 0 && i > at[n] {
 				out = append(out, p.argText(t))
 			} else {
 				out = append(out, p.wordValue(t))
@@ -557,8 +563,7 @@ func (p *commandParser) envText(s string) string {
 
 // argText is an argument word of one of quietCommands: its quoted strings
 // become a space unless they expand something ($ or ` in double quotes), and
-// its
-// backslashes are removed.
+// its backslashes are removed.
 func (p *commandParser) argText(w string) string {
 	var b strings.Builder
 	for i := 0; i < len(w); {
