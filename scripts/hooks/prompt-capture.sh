@@ -13,7 +13,11 @@
 # Those parts are cut before matching, and only what is left is stored; a
 # prompt that is all Orca text, or an Orca worker dispatch, is not stored.
 # A block whose end cannot be found is kept, since a stored false positive
-# can be dropped by retro but a missed correction cannot be recovered.
+# can be dropped by retro but a missed correction cannot be recovered. The
+# `## First run` rules end at an `Orca: ` line, a blank line or the next Orca
+# block; `- ` lines that follow them directly are kept with them. A stored
+# prompt that still starts with Orca text keeps its last 500 characters,
+# where the owner's words are, instead of its first.
 #
 # False positives are acceptable (retro filters); false exits are not:
 # always exit 0 so the prompt is never blocked or delayed by an error.
@@ -36,14 +40,16 @@ strip_orca() {
     mode == "mail" { keep($0); if ($0 ~ /^(─)+$/) { buf = ""; mode = "" } ; next }
     mode == "quote" { keep($0); if ($0 == ">>>") { buf = ""; mode = "after" } ; next }
     mode == "after" && index($0, "${ORCA_CLI_COMMAND:-orca}") { next }
-    mode == "rules" && ($0 == "" || $0 == "## First run") { next }
-    mode == "rules" && /^- / { mode = "bullets"; next }
-    mode == "bullets" && /^- / { next }
-    mode == "bullets" && /^Orca: / { mode = ""; next }
+    mode == "rules" && ($0 == "" || $0 == "## First run") { keep($0); next }
+    mode == "rules" && /^- / { keep($0); mode = "bullets"; next }
+    mode == "bullets" && /^- / { keep($0); next }
+    mode == "bullets" && /^Orca: / { buf = ""; mode = ""; next }
+    mode == "bullets" && $0 == "" { buf = ""; mode = ""; print; next }
+    mode == "bullets" && /^(\[Orca: |──── From: )/ { buf = "" }
     mode == "orca" && $0 == "<<<" { keep($0); mode = "quote"; next }
-    { mode = "" }
+    { flush(); mode = "" }
     /^──── From: / { keep($0); mode = "mail"; next }
-    /^\[Orca: / { mode = /first run/ ? "rules" : "orca"; next }
+    /^\[Orca: / { mode = /first run/ ? "rules" : "orca"; if (mode == "rules") keep($0); next }
     { print }
     END { flush() }
   '
@@ -72,7 +78,8 @@ printf '%s' "$payload" | jq -c --arg human "$human" '{
   ts: (now | todate),
   session_id: (.session_id // null),
   cwd: (.cwd // null),
-  prompt: ((if $human == "" then .prompt // "" else $human end) | .[0:500])
+  prompt: ((if $human == "" then .prompt // "" else $human end)
+    | if test("^(\\[Orca: |──── From: )") then .[-500:] else .[0:500] end)
 }' >> "$dir/corrections.jsonl" 2>/dev/null
 
 exit 0
