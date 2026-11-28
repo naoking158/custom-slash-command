@@ -453,7 +453,7 @@ var (
 	ghPRText = [][2][]string{
 		{{"pr", "issue"}, {"create", "new", "comment", "edit", "review", "close", "reopen"}},
 		{{"pr"}, {"merge"}},
-		{{"release"}, {"create", "new", "edit"}},
+		{{"release"}, {"create", "new", "edit", "upload"}},
 		{{"gist"}, {"create", "new", "edit"}},
 	}
 	ghAPI       = [][2][]string{{{"api"}, nil}}
