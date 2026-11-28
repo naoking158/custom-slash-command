@@ -29,8 +29,8 @@
 # with them: write access to autopilot's state directory, and on a nix machine
 # read access to the nix store, where the shell the terminal sandbox starts
 # lives. Without that grant every command fails in the sandbox and asks to run
-# outside it. --check reports missing rules and --uninstall removes exactly
-# these rules. Commands the rules do not cover still go to Antigravity's own
+# outside it. --check reports missing rules and --uninstall removes these
+# rules, also when the user had added one of them by hand. Commands the rules do not cover still go to Antigravity's own
 # check, and the outbound guard hook still denies what it denies.
 #
 # Also cleans up symlinks from the pre-plugin layout when they point into
@@ -92,7 +92,8 @@ $HOME/.claude/agents) when they point into this repo.
 When Antigravity is present, install adds the allow rules of
 orca/settings/agy.permissions.json (and, per machine, autopilot's state
 directory and the nix store) to $HOME/.gemini/antigravity-cli/settings.json;
---check reports missing ones and --uninstall removes them.
+--check reports missing ones and --uninstall removes them (also a rule of the
+same text the user added by hand).
 
 When an `orca` command is on PATH, install and --check also confirm that
 orca/bin/doctor is executable (run it from an Orca terminal yourself) and that
