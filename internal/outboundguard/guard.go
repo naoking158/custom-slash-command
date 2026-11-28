@@ -230,9 +230,33 @@ func (g *guard) labelCheck() {
 		}
 		return r
 	}, g.cmd)
-	if anyLine(flat, labelAdd) || anyLine(flat, labelEdit) {
+	if anyLine(flat, labelAdd) || anyLine(flat, labelEdit) || labelOption(g.cmd) {
 		decide("deny", "label human-approved は人の承認を表す。agent は付けず、人が GitHub の画面で付ける（label は変数を使わず直接書く）")
 	}
+}
+
+// labelOption reports whether a gh pr / issue create or edit on the line adds
+// human-approved, or a label it does not show, through -l / --label /
+// --add-label as gh reads them (-dl human-approved, -lhuman-approved).
+func labelOption(cmd string) bool {
+	s, h := holdLine(cmd)
+	for _, seg := range splitOn(s, listSep(true, "<>|")) {
+		for from := 0; ; {
+			start, end, ok := findGh(seg, from, ghLabelCmds)
+			if !ok {
+				break
+			}
+			from = end
+			gr, _ := ghGrammarOf(seg[start:end])
+			for _, o := range gr.options(lineWords(seg, end, h)) {
+				if o.hasValue && o.is("l", "label", "add-label") &&
+					(strings.Contains(strings.ToLower(o.value), "human-approved") || strings.ContainsAny(o.value, "$`")) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // anyLine reports whether re matches one of the lines of s, as grep does.
@@ -246,11 +270,34 @@ func anyLine(s string, re *regexp.Regexp) bool {
 }
 
 var (
-	draftFalse = regexp.MustCompile(`--draft=(false|0)`)
-	draftFlag  = regexp.MustCompile(`(^|[[:space:]])(--draft|-d)([[:space:]=]|$)`)
-	apiMerge   = regexp.MustCompile(`(?i)mergePullRequest|enablePullRequestAutoMerge|pulls/[0-9]+/merge`)
-	apiReady   = regexp.MustCompile(`(?i)markPullRequestReadyForReview|"?draft"?[[:space:]]*[:=][[:space:]]*false`)
+	apiMerge = regexp.MustCompile(`(?i)mergePullRequest|enablePullRequestAutoMerge|pulls/[0-9]+/merge`)
+	apiReady = regexp.MustCompile(`(?i)markPullRequestReadyForReview|"?draft"?[[:space:]]*[:=][[:space:]]*false`)
 )
+
+// draftReason returns why a gh pr create does not open a draft, or "": its
+// last -d / --draft decides, and pflag reads -d=false and --draft=0 as false.
+func draftReason(gh string) string {
+	var words []word
+	for _, t := range fields(gh)[3:] {
+		words = append(words, word{text: t})
+	}
+	draft, off := false, false
+	for _, o := range ghGrammars["pr create"].options(words) {
+		if !o.is("d", "draft") {
+			continue
+		}
+		b, err := strconv.ParseBool(o.value)
+		draft = !o.hasValue || (err == nil && b)
+		off = off || !draft
+	}
+	switch {
+	case draft:
+		return ""
+	case off:
+		return "PR は draft で作る（--draft=false は使わない）"
+	}
+	return "PR は draft で作る。gh pr create に --draft を付ける"
+}
 
 func isCmd(gh, name string) bool { return gh == name || strings.HasPrefix(gh, name+" ") }
 
@@ -269,11 +316,7 @@ func (g *guard) judgePR(dir, gh string, repos, also []string) {
 	case isCmd(gh, "gh pr ready"):
 		reason = "PR を ready にしない。ready への変更は本人がセルフレビュー後に行う"
 	case isCmd(gh, "gh pr create"), isCmd(gh, "gh pr new"):
-		if anyLine(gh, draftFalse) {
-			reason = "PR は draft で作る（--draft=false は使わない）"
-		} else if !anyLine(gh, draftFlag) {
-			reason = "PR は draft で作る。gh pr create に --draft を付ける"
-		}
+		reason = draftReason(gh)
 	case isCmd(gh, "gh api"):
 		hint = "cd <絶対パス> で始める"
 		if anyLine(g.cmd, apiMerge) {

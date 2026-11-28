@@ -419,15 +419,16 @@ func findGh(s string, from int, alts [][2][]string) (start, end int, ok bool) {
 }
 
 var (
-	ghPRSend   = [][2][]string{{{"pr"}, {"create", "new", "merge", "ready"}}, {{"api"}, nil}}
-	ghPRText   = [][2][]string{{{"pr", "issue"}, {"create", "new", "comment", "edit", "review"}}}
-	ghAPI      = [][2][]string{{{"api"}, nil}}
-	moveWords  = []string{"cd", "pushd", "popd"}
-	declWords  = map[string]bool{"export": true, "declare": true, "local": true, "readonly": true, "typeset": true}
-	leadWords  = []string{"if", "then", "elif", "else", "while", "until", "do", "time", "!", "{", "builtin", "command"}
-	cdFlags    = map[string]bool{"-L": true, "-P": true, "--": true}
-	notTarget  = " \t\n\r\f\v()<>&|;"
-	redirectOp = []string{">>", ">|", ">&", ">", "<<<", "<<-", "<<", "<&", "<>", "<"}
+	ghPRSend    = [][2][]string{{{"pr"}, {"create", "new", "merge", "ready"}}, {{"api"}, nil}}
+	ghPRText    = [][2][]string{{{"pr", "issue"}, {"create", "new", "comment", "edit", "review"}}}
+	ghAPI       = [][2][]string{{{"api"}, nil}}
+	ghLabelCmds = [][2][]string{{{"pr", "issue"}, {"create", "new", "edit"}}}
+	moveWords   = []string{"cd", "pushd", "popd"}
+	declWords   = map[string]bool{"export": true, "declare": true, "local": true, "readonly": true, "typeset": true}
+	leadWords   = []string{"if", "then", "elif", "else", "while", "until", "do", "time", "!", "{", "builtin", "command"}
+	cdFlags     = map[string]bool{"-L": true, "-P": true, "--": true}
+	notTarget   = " \t\n\r\f\v()<>&|;"
+	redirectOp  = []string{">>", ">|", ">&", ">", "<<<", "<<-", "<<", "<&", "<>", "<"}
 )
 
 // flattenParens replaces innermost (...) groups with a space until none is left.

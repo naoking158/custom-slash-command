@@ -287,6 +287,13 @@ var guardTests = []struct {
 	}},
 	{"gh pr create --draft=false is denied", func(f *fx) {
 		f.guard(`gh pr create --draft=false --title t --body b`).deny()
+		f.guard(`gh pr create -d=false --title t --body b`).deny()
+		f.guard(`gh pr create --draft=FALSE --title t --body b`).deny()
+		f.guard(`gh pr create -d --draft=0 --title t --body b`).deny()
+	}},
+	{"gh pr create -d bundled with other short options is a draft", func(f *fx) {
+		f.guard(`gh pr create -fd --title t`).allow()
+		f.guard(`gh pr create --draft=false -d --title t --body b`).allow()
 	}},
 	{"gh pr ready is denied", func(f *fx) {
 		f.guard(`gh pr ready 12`).deny()
@@ -697,6 +704,9 @@ var guardTests = []struct {
 		f.own()
 		f.shipRepo()
 		f.guard(`gh pr merge 3 -R work/app`).deny()
+		f.guard(`gh pr merge 3 -sR work/app`).deny()
+		f.guard(`gh pr merge 3 -sdR work/app`).deny()
+		f.guard(`gh pr merge 3 -sR me/app`).allow()
 	}},
 	{"ship cwd: cd into a strict repo is judged as that repo", func(f *fx) {
 		f.own()
