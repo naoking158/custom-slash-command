@@ -21,8 +21,8 @@ import (
 // as the next word, GH_REPO assigned just before gh) and Also the ones it may
 // act on besides (an attached -R<repo>, a pull request URL, a repos/OWNER/NAME
 // path, any other GH_REPO assignment); "" stands for one the line does not
-// show. Args are the
-// words of a pr command with their quotes removed, unexpanded.
+// show. Args are the words of a pr command with their quotes removed,
+// unexpanded.
 type command struct {
 	Kind, Dir, Rest string
 	Repos, Also     []string
@@ -473,8 +473,9 @@ func (p *commandParser) emptyQuotes(s string) string {
 // envChdir reports whether t is an option of env that changes the directory:
 // -C, alone or after other short options (-iC) but not in the value of -u
 // or -a (-uLC_ALL), -S with a C in its value (env reads it as options again),
-// a word with whitespace and a C in it (the value of -S given as its own
-// word), or --chdir and the abbreviations GNU env takes (--c).
+// a word that starts with - and has whitespace and a C in it (the value of -S
+// given as its own word), or --chdir and the abbreviations GNU env takes
+// (--c).
 func envChdir(t string) bool {
 	if strings.HasPrefix(t, "--") {
 		name, _, _ := strings.Cut(t[2:], "=")
