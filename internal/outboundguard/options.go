@@ -49,7 +49,8 @@ var (
 		"issue close":    {value: "crR", shortEq: true, long: ghLong("comment", "duplicate-of", "reason")},
 		"issue reopen":   {value: "cR", shortEq: true, long: ghLong("comment")},
 		"release create": {value: "nFtR", shortEq: true, files: []string{"F", "notes-file"}, args: argsAssets, long: ghLong("discussion-category", "notes", "notes-file", "notes-start-tag", "target", "title")},
-		"release edit":   {value: "nFtR", shortEq: true, files: []string{"F", "notes-file"}, args: argsAssets, long: ghLong("discussion-category", "notes", "notes-file", "tag", "target", "title")},
+		"release edit":   {value: "nFtR", shortEq: true, files: []string{"F", "notes-file"}, long: ghLong("discussion-category", "notes", "notes-file", "tag", "target", "title")},
+		"release upload": {value: "R", shortEq: true, args: argsAssets, long: ghLong()},
 		"gist create":    {value: "df", shortEq: true, args: argsFiles, long: []string{"desc", "filename"}},
 		"gist edit":      {value: "adfr", shortEq: true, files: []string{"a", "add"}, args: argsGist, long: []string{"add", "desc", "filename", "remove"}},
 	}
