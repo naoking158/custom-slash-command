@@ -37,6 +37,9 @@ func holdLine(cmd string) (string, *held) {
 	return strings.ReplaceAll(s, "\\\n", " "), h
 }
 
+// value is the value of a word: its quotes and backslashes removed.
+func (h *held) value(w string) string { return strings.ReplaceAll(h.put(w, true), "\\", "") }
+
 // put replaces markers with what they hold until none is left.
 func (h *held) put(s string, asContent bool) string {
 	for {
@@ -390,9 +393,9 @@ func commandWordAt(s, name string, min int) ([]string, bool) {
 
 // outboundTextAt finds the first git commit or gh pr/issue text command: where
 // it starts, where its arguments start and how it reads its options.
-func outboundTextAt(s string) (start, args int, g grammar, ok bool) {
+func (h *held) outboundTextAt(s string) (start, args int, g grammar, ok bool) {
 	start = -1
-	if at, _, end, found := gitSub(s, "commit", 0); found {
+	if at, _, end, found := gitSub(s, "commit", 0, h.value); found {
 		start, args, g = at, end, gitCommitGrammar
 	}
 	if at, end, found := findGh(s, 0, ghPRText); found && (start < 0 || at < start) {
@@ -420,7 +423,7 @@ func outboundText(cmd string) string {
 		k, start, args := -1, 0, 0
 		var g grammar
 		for n, st := range stages {
-			if at, a, gr, ok := outboundTextAt(st); ok {
+			if at, a, gr, ok := h.outboundTextAt(st); ok {
 				k, start, args, g = n, at, a, gr
 				break
 			}
@@ -551,7 +554,7 @@ func (h *held) takeSent(feed []string, own string) ([]string, []string) {
 	sent := append([]string{}, feed...)
 	sent = append(sent, own)
 	for i := range sent {
-		sent[i] = removeSpans(sent[i], gitOptionSpans(sent[i]))
+		sent[i] = removeSpans(sent[i], h.gitOptionSpans(sent[i]))
 		var fs []string
 		if i < len(feed) {
 			sent[i], fs = h.takeFed(sent[i])
@@ -568,7 +571,7 @@ func (h *held) takeSent(feed []string, own string) ([]string, []string) {
 // (after any ( or { and NAME=value words): they say where and how git runs,
 // not what it sends.
 // A git written anywhere else in s is text and is left as it is.
-func gitOptionSpans(s string) []span {
+func (h *held) gitOptionSpans(s string) []span {
 	i := 0
 	for {
 		i = skipSpaces(s, i)
@@ -586,7 +589,7 @@ func gitOptionSpans(s string) []span {
 	if !strings.HasPrefix(s[i:], "git") || (i+3 < len(s) && !isSpace(s[i+3])) {
 		return nil
 	}
-	return gitGlobals(s, i+3)
+	return gitGlobals(s, i+3, h.value)
 }
 
 // cpOrMv returns the words after the first cp or mv that has two or more.

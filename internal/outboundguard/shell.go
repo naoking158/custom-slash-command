@@ -1,6 +1,7 @@
 package outboundguard
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -318,9 +319,10 @@ func pipeSep(afterGt bool) func(string, int) int {
 }
 
 // gitSub matches `git [global option]... SUB` with git not inside a longer
-// word and SUB not followed by a word byte or -. It returns where git starts,
-// the option text between them and where SUB ends.
-func gitSub(s, sub string, from int) (start int, opts string, end int, ok bool) {
+// word and SUB not followed by a word byte or -; val gives the value of a word
+// (its quotes removed). It returns where git starts, the option text between
+// them and where SUB ends.
+func gitSub(s, sub string, from int, val func(string) string) (start int, opts string, end int, ok bool) {
 	for i := from; ; i++ {
 		k := strings.Index(s[i:], "git")
 		if k < 0 {
@@ -331,17 +333,20 @@ func gitSub(s, sub string, from int) (start int, opts string, end int, ok bool) 
 			continue
 		}
 		ends := []int{i + 3}
-		for _, o := range gitGlobals(s, i+3) {
+		for _, o := range gitGlobals(s, i+3, val) {
 			ends = append(ends, o.end)
 		}
 		for n := len(ends) - 1; n >= 0; n-- {
-			q := skipSpaces(s, ends[n])
-			if q == ends[n] || !strings.HasPrefix(s[q:], sub) {
+			q, e, ok := wordAfter(s, ends[n])
+			if !ok || q == ends[n] {
 				continue
 			}
-			e := q + len(sub)
-			if e < len(s) && wordOrDash(s[e]) {
+			w := val(s[q:e])
+			if !strings.HasPrefix(w, sub) || (len(w) > len(sub) && wordOrDash(w[len(sub)])) {
 				continue
+			}
+			if w == s[q:e] {
+				e = q + len(sub)
 			}
 			return i, s[i+3 : ends[n]], e, true
 		}
@@ -350,22 +355,25 @@ func gitSub(s, sub string, from int) (start int, opts string, end int, ok bool) 
 
 // gitValued are git's global options that take the next word as their value
 // when they are not written --name=value.
-var gitValued = []string{"--git-dir", "--work-tree", "--namespace", "--config-env", "--attr-source"}
+var gitValued = []string{"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--attr-source"}
 
-// gitGlobals returns the options git is given from p, before its subcommand:
-// -C and -c with the next word, the gitValued ones with theirs, and any other
-// word that starts with - (--no-pager, -P, --bare ...).
-func gitGlobals(s string, p int) []span {
+// gitGlobals returns the options git is given from p, before its subcommand,
+// read by their value (val): the gitValued ones with the next word, and any
+// other word that starts with - (--no-pager, -P, --bare ...).
+func gitGlobals(s string, p int, val func(string) string) []span {
 	var out []span
 	for {
 		ws, e, ok := wordAfter(s, p)
-		if !ok || ws == p || s[ws] != '-' {
+		if !ok || ws == p {
 			return out
 		}
-		w := s[ws:e]
-		valued := w == "-C" || w == "-c"
-		for _, name := range gitValued {
-			valued = valued || w == name
+		w := val(s[ws:e])
+		if !strings.HasPrefix(w, "-") || w == "-" || w == "--" {
+			return out
+		}
+		valued := false
+		for _, v := range gitValued {
+			valued = valued || w == v
 		}
 		if valued {
 			vs, ve, ok := wordAfter(s, e)
@@ -376,19 +384,52 @@ func gitGlobals(s string, p int) []span {
 			p = ve
 			continue
 		}
-		if w == "-" || w == "--" {
-			return out
-		}
 		out = append(out, span{ws, e, e})
 		p = e
 	}
 }
 
-// gitElsewhere reports whether git's options point it at a repository or
-// work tree other than the directory it runs in.
-func gitElsewhere(opts string) bool {
-	for _, w := range fields(opts) {
-		if strings.HasPrefix(w, "--git-dir") || strings.HasPrefix(w, "--work-tree") {
+// gitEnvNames are the environment variables that may point git at another
+// repository, work tree or push target, or change the config it reads:
+// GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR, GIT_NAMESPACE, every GIT_CONFIG*
+// (GIT_CONFIG_KEY_n sets any key), and HOME and XDG_CONFIG_HOME, which choose
+// the global config.
+var (
+	gitEnvNames = `(GIT_DIR|GIT_WORK_TREE|GIT_COMMON_DIR|GIT_NAMESPACE|GIT_CONFIG[A-Za-z0-9_]*|HOME|XDG_CONFIG_HOME)`
+	// NAME=, NAME+=, NAME[i]= and ${NAME:=v} / ${NAME=v}, wherever they are.
+	gitEnvAssign = regexp.MustCompile(`(^|[^A-Za-z0-9_$])` + gitEnvNames + `(\+?=|\[)|\$\{` + gitEnvNames + `:?=`)
+	// NAME as an argument of a builtin that sets it, in the same command.
+	gitEnvSetter = regexp.MustCompile(`(^|[^A-Za-z0-9_-])(export|declare|typeset|readonly|local|read|printf[[:space:]]+-v)([[:space:]][^;&|\n]*[^A-Za-z0-9_${]|[[:space:]]|$)` + gitEnvNames + `([^A-Za-z0-9_]|$)`)
+	// printf -vNAME.
+	gitEnvPrintf = regexp.MustCompile(`(^|[^A-Za-z0-9_-])printf[[:space:]]+-v` + gitEnvNames + `([^A-Za-z0-9_]|$)`)
+	// for NAME in, where a command starts.
+	gitEnvFor = regexp.MustCompile(`(^|[;&|(){}\n!]|[;&|(){}\n!][[:space:]]*(then|do|else))[[:space:]]*for[[:space:]]+` + gitEnvNames + `([^A-Za-z0-9_]|$)`)
+)
+
+// setsGitEnv reports whether line, its quotes and backslashes removed, may
+// give a value to one of gitEnvNames: an assignment anywhere, a quoted message
+// included, NAME as an argument of export, declare, read, printf -v and the
+// like, or the variable of a for loop. A line that only reads one ($HOME,
+// ${HOME}) does not.
+func setsGitEnv(line string) bool {
+	for _, re := range []*regexp.Regexp{gitEnvAssign, gitEnvSetter, gitEnvPrintf, gitEnvFor} {
+		if re.MatchString(line) {
+			return true
+		}
+	}
+	return false
+}
+
+// gitSafeKey reports whether a config key given with -c or --config-env
+// leaves alone where git works and where and what it pushes. Any other key,
+// one written with a variable and include.path among them, may change them.
+func gitSafeKey(key string) bool {
+	key, _, _ = strings.Cut(strings.ToLower(key), "=")
+	if key == "core.pager" {
+		return true
+	}
+	for _, p := range []string{"credential.", "user.", "color.", "advice.", "http."} {
+		if strings.HasPrefix(key, p) && !strings.ContainsAny(key, "$`") {
 			return true
 		}
 	}
@@ -453,7 +494,7 @@ var (
 	ghPRText = [][2][]string{
 		{{"pr", "issue"}, {"create", "new", "comment", "edit", "review", "close", "reopen"}},
 		{{"pr"}, {"merge"}},
-		{{"release"}, {"create", "new", "edit"}},
+		{{"release"}, {"create", "new", "edit", "upload"}},
 		{{"gist"}, {"create", "new", "edit"}},
 	}
 	ghAPI       = [][2][]string{{{"api"}, nil}}
