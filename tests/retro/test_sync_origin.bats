@@ -121,7 +121,6 @@ head_of() { git -C "$TMP/co" rev-parse HEAD; }
 
 @test "sync: --fetch-only does not set a missing origin/HEAD" {
   git -C "$TMP/co" remote set-head origin --delete
-  git -C "$TMP/co" config remote.origin.followRemoteHEAD never
   run "$SYNC" --fetch-only "$TMP/co"
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "base: origin/trunk $NEW" ]

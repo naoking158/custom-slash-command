@@ -37,7 +37,9 @@ repo="$1"
 git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "$repo is not a Git checkout"
 git -C "$repo" remote get-url origin >/dev/null 2>&1 || fail "$repo has no origin remote"
 
-fetch_err="$(git -C "$repo" fetch --quiet origin 2>&1)"
+fetch_args=(fetch --quiet origin)
+[ "$fetch_only" -eq 0 ] || fetch_args=(-c remote.origin.followRemoteHEAD=never "${fetch_args[@]}")
+fetch_err="$(git -C "$repo" "${fetch_args[@]}" 2>&1)"
 fetched=$?
 
 default="$(git -C "$repo" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
