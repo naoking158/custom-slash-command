@@ -2,7 +2,7 @@
 # sync-origin.sh — Fetch the toolkit repo's origin and bring its checkout up to
 # date when that is safe, for /my:retro.
 #
-#   sync-origin.sh <toolkit_repo>
+#   sync-origin.sh [--fetch-only] <toolkit_repo>
 #
 # Fetches origin, then fast-forwards the checkout to origin/<default> only when
 # it is on the default branch, has no uncommitted changes to tracked files and
@@ -10,6 +10,9 @@
 # left as it is. The default branch is origin/HEAD, or what origin reports as
 # HEAD when that ref is missing (then origin/HEAD is set, so a later run
 # without network still knows it).
+#
+# --fetch-only fetches and nothing else: no fast-forward and no origin/HEAD.
+# A checkout it would have fast-forwarded is reported as `kept (fetch only)`.
 #
 # Prints two lines:
 #   base: origin/<default> <sha>      the ref and commit to judge signals on
@@ -27,12 +30,16 @@ fail() {
   exit 2
 }
 
-[ $# -eq 1 ] || fail "usage: sync-origin.sh <toolkit_repo>"
+fetch_only=0
+[ "${1:-}" = --fetch-only ] && { fetch_only=1; shift; }
+[ $# -eq 1 ] || fail "usage: sync-origin.sh [--fetch-only] <toolkit_repo>"
 repo="$1"
 git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "$repo is not a Git checkout"
 git -C "$repo" remote get-url origin >/dev/null 2>&1 || fail "$repo has no origin remote"
 
-fetch_err="$(git -C "$repo" fetch --quiet origin 2>&1)"
+fetch_args=(fetch --quiet origin)
+[ "$fetch_only" -eq 0 ] || fetch_args=(-c remote.origin.followRemoteHEAD=never "${fetch_args[@]}")
+fetch_err="$(git -C "$repo" "${fetch_args[@]}" 2>&1)"
 fetched=$?
 
 default="$(git -C "$repo" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
@@ -40,7 +47,7 @@ default="${default#origin/}"
 if [ -z "$default" ] && [ "$fetched" -eq 0 ]; then
   default="$(git -C "$repo" ls-remote --symref origin HEAD 2>/dev/null \
     | sed -n 's#^ref: refs/heads/\([^[:space:]]*\)[[:space:]]*HEAD$#\1#p')"
-  [ -z "$default" ] || git -C "$repo" remote set-head origin "$default" >/dev/null 2>&1
+  [ -z "$default" ] || [ "$fetch_only" -eq 1 ] || git -C "$repo" remote set-head origin "$default" >/dev/null 2>&1
 fi
 if [ -z "$default" ]; then
   [ "$fetched" -eq 0 ] || fail "fetch failed and origin/HEAD is unset: $(printf '%s' "$fetch_err" | head -n 1)"
@@ -66,6 +73,7 @@ checkout_state() {
     return
   fi
   [ "$fetched" -eq 0 ] || { echo "kept (fetch failed)"; return; }
+  [ "$fetch_only" -eq 0 ] || { echo "kept (fetch only)"; return; }
   if git -C "$repo" merge --ff-only --quiet "$base_sha" >/dev/null 2>&1; then
     echo "updated ${head:0:7}..${base_sha:0:7}"
   else

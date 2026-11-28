@@ -110,3 +110,20 @@ head_of() { git -C "$TMP/co" rev-parse HEAD; }
   [ "${lines[1]}" = "checkout: kept (fetch failed)" ]
   [ "$(head_of)" = "$OLD" ]
 }
+
+@test "sync: --fetch-only fetches but leaves a behind checkout where it is" {
+  run "$SYNC" --fetch-only "$TMP/co"
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "base: origin/trunk $NEW" ]
+  [ "${lines[1]}" = "checkout: kept (fetch only)" ]
+  [ "$(head_of)" = "$OLD" ]
+}
+
+@test "sync: --fetch-only does not set a missing origin/HEAD" {
+  git -C "$TMP/co" remote set-head origin --delete
+  run "$SYNC" --fetch-only "$TMP/co"
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "base: origin/trunk $NEW" ]
+  run ! git -C "$TMP/co" symbolic-ref --quiet refs/remotes/origin/HEAD
+  [ "$(head_of)" = "$OLD" ]
+}

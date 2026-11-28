@@ -91,3 +91,23 @@ real() { (cd "$1" && pwd -P); }
   [ "$status" -eq 1 ]
   [ -z "$output" ]
 }
+
+# step1 SHELL — the two lines of retro's Step 1, sourced from SHELL.
+step1() {
+  "$1" -c 'source "$1"; toolkit_repo="$(resolve_toolkit_repo)" || true; printf "repo=%s\n" "$toolkit_repo"' "$1" "$TOOLKIT_LIB"
+}
+
+@test "resolve: sourced from bash, Step 1 sets the repo and the shell goes on" {
+  export CLAUDE_SKILL_DIR="$FAKE_REPO/skills/retro"
+  run step1 bash
+  [ "$status" -eq 0 ]
+  [ "$output" = "repo=$(real "$FAKE_REPO")" ]
+}
+
+@test "resolve: sourced from zsh, Step 1 sets the repo and the shell goes on" {
+  command -v zsh >/dev/null || skip "zsh is not installed"
+  export CLAUDE_SKILL_DIR="$FAKE_REPO/skills/retro"
+  run step1 zsh
+  [ "$status" -eq 0 ]
+  [ "$output" = "repo=$(real "$FAKE_REPO")" ]
+}
