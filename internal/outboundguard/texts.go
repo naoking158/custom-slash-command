@@ -458,10 +458,17 @@ func outboundText(cmd string) string {
 			if g.args == argsFiles && len(args) == 0 {
 				stdin = true
 			}
-			for _, i := range args {
+			for n, i := range args {
 				cut = append(cut, span{words[i].start, words[i].end, 0})
-				if g.args == argsFiles {
-					readFile(words[i].text)
+				switch v := words[i].text; {
+				case g.args == argsFiles, g.args == argsGist && n > 0:
+					readFile(v)
+				case g.args == argsAssets && n > 0:
+					if _, label, ok := strings.Cut(v, "#"); ok {
+						out = append(out, label)
+					}
+				default:
+					out = append(out, v)
 				}
 			}
 		}

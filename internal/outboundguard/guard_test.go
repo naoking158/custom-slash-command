@@ -652,6 +652,10 @@ var guardTests = []struct {
 			`gh gist create -d "fix H001" clean.txt`,
 			`gh gist edit abc -a m.txt`,
 			`gh gist create < m.txt`,
+			`gh gist edit abc m.txt`,
+			`gh gist edit abc - < m.txt`,
+			`gh release new v1 --notes "fix H001"`,
+			`gh release create v1 './app.tgz#fix H001'`,
 			`gh pr comment 3 -b x --attach './a.png#see H001'`,
 		} {
 			f.guard(c).deny()

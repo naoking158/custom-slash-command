@@ -20,9 +20,10 @@ type grammar struct {
 type argUse int
 
 const (
-	argsText  argUse = iota // they are part of what it sends
-	argsFiles               // they are files it sends as text
-	argsOther               // they are not text (a tag, files uploaded as assets)
+	argsText   argUse = iota // they are part of what it sends
+	argsFiles                // they are files it sends as text; none: standard input
+	argsGist                 // a gist, then the file that replaces its content
+	argsAssets               // a tag, then files uploaded as they are (FILE#LABEL)
 )
 
 var (
@@ -47,10 +48,10 @@ var (
 		"pr reopen":      {value: "cR", shortEq: true, long: ghLong("comment")},
 		"issue close":    {value: "crR", shortEq: true, long: ghLong("comment", "duplicate-of", "reason")},
 		"issue reopen":   {value: "cR", shortEq: true, long: ghLong("comment")},
-		"release create": {value: "nFtR", shortEq: true, files: []string{"F", "notes-file"}, args: argsOther, long: ghLong("discussion-category", "notes", "notes-file", "notes-start-tag", "target", "title")},
-		"release edit":   {value: "nFtR", shortEq: true, files: []string{"F", "notes-file"}, args: argsOther, long: ghLong("discussion-category", "notes", "notes-file", "tag", "target", "title")},
+		"release create": {value: "nFtR", shortEq: true, files: []string{"F", "notes-file"}, args: argsAssets, long: ghLong("discussion-category", "notes", "notes-file", "notes-start-tag", "target", "title")},
+		"release edit":   {value: "nFtR", shortEq: true, files: []string{"F", "notes-file"}, args: argsAssets, long: ghLong("discussion-category", "notes", "notes-file", "tag", "target", "title")},
 		"gist create":    {value: "df", shortEq: true, args: argsFiles, long: []string{"desc", "filename"}},
-		"gist edit":      {value: "adfr", shortEq: true, files: []string{"a", "add"}, long: []string{"add", "desc", "filename", "remove"}},
+		"gist edit":      {value: "adfr", shortEq: true, files: []string{"a", "add"}, args: argsGist, long: []string{"add", "desc", "filename", "remove"}},
 	}
 )
 
