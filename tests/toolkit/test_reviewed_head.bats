@@ -53,6 +53,20 @@ report() {
   run -1 bash "$REVIEWED_HEAD" "$REPO" "$REVIEWS" 7 "$REVIEWED"
 }
 
+@test "a later review that needs revision outweighs an earlier pass of the same head" {
+  report "7-${REVIEWED:0:7}" PASS
+  report "7-${REVIEWED:0:7}-2" NEEDS_REVISION
+  run -1 bash "$REVIEWED_HEAD" "$REPO" "$REVIEWS" 7 "$REVIEWED"
+}
+
+@test "a perspective review neither covers nor blocks the head" {
+  report "7-${REVIEWED:0:7}--security" PASS
+  run -1 bash "$REVIEWED_HEAD" "$REPO" "$REVIEWS" 7 "$REVIEWED"
+  report "7-${REVIEWED:0:7}" PASS
+  report "7-${REVIEWED:0:7}-2--security" NEEDS_REVISION
+  run -0 bash "$REVIEWED_HEAD" "$REPO" "$REVIEWS" 7 "$REVIEWED"
+}
+
 @test "a verdict written as an Assessment line is read too" {
   printf '## Summary\n\n**Assessment**: PASS\n\n- PASS: proceed\n' >"$REVIEWS/prs/7-${REVIEWED:0:7}.md"
   run -0 bash "$REVIEWED_HEAD" "$REPO" "$REVIEWS" 7 "$REVIEWED"
@@ -76,6 +90,21 @@ report() {
   run -1 bash "$REVIEWED_HEAD" "$REPO" "$REVIEWS" 7 "$fix"
 }
 
+@test "a delta review that starts at its own head ends" {
+  report "7-${REVIEWED:0:7}..${REVIEWED:0:7}" PASS
+  run -1 bash "$REVIEWED_HEAD" "$REPO" "$REVIEWS" 7 "$REVIEWED"
+}
+
+@test "a delta review from a commit that is not an ancestor does not cover" {
+  git -C "$REPO" switch -q main
+  commit_file side.txt elsewhere
+  side="$(git -C "$REPO" rev-parse HEAD)"
+  report "7-${side:0:7}" PASS
+  git -C "$REPO" switch -q pr
+  report "7-${side:0:7}..${REVIEWED:0:7}" PASS
+  run -1 bash "$REVIEWED_HEAD" "$REPO" "$REVIEWS" 7 "$REVIEWED"
+}
+
 @test "a merge of the default branch that shares no file is covered only when asked" {
   report "7-${REVIEWED:0:7}" PASS
   git -C "$REPO" switch -q main
@@ -85,6 +114,32 @@ report() {
   run -1 bash "$REVIEWED_HEAD" "$REPO" "$REVIEWS" 7 HEAD
   run -0 bash "$REVIEWED_HEAD" "$REPO" "$REVIEWS" 7 HEAD main
   [[ "$output" == "$REVIEWS/prs/7-${REVIEWED:0:7}.md (then a merge of main sharing no file"* ]]
+}
+
+@test "a clean merge that touches a file the PR changes is not covered" {
+  printf '1\n2\n3\n4\n5\n6\n' >"$REPO/shared.txt"
+  git -C "$REPO" add shared.txt
+  git -C "$REPO" commit -q -m shared
+  git -C "$REPO" switch -q main
+  git -C "$REPO" merge -q --no-edit pr
+  printf '1-main\n2\n3\n4\n5\n6\n' >"$REPO/shared.txt"
+  git -C "$REPO" commit -q -am main-edit
+  git -C "$REPO" switch -q pr
+  printf '1\n2\n3\n4\n5\n6-pr\n' >"$REPO/shared.txt"
+  git -C "$REPO" commit -q -am pr-edit
+  head="$(git -C "$REPO" rev-parse HEAD)"
+  report "7-${head:0:7}" PASS
+  git -C "$REPO" merge -q --no-edit main
+  run -1 bash "$REVIEWED_HEAD" "$REPO" "$REVIEWS" 7 HEAD main
+}
+
+@test "a merge of a branch other than the default one is not covered" {
+  report "7-${REVIEWED:0:7}" PASS
+  git -C "$REPO" switch -q -c other main
+  commit_file other.txt elsewhere
+  git -C "$REPO" switch -q pr
+  git -C "$REPO" merge -q --no-edit other
+  run -1 bash "$REVIEWED_HEAD" "$REPO" "$REVIEWS" 7 HEAD main
 }
 
 @test "a merge commit with a change made by hand is not covered" {

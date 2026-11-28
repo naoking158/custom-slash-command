@@ -5,7 +5,7 @@
 #
 # <reviews-dir> is where `my:review --report-dir` wrote, and the report names
 # are the ones skills/review/scripts/report-path.sh gives. <sha> is covered
-# when one of these holds:
+# when no review that read <sha> says NEEDS_REVISION and one of these holds:
 #   - a PASS report of a full review of <sha>: prs/<pr>-<sha7>[-<k>].md
 #   - a PASS report of a delta review that ends at <sha>,
 #     prs/<pr>-<since7>..<sha7>[-<k>].md, where <since> is an ancestor of
@@ -49,25 +49,41 @@ passed() {
   case "$verdicts" in *NEEDS_REVISION*) return 1 ;; esac
 }
 
+# reports_of <sha7> — the full and delta reviews of PR <pr> that read <sha7>,
+# perspective reviews left out.
+reports_of() {
+  local f
+  for f in "$dir/$pr-$1.md" "$dir/$pr-$1"-[0-9]*.md \
+    "$dir/$pr"-???????.."$1".md "$dir/$pr"-???????.."$1"-[0-9]*.md; do
+    [ -f "$f" ] || continue
+    case "${f##*/}" in *--*) continue ;; esac
+    echo "$f"
+  done
+}
+
 # covered <full sha> — print the report that covers it.
 covered() {
-  local sha="$1" s7="${1:0:7}" f since parents p1 p2 report shared
-  for f in "$dir/$pr-$s7.md" "$dir/$pr-$s7"-[0-9]*.md; do
-    if passed "$f"; then
-      echo "$f"
-      return 0
-    fi
-  done
-  for f in "$dir/$pr"-???????.."$s7".md "$dir/$pr"-???????.."$s7"-[0-9]*.md; do
-    passed "$f" || continue
+  local sha="$1" s7="${1:0:7}" f since parents p1 p2 report shared reports
+  reports="$(reports_of "$s7")"
+  while IFS= read -r f; do
+    [ -z "$f" ] || passed "$f" || return 1
+  done <<<"$reports"
+  while IFS= read -r f; do
+    case "$f" in */"$pr-$s7".md | */"$pr-$s7"-[0-9]*.md) ;; *) continue ;; esac
+    echo "$f"
+    return 0
+  done <<<"$reports"
+  while IFS= read -r f; do
+    case "${f##*/}" in *..*) ;; *) continue ;; esac
     since="${f##*/}"
     since="${since#"$pr"-}"
     since="$(commit "${since%%..*}")" || continue
+    [ "$since" != "$sha" ] || continue
     git -C "$repo" merge-base --is-ancestor "$since" "$sha" || continue
     covered "$since" >/dev/null || continue
     echo "$f"
     return 0
-  done
+  done <<<"$reports"
   [ -n "$default_ref" ] || return 1
   read -r _ p1 p2 parents <<<"$(git -C "$repo" rev-list --parents -n 1 "$sha")"
   [ -n "${p2:-}" ] && [ -z "${parents:-}" ] || return 1
