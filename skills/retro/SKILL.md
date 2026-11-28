@@ -50,9 +50,13 @@ proposes fixes that are already merged.
 "${CLAUDE_SKILL_DIR}/scripts/sync-origin.sh" "{toolkit_repo}"
 ```
 
+Under `--dry-run`, pass `--fetch-only` before `"{toolkit_repo}"`.
+
 It fetches origin and fast-forwards the checkout only when it is on the
 default branch, has no uncommitted changes to tracked files and has no
-commits of its own; any other checkout is left as it is. It prints:
+commits of its own; any other checkout is left as it is. With
+`--fetch-only` it only fetches: the checkout and origin/HEAD stay as they
+are. It prints:
 
 - `base: origin/<default> <sha>`: call this ref `{base}`. From here on,
   read toolkit files at `{base}` (`git -C {toolkit_repo} show {base}:<path>`),
@@ -273,8 +277,8 @@ heading, pasting the script's output lines as they are:
 
 - **Approval-gated writes.** No repo file changes before Step 5 approval.
   The only changes to the checkout are Step 1b's fetch, fast-forward and,
-  when origin/HEAD was missing, `git remote set-head`. Step 1b runs also
-  under `--dry-run`; `--dry-run` writes nothing else, including bookkeeping.
+  when origin/HEAD was missing, `git remote set-head`. Under `--dry-run`,
+  Step 1b only fetches and nothing else is written, including bookkeeping.
 - **Edits go through pull requests.** Approved edits are made on a branch
   in a worktree from `{base}`, never in the `{toolkit_repo}` checkout.
 - **Never derive `{toolkit_repo}` from `$PWD`.** Resolution failure aborts.
