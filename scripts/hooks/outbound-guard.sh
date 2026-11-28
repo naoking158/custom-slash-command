@@ -34,10 +34,12 @@
 # runs in: the session cwd, moved by the `cd`s before the command (with the
 # NAME=value assignments made earlier on the line expanded) and by its own
 # `git -C`. A git that the line may point at another repository, work tree or
-# push target (--git-dir, --work-tree, a -c / --config-env core.worktree,
-# remote.*, branch.*, push.* or url.* key, a GIT_DIR / GIT_WORK_TREE /
-# GIT_COMMON_DIR / GIT_CONFIG* assignment on the line) runs in a directory the
-# line does not show. A push or PR command whose directory or arguments the line does not
+# push target runs in a directory the line does not show: --git-dir,
+# --work-tree, --namespace, env -C, a -c / --config-env key other than
+# credential.*, user.*, color.*, advice.*, http.* and core.pager, or a value
+# given on the line to GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR, GIT_NAMESPACE,
+# GIT_CONFIG*, HOME or XDG_CONFIG_HOME.
+# A push or PR command whose directory or arguments the line does not
 # show (`cd "$(mktemp -d)"`, a refspec from a command substitution) is denied
 # with the way to rewrite it: judging it in the session cwd would apply another
 # repository's rules. A `case` statement makes the rest of its line such a
