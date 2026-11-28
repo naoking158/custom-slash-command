@@ -1,6 +1,9 @@
 package outboundguard
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // held keeps the quoted strings and heredoc bodies of a line set aside: whole
 // is the text as written (quotes included), content what it stands for, and
@@ -533,35 +536,42 @@ func apiCalls(cmd string) ([]apiCall, []string) {
 					break
 				}
 				from = end
-				calls = append(calls, apiCallAt(stages[:k], st[:start], st[start:], h))
+				calls = append(calls, apiCallAt(stages[:k], st[:start], st[start:], end-start, h))
 			}
 		}
 	}
 	return calls, writtenFiles(segs, h)
 }
 
-func apiCallAt(feed []string, before, gh string, h *held) apiCall {
-	if !apiWrites1(gh, h) {
+func apiCallAt(feed []string, before, gh string, args int, h *held) apiCall {
+	words := lineWords(gh, args, h)
+	opts := ghAPIGrammar.options(words)
+	if !apiWrites(opts) {
 		return apiCall{}
 	}
 	c := apiCall{writes: true}
 	stdin := false
-	for _, m := range findAll(gh, optionAt([]string{"--input"}, true)) {
-		f := h.put(gh[m.wordStart:m.end], true)
+	var cut []span
+	var attached []string
+	for _, o := range opts {
+		if !o.hasValue {
+			continue
+		}
+		if o.attached {
+			attached = append(attached, o.value)
+		}
+		f := o.value
+		if !o.is("input") {
+			var ok bool
+			if f, ok = fieldFile(o.value); !ok || !o.is("F", "field") {
+				continue
+			}
+		}
+		cut = append(cut, span{words[o.first].start, words[o.last].end, 0})
 		if f == "-" {
 			stdin = true
 		} else {
 			c.files = append(c.files, f)
-		}
-	}
-	for _, m := range findAll(gh, optionAt([]string{"--field", "-F"}, false)) {
-		v := h.put(gh[m.wordStart:m.end], true)
-		if f, ok := fieldFile(v); ok {
-			if f == "-" {
-				stdin = true
-			} else {
-				c.files = append(c.files, f)
-			}
 		}
 	}
 	if stdin {
@@ -570,74 +580,34 @@ func apiCallAt(feed []string, before, gh string, h *held) apiCall {
 		for _, m := range in {
 			c.files = append(c.files, h.put(gh[m.wordStart:m.end], true))
 		}
-		gh = removeSpans(gh, in)
+		cut = append(cut, in...)
+		sort.Slice(cut, func(a, b int) bool { return cut[a].start < cut[b].start })
 	}
-	gh = removeSpans(gh, findAll(gh, optionAt([]string{"--input"}, true)))
-	var sent []span
-	for _, m := range findAll(gh, optionAt([]string{"--field", "-F"}, false)) {
-		v := h.put(gh[m.wordStart:m.end], true)
-		if eq := strings.IndexByte(v, '='); eq >= 0 && eq+1 < len(v) && v[eq+1] == '@' {
-			sent = append(sent, m)
-		}
-	}
-	gh = removeSpans(gh, sent)
-	stages, read := h.takeSent(feed, gh)
+	stages, read := h.takeSent(feed, removeSpans(gh, cut))
 	c.files = append(c.files, read...)
-	c.text = h.put(dropWrites(stages), false)
+	c.text = strings.Join(append([]string{h.put(dropWrites(stages), false)}, attached...), "\n")
 	return c
 }
 
-// apiWrites1: a --method / -X other than GET or HEAD, or, without one, any
-// --input / --field / --raw-field / -f / -F.
-func apiWrites1(gh string, h *held) bool {
-	if m := findAll(gh, optionAt([]string{"--method", "-X"}, false)); len(m) > 0 {
-		v := strings.TrimSuffix(h.put(gh[m[0].wordStart:m[0].end], true), "\n")
-		return !strings.EqualFold(v, "GET") && !strings.EqualFold(v, "HEAD")
-	}
-	for i := 0; i < len(gh); i++ {
-		if prevIs(gh, i, notSpace) {
-			continue
+// apiWrites: the last --method / -X is not GET or HEAD, or, without one, an
+// --input / --field / --raw-field / -f / -F is given.
+func apiWrites(opts []option) bool {
+	method, given := "", false
+	for _, o := range opts {
+		if o.is("X", "method") && o.hasValue {
+			method, given = o.value, true
 		}
-		for _, o := range []string{"--input", "--field", "--raw-field", "-f", "-F"} {
-			if strings.HasPrefix(gh[i:], o) {
-				return true
-			}
+	}
+	if given {
+		method = strings.TrimSuffix(method, "\n")
+		return !strings.EqualFold(method, "GET") && !strings.EqualFold(method, "HEAD")
+	}
+	for _, o := range opts {
+		if o.is("input", "field", "raw-field", "f", "F") {
+			return true
 		}
 	}
 	return false
-}
-
-// optionAt matches an option at the start of a word followed by its value:
-// with sepRequired, after whitespace or =; otherwise also directly.
-func optionAt(names []string, sepRequired bool) func(string, int) (span, bool) {
-	return func(s string, i int) (span, bool) {
-		if prevIs(s, i, notSpace) {
-			return span{}, false
-		}
-		for _, name := range names {
-			if !strings.HasPrefix(s[i:], name) {
-				continue
-			}
-			p := i + len(name)
-			if q := skipSpaces(s, p); q > p {
-				if e := wordEnd(s, q); e > q {
-					return span{i, e, q}, true
-				}
-			}
-			if p < len(s) && s[p] == '=' {
-				if e := wordEnd(s, p+1); e > p+1 {
-					return span{i, e, p + 1}, true
-				}
-			}
-			if !sepRequired {
-				if e := wordEnd(s, p); e > p {
-					return span{i, e, p}, true
-				}
-			}
-			return span{}, false
-		}
-		return span{}, false
-	}
 }
 
 // fieldFile returns FILE for a field value key=@FILE.

@@ -788,6 +788,16 @@ var guardTests = []struct {
 		f.guard(`gh api repos/o/r/pulls/1/comments`).allow()
 		f.guard(`gh api --paginate repos/o/r/pulls/1/comments --jq '.[] | select(.body | test("H001"))'`).allow()
 	}},
+	{"api: fields bundled after a boolean short option are checked", func(f *fx) {
+		f.write("body.md", "fixed H001\n")
+		f.guard("gh api repos/o/r/issues/1/comments -iF body=@" + f.tmp + "/body.md").deny()
+		f.guard("gh api repos/o/r/issues/1/comments -iFbody=@" + f.tmp + "/body.md").deny()
+		f.guard(`gh api repos/o/r/issues/1/comments -iFbody=H001`).deny()
+		f.guard(`gh api repos/o/r/issues/1/comments -if body=H001`).deny()
+		f.guard(`gh api -X GET -XPOST repos/o/r/issues/1/comments -f body=H001`).deny()
+		f.write("clean.md", "fixed in abc123\n")
+		f.guard("gh api repos/o/r/issues/1/comments -iF body=@" + f.tmp + "/clean.md").allow()
+	}},
 	{"api: GET with query fields is not a write", func(f *fx) {
 		f.guard(`gh api -X GET search/issues -f q="repo:o/r H001"`).allow()
 	}},

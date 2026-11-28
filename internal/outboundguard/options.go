@@ -18,6 +18,8 @@ var (
 	gitCommitGrammar = grammar{value: "FmcCtU", attached: "Su", prefixes: true,
 		long: []string{"file", "message", "reedit-message", "reuse-message", "template", "fixup", "squash",
 			"author", "date", "cleanup", "trailer", "pathspec-from-file", "unified"}}
+	ghAPIGrammar = grammar{value: "FfHXpqt", shortEq: true,
+		long: []string{"field", "raw-field", "header", "method", "preview", "jq", "template", "input", "hostname", "cache"}}
 	ghGrammars = map[string]grammar{
 		"pr create":     {value: "aBbFHlmprTtR", shortEq: true, long: ghLong("assignee", "attach", "base", "body", "body-file", "head", "label", "milestone", "project", "recover", "reviewer", "template", "title")},
 		"pr comment":    {value: "bFR", shortEq: true, long: ghLong("attach", "body", "body-file")},
