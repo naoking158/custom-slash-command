@@ -22,7 +22,7 @@ a pull request from a branch of its own, never into the checkout.
 |-----|---------|-------|
 | `--since <Nd\|YYYY-MM-DD>` | `30d` | Lower bound for journal entries and corrections. Invalid → exit with `usage: --since <Nd|YYYY-MM-DD>`. |
 | `--deep` | off | Additionally scan recent session transcripts (from `sessions.jsonl`) for repeated corrections the hook regex missed. Slower; use before the ~30-day transcript expiry. |
-| `--dry-run` | off | Report candidates only; skip the proposal/apply phase. |
+| `--dry-run` | off | Report candidates only; skip the proposal/apply phase. Step 1b only fetches: the checkout and origin/HEAD stay as they are. |
 
 ## Step 1 — Resolve the toolkit repo (abort if unresolved)
 
