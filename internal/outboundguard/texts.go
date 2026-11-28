@@ -37,8 +37,8 @@ func holdLine(cmd string) (string, *held) {
 	return strings.ReplaceAll(s, "\\\n", " "), h
 }
 
-// value is the value of a word: its quotes removed.
-func (h *held) value(w string) string { return h.put(w, true) }
+// value is the value of a word: its quotes and backslashes removed.
+func (h *held) value(w string) string { return strings.ReplaceAll(h.put(w, true), "\\", "") }
 
 // put replaces markers with what they hold until none is left.
 func (h *held) put(s string, asContent bool) string {
