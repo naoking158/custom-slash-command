@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -490,22 +491,35 @@ func plainExpr(e ast.Expr, s scope) string {
 
 // fixturePath reports whether e is one string literal holding a relative
 // path, or f.tmp or f.repo followed by one literal starting with "/", with
-// no ".." in the literal. f.repo is the read-only template until the case
-// calls f.own, so a write there fails rather than reaching another case.
+// no ".." in the literal's value. f.repo is the read-only template until the
+// case calls f.own, so a write there fails rather than reaching another case.
 func fixturePath(e ast.Expr) bool {
 	switch e := e.(type) {
 	case *ast.BasicLit:
-		return e.Kind == token.STRING && !strings.Contains(e.Value, "..") && !strings.HasPrefix(e.Value[1:], "/")
+		v, ok := literal(e)
+		return ok && !strings.HasPrefix(v, "/")
 	case *ast.BinaryExpr:
 		lit, ok := e.Y.(*ast.BasicLit)
-		if e.Op != token.ADD || !ok || lit.Kind != token.STRING || strings.Contains(lit.Value, "..") ||
-			!strings.HasPrefix(lit.Value[1:], "/") {
+		if e.Op != token.ADD || !ok {
+			return false
+		}
+		v, ok := literal(lit)
+		if !ok || !strings.HasPrefix(v, "/") {
 			return false
 		}
 		sel, ok := e.X.(*ast.SelectorExpr)
 		return ok && isIdent(sel.X, "f") && (sel.Sel.Name == "tmp" || sel.Sel.Name == "repo")
 	}
 	return false
+}
+
+// literal returns the value of a string literal with no ".." in it.
+func literal(lit *ast.BasicLit) (string, bool) {
+	if lit.Kind != token.STRING {
+		return "", false
+	}
+	v, err := strconv.Unquote(lit.Value)
+	return v, err == nil && !strings.Contains(v, "..")
 }
 
 func isPackage(name string) bool {

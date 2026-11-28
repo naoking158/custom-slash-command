@@ -121,7 +121,8 @@ append_case() {
 
   local body
   for body in 'f.write("/tmp/elsewhere.txt", "x")' 'f.write(f.tmp+"/."+"./x", "x")' \
-    'f.write(f.wt+"/tmp/elsewhere.txt", "x")' 'f.newRepo("../r", "u")'; do
+    'f.write(f.wt+"/tmp/elsewhere.txt", "x")' 'f.newRepo("../r", "u")' \
+    'f.write("\x2e\x2e/x", "x")' 'f.write("\x2ftmp/elsewhere.txt", "x")'; do
     git reset -q --hard "$BASE"
     append_case "writes outside" "$body"
     commit_head

@@ -56,7 +56,9 @@
 # What it does not stop: a change that loosens the guard for an input no
 # case covers; and code written to deceive the tests, such as code that
 # behaves differently when Env holds the fixture's values or after some
-# time, or that ends the test binary early. The exception catches a mistake
+# time, or that ends the test binary early; or an added case that writes a
+# git config into its fixture (core.fsmonitor) so the guard's own git calls
+# run a command during the tests. The exception catches a mistake
 # in a fix, not an agent set on cheating; a person sees such code only by
 # reading the diff.
 #
