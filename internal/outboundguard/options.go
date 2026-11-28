@@ -18,6 +18,8 @@ var (
 	gitCommitGrammar = grammar{value: "FmcCtU", attached: "Su", prefixes: true,
 		long: []string{"file", "message", "reedit-message", "reuse-message", "template", "fixup", "squash",
 			"author", "date", "cleanup", "trailer", "pathspec-from-file", "unified"}}
+	gitPushGrammar = grammar{value: "o", prefixes: true,
+		long: []string{"push-option", "repo", "receive-pack", "exec"}}
 	ghAPIGrammar = grammar{value: "FfHXpqt", shortEq: true,
 		long: []string{"field", "raw-field", "header", "method", "preview", "jq", "template", "input", "hostname", "cache"}}
 	ghGrammars = map[string]grammar{

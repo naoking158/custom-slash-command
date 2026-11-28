@@ -399,22 +399,51 @@ func (g *guard) autonomyMode(slug string) string {
 	return "strict"
 }
 
+// pushRefused reports whether a git push long option, possibly abbreviated as
+// git allows, forces, deletes or pushes more than one branch.
+func pushRefused(name string) bool {
+	for _, o := range []string{"force", "force-with-lease", "force-if-includes", "mirror", "all", "delete", "prune"} {
+		if strings.HasPrefix(o, name) {
+			return true
+		}
+	}
+	return false
+}
+
 // judgePush denies force pushes and pushes to the default branch.
 func (g *guard) judgePush(dir, args string) {
 	unknownDir := "git push を実行する directory を判定できない。cd <絶対パス> で始めるか git -C <絶対パス> push と書く"
 	var positional, dests []string
 	tags := false
-	for _, tok := range fieldsIFS(args) {
+	toks := fieldsIFS(args)
+	words := make([]word, len(toks))
+	for i, t := range toks {
+		if t == "?" {
+			decide("deny", "git push の引数を判定できない。remote と branch を直接書く")
+		}
+		words[i] = word{text: t}
+	}
+	inOption := make([]bool, len(toks))
+	for _, o := range gitPushGrammar.options(words) {
+		for i := o.first; i <= o.last; i++ {
+			inOption[i] = true
+		}
+		tok := words[o.first].text
 		switch {
-		case tok == "-f" || tok == "--force" || tok == "--force-with-lease" || strings.HasPrefix(tok, "--force-with-lease=") ||
-			tok == "--force-if-includes" || tok == "--mirror" || tok == "--all" || tok == "--delete" || tok == "-d" || tok == "--prune":
+		case !o.long && (o.name == "f" || o.name == "d"), o.long && o.name != "" && pushRefused(o.name):
 			decide("deny", "git push "+tok+" は使わない（取り消せない、または既定の branch に及ぶ）")
-		case tok == "--tags":
+		case o.long && o.name != "" && strings.HasPrefix("tags", o.name):
 			tags = true
 			g.pendingAsk = "tag の push は deploy を起こしうる"
-		case tok == "?":
-			decide("deny", "git push の引数を判定できない。remote と branch を直接書く")
-		case strings.HasPrefix(tok, "-"):
+		}
+	}
+	afterDashes := false
+	for i, tok := range toks {
+		switch {
+		case inOption[i]:
+		case tok == "--" && !afterDashes:
+			afterDashes = true
+		case strings.HasPrefix(tok, "-") && !afterDashes:
 		case strings.HasPrefix(tok, "+"):
 			decide("deny", "+ 付きの refspec は force-push になる")
 		default:

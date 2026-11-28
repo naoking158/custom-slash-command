@@ -328,6 +328,23 @@ var guardTests = []struct {
 	{"force push is denied", func(f *fx) {
 		f.guard(`git push --force-with-lease origin feature/x`).deny()
 	}},
+	{"force and delete bundled with other short options or abbreviated are denied", func(f *fx) {
+		for _, c := range []string{
+			`git push -uf origin feature/x`,
+			`git push -qd origin feature/x`,
+			`git push --del origin feature/x`,
+			`git push --forc origin feature/x`,
+			`git push --mir origin`,
+		} {
+			f.guard(c).deny()
+		}
+		f.guard(`git push -u origin feature/x`).allow()
+	}},
+	{"a push option value is not taken for the remote", func(f *fx) {
+		f.own()
+		f.git("-C", f.repo, "checkout", "-q", "main")
+		f.guard(`git push -o ci.skip origin`).deny()
+	}},
 	{"plus refspec is denied", func(f *fx) {
 		f.guard(`git push origin +feature/x`).deny()
 	}},
