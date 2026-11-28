@@ -61,7 +61,9 @@ commits of its own; any other checkout is left as it is. It prints:
 - `checkout: updated <old>..<new> | current | kept (<reason>)`: put this
   line in the Step 8 report. When it says `updated` and
   `git -C {toolkit_repo} diff --name-only <old>..<new>` lists
-  `skills/retro/`, read this SKILL.md again before going on.
+  `skills/retro/`, read this SKILL.md again before going on; when it lists
+  `hooks/` or `scripts/hooks/`, tell the user to run `/reload-plugins`
+  (this session still runs the old hook definitions).
 
 Exit status:
 
@@ -270,9 +272,9 @@ heading, pasting the script's output lines as they are:
 ## Critical rules
 
 - **Approval-gated writes.** No repo file changes before Step 5 approval.
-  The only change to the checkout is Step 1b's fetch and fast-forward,
-  which runs also under `--dry-run`; `--dry-run` writes nothing else,
-  including bookkeeping.
+  The only changes to the checkout are Step 1b's fetch, fast-forward and,
+  when origin/HEAD was missing, `git remote set-head`. Step 1b runs also
+  under `--dry-run`; `--dry-run` writes nothing else, including bookkeeping.
 - **Edits go through pull requests.** Approved edits are made on a branch
   in a worktree from `{base}`, never in the `{toolkit_repo}` checkout.
 - **Never derive `{toolkit_repo}` from `$PWD`.** Resolution failure aborts.
