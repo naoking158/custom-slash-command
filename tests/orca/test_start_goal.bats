@@ -415,7 +415,7 @@ idle_screen() {
   run_start_goal --name g1 "$REPO" "$GOAL"
   [ "$status" -eq 3 ]
   [ "$(last_line)" = "[start-goal] exit=3 $TMP/wt/g1" ]
-  [[ "$stderr" == *"orca terminal send --terminal term_fake --enter --wait-submit 20 --text "* ]]
+  [[ "$stderr" == *"orca terminal send --terminal term_fake --enter --wait-submit $(arg_of send --wait-submit) --text "* ]]
   orca() { while [ "$1" != --text ]; do shift; done; printf '%s' "$2"; }
   [ "$(eval "${stderr#*send the prompt by hand with: }")" = "/my:autopilot $GOAL" ]
   [ "$(grep -c '^terminal send' "$TMP/calls")" -eq 1 ]

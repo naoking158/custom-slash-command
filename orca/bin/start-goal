@@ -224,12 +224,13 @@ stuck() {
   printf 'start-goal: the session is %s in %s; check it with: orca terminal read --terminal %s --screen\n' \
     "$handle" "$WT" "$handle" >&2
   local sq="'"
-  printf 'start-goal: once the screen shows no turn, send the prompt by hand with: orca terminal send --terminal %s --enter --wait-submit 20 --text %s\n' \
-    "$handle" "$sq${prompt//$sq/$sq\\$sq$sq}$sq" >&2
+  printf 'start-goal: once the screen shows no turn, send the prompt by hand with: orca terminal send --terminal %s --enter --wait-submit %s --text %s\n' \
+    "$handle" "$wait_submit" "$sq${prompt//$sq/$sq\\$sq$sq}$sq" >&2
   finish 3
 }
 
 prompt="/my:autopilot $goal"
+wait_submit=30
 launched="$(orca agent launch --agent "$harness" --worktree "path:$WT" --model "$model" \
   --surface terminal --prompt "$prompt" --json 2>/dev/null)"
 handle="$(printf '%s' "$launched" | jq -r 'select(.ok == true) | .result.outcome.handle // empty' 2>/dev/null)"
@@ -251,7 +252,7 @@ done
   || stuck "the agent did not report to Orca within two minutes, so the turn could not be checked; the launch prompt may still arrive, and nothing was resent"
 resendable && sleep 5 && resendable \
   || stuck "the prompt started no turn, and the agent's input box was not seen empty of it; nothing was resent"
-sent="$(orca terminal send --terminal "$handle" --enter --wait-submit 30 --text "$prompt" --json 2>/dev/null)"
+sent="$(orca terminal send --terminal "$handle" --enter --wait-submit "$wait_submit" --text "$prompt" --json 2>/dev/null)"
 if printf '%s' "$sent" | jq -e '.result.send.prompt.stages | index("turn_started")' >/dev/null 2>&1 \
   || [ "$(turn_state)" = started ]; then
   printf 'start-goal: the prompt was resent and started a turn\n' >&2
