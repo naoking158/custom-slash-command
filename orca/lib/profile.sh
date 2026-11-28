@@ -2,7 +2,7 @@
 # profile.sh — Resolve which orca/profiles/<name>.conf this machine uses.
 #
 # The profile is $MY_ORCA_PROFILE, else the first `profile <name>` line in
-# ~/.claude/my-toolkit/orca.conf. Sourced by orca/bin/run-role and
+# ~/.claude/my-toolkit/orca.conf. Sourced by orca/bin/start-goal and
 # scripts/install.sh.
 
 case "${BASH_SOURCE[0]}" in */*) profile_lib_dir="${BASH_SOURCE[0]%/*}" ;; *) profile_lib_dir=. ;; esac
