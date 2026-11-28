@@ -11,29 +11,44 @@
 #     command hidden in a quoted string or a script is not read (see below).
 #   - `git push` is denied for force / delete / mirror / --all pushes and for
 #     pushes whose destination is the default branch (main, master, origin/HEAD).
-#   - Outbound text (commit messages, PR / issue bodies and comments) must not
-#     cite local working artifacts: review finding IDs (C001, H012 ...),
-#     docs/reviews/ paths, absolute local paths, or docs/ paths that git does
-#     not track. The files their --body-file / --file / -F arguments name are
-#     read and checked too; a body file the hook cannot read, or one the same
-#     line writes, is denied.
+#   - Outbound text must not cite local working artifacts: review finding IDs
+#     (C001, H012 ...), docs/reviews/ paths, absolute local paths, or docs/
+#     paths that git does not track. Outbound text is a `git commit` message,
+#     a PR / issue body, comment or review, the subject and body of
+#     `gh pr merge`, a close / reopen comment, release notes and asset labels,
+#     and gist files (not `git merge -m` or `git tag -m`).
+#     The files the body options name (-F, --file, --body-file, --notes-file,
+#     the files of `gh gist`) are read and checked too; a body file the hook
+#     cannot read, or one the same line writes, is denied. --attach images are
+#     not read; their alt text and file name, which go in the body, are.
 #   - `gh api` calls that write (--method / -X other than GET, or fields and
 #     --input without a method) get the same check over their fields, the
 #     stages that pipe into them, and the files --input / -F k=@file send. A
 #     file the hook cannot read yet (written on the same line) is denied.
 # Notion MCP writes get the same leak check (without the git-tracked test).
 #
+# Options are read as git (parse-options) and gh (pflag) read them: short
+# options grouped in one word (-qF file, -mTEXT), abbreviated git long options
+# (--fil), and quoted options ("-R", "--draft=false").
+#
 # Every push and PR command on the line is judged, each in the directory it
 # runs in: the session cwd, moved by the `cd`s before the command (with the
 # NAME=value assignments made earlier on the line expanded) and by its own
-# `git -C`. A push or PR command whose directory or arguments the line does not
+# `git -C`. A git that the line may point at another repository, work tree or
+# push target runs in a directory the line does not show, so such a push is
+# denied and such a commit is checked without the git-tracked test:
+# --git-dir, --work-tree, --namespace, env -C / --chdir, a -c / --config-env
+# key other than credential.*, user.*, color.*, advice.*, http.* and
+# core.pager (one with $ or ` in it included), or a value given on the line
+# to GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR, GIT_NAMESPACE, GIT_CONFIG*, HOME
+# or XDG_CONFIG_HOME.
+# A push or PR command whose directory or arguments the line does not
 # show (`cd "$(mktemp -d)"`, a refspec from a command substitution) is denied
 # with the way to rewrite it: judging it in the session cwd would apply another
 # repository's rules. A `case` statement makes the rest of its line such a
 # line: its patterns end in `)` with no `(`, so the scopes cannot be followed.
 # Not read: a command inside a quoted string (`bash -c "git push"`,
-# `out="$(git push)"`), and git options other than -C / -c before the
-# subcommand.
+# `out="$(git push)"`).
 #
 # Autonomy modes. A repository is in `strict` mode unless the machine-local
 # config ($MY_AUTONOMY_CONF, default ~/.claude/my-toolkit/autonomy.conf) has a
