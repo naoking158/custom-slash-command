@@ -125,7 +125,7 @@ GOAL='README を直す。"引用" と `code` と $HOME
   [ "$(arg_of create --name)" = "g1" ]
   [ "$(arg_of create --base-branch)" = "origin/trunk" ]
   grep -qx -- --no-parent "$TMP/create.args"
-  ! grep -qx -- --agent "$TMP/create.args"
+  run ! grep -qx -- --agent "$TMP/create.args"
   [ "$(arg_of launch --agent)" = "$(profile_value work implement 2)" ]
   [ "$(arg_of launch --model)" = "$(profile_value work implement 3)" ]
   [ "$(arg_of launch --worktree)" = "path:$TMP/wt/g1" ]
@@ -194,7 +194,7 @@ JSON
   [ "$status" -eq 2 ]
   [ "$(last_line)" = "[start-goal] exit=2 $TMP/wt/g1" ]
   [ "$(cat "$TMP/wt/g1/.claude/settings.local.json")" = "not json" ]
-  ! called "agent launch"
+  run ! called "agent launch"
   called "worktree rm --worktree path:$TMP/wt/g1 --force --delete-branch"
 }
 
@@ -202,7 +202,7 @@ JSON
   echo '{"permissions":{"deny":"mcp__notion"}}' >"$TMP/existing.json"
   run_start_goal --name g1 "$REPO" "$GOAL"
   [ "$status" -eq 2 ]
-  ! called "agent launch"
+  run ! called "agent launch"
   called "worktree rm --worktree path:$TMP/wt/g1 --force --delete-branch"
 }
 
@@ -259,7 +259,7 @@ JSON
   [ "$status" -eq 2 ]
   [ "$(last_line)" = "[start-goal] exit=2 -" ]
   [[ "$stderr" == *"orca repo add --path $REPO"* ]]
-  ! called "agent launch"
+  run ! called "agent launch"
 }
 
 # --- exit 3 ---
@@ -275,7 +275,7 @@ JSON
   echo '{"ok":true,"result":{"runtime":{"reachable":false}}}' >"$TMP/status.json"
   run_start_goal "$REPO" "$GOAL"
   [ "$status" -eq 3 ]
-  ! called "worktree create"
+  run ! called "worktree create"
 }
 
 @test "worktree create fails for another reason: exit 3" {
@@ -283,7 +283,7 @@ JSON
   run_start_goal "$REPO" "$GOAL"
   [ "$status" -eq 3 ]
   [ "$(last_line)" = "[start-goal] exit=3 -" ]
-  ! called "agent launch"
+  run ! called "agent launch"
 }
 
 @test "agent launch fails: exit 3 and the worktree is removed" {
