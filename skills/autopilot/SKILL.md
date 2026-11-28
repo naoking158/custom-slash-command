@@ -112,7 +112,7 @@ Then append the report to `progress.md` and show the user, decision first:
 1. **One line**: whether a human has to act, or that nothing is needed.
 2. **Waiting on a human** (only when something is): riskiest first, each with the target (PR link or task), the recommended action, the evidence, the risk, and the exact operation to perform, so that this reply alone is enough to decide.
 3. **Done criteria**: met / not met for each, with the evidence (PR, verify evidence dir, CI run).
-4. **PRs** in order with their state (merged / draft), review rounds and remaining Medium/Low.
+4. **PRs** in order with their state (merged / draft / open: a ship PR left open as `stopped`, also listed under item 2), review rounds and remaining Medium/Low.
 5. **Run record**: the paths of `decisions.tsv`, `tasks.tsv` and `progress.md`, why it stopped, the decisions made on the user's behalf, `found.md` rows still open across the repository (count, and the rows this run added), `/my:learn` signals captured, and `## Tool friction` entries.
 
 Clean up: remove the worktree only when everything in it is pushed (`git worktree remove`), and stop any app stack a verify run left behind. Never remove a worktree made for this goal (one with the `my-autopilot-worktree` marker of §0 step 3): whoever made it removes it.
