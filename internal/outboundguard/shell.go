@@ -397,13 +397,15 @@ func gitGlobals(s string, p int, val func(string) string) []span {
 var (
 	gitEnvNames  = `(GIT_DIR|GIT_WORK_TREE|GIT_COMMON_DIR|GIT_NAMESPACE|GIT_CONFIG[A-Za-z0-9_]*|HOME|XDG_CONFIG_HOME)`
 	gitEnvAssign = regexp.MustCompile(`(^|[^A-Za-z0-9_$])` + gitEnvNames + `\+?=`)
-	gitEnvSet    = regexp.MustCompile(`(^|[^A-Za-z0-9_])(export|declare|typeset|readonly|local|read|for)[[:space:]]([^;&|\n]*[^A-Za-z0-9_$])?` + gitEnvNames + `([^A-Za-z0-9_]|$)`)
+	gitEnvSet    = regexp.MustCompile(`(^|[;&|(){}\n!]|[;&|(){}\n!][[:space:]]*(then|do|else))[[:space:]]*(export|declare|typeset|readonly|local|read|for|printf[[:space:]]+-v)([[:space:]]+[^;&|\n]*[^A-Za-z0-9_${]|[[:space:]]+)` + gitEnvNames + `([^A-Za-z0-9_]|$)`)
 )
 
-// setsGitEnv reports whether line gives a value to one of gitEnvNames:
-// NAME=value anywhere (after ;, (, a quote ...), or NAME as an argument of
-// export, declare, read, for and the like. A line that only reads one ($HOME)
-// does not. line is the command line as wordsText gives it.
+// setsGitEnv reports whether line, its quotes and backslashes removed, may
+// give a value to one of gitEnvNames: NAME=value anywhere, inside a quoted
+// message too, or NAME as an argument of export, declare, read, for,
+// printf -v and the like where a command starts. A line that only reads one
+// ($HOME) does not. NAME= in a message is taken as an assignment: a wrong
+// deny there costs less than a missed one.
 func setsGitEnv(line string) bool {
 	return gitEnvAssign.MatchString(line) || gitEnvSet.MatchString(line)
 }
