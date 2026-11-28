@@ -19,9 +19,9 @@ import (
 // another repository, work tree or push target. For pr, Repos are the
 // repositories gh is told to use instead of Dir's (-R or --repo with its value
 // as the next word, GH_REPO assigned just before gh) and Also the ones it may
-// act on besides (an attached -R<repo>, a pull request URL, a
-// repos/OWNER/NAME path, any other GH_REPO assignment); "" stands for one the
-// line does not show. Args are the
+// act on besides (an attached -R<repo>, a pull request URL, a repos/OWNER/NAME
+// path, any other GH_REPO assignment); "" stands for one the line does not
+// show. Args are the
 // words of a pr command with their quotes removed, unexpanded.
 type command struct {
 	Kind, Dir, Rest string
@@ -502,8 +502,8 @@ func envChdir(t string) bool {
 var (
 	shellKeywords = map[string]bool{"if": true, "then": true, "elif": true, "else": true, "fi": true,
 		"while": true, "until": true, "do": true, "done": true, "{": true, "}": true, "!": true}
-	// quietCommands set no variable of the shell that runs them, whatever
-	// their arguments say.
+	// quietCommands set none of gitEnvNames in the shell that runs them,
+	// whatever their arguments say (printf only without -v).
 	quietCommands = map[string]bool{"git": true, "gh": true, "echo": true, "printf": true,
 		"cat": true, "grep": true, "jq": true, "true": true, "cd": true}
 	// runsInShell matches a bash 5.3 ${ cmd; } or ${| cmd; } substitution,
@@ -529,7 +529,7 @@ func (p *commandParser) envText(s string) string {
 	at := make([]int, len(segs))
 	quiet := !definesFunction.MatchString(p.wordValue(s)) && !runsInShell.MatchString(p.argText(s))
 	for n, seg := range segs {
-		words[n], at[n] = fields(seg), -1
+		words[n], at[n] = fields(stripRedirections(seg)), -1
 		for i, t := range words[n] {
 			v := strings.TrimLeft(p.wordValue(t), "({!")
 			if v != "" && !shellKeywords[v] && !assignWord.MatchString(v) {
