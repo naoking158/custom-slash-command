@@ -369,7 +369,7 @@ agy_settings() { printf '%s' "$HOME/.gemini/antigravity-cli/settings.json"; }
     and .permissions.allow[0] == "command(make)"
     and (.permissions.allow | index("command(git status)") and index("command(gh pr view)"))' "$(agy_settings)"
   jq -e --arg d "$HOME/.local/state/autopilot" '.permissions.allow | index("write_file(\($d))")' "$(agy_settings)"
-  [ "$(stat -f %Lp "$(agy_settings)" 2>/dev/null || stat -c %a "$(agy_settings)")" = 600 ]
+  [ "$(ls -l "$(agy_settings)" | cut -c1-10)" = "-rw-------" ]
   run bash "$INSTALL"
   [ "$(jq '[.permissions.allow[] | select(. == "command(git status)")] | length' "$(agy_settings)")" -eq 1 ]
 }
