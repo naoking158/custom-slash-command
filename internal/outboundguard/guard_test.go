@@ -687,7 +687,7 @@ var guardTests = []struct {
 	{"the hint for gh api does not offer -R", func(f *fx) {
 		f.own()
 		f.shipRepo()
-		f.guard(`cd "$(mktemp -d)" && gh api -X PUT repos/me/app/pulls/3/merge`).deny()
+		f.guard(`cd "$(mktemp -d)" && gh api -X PUT repos/{owner}/{repo}/pulls/3/merge`).deny()
 		if strings.Contains(f.out, "-R") {
 			f.t.Fatalf("the hint offers -R: %q", f.out)
 		}
@@ -797,6 +797,33 @@ var guardTests = []struct {
 		f.guard(`printf 'fixed in abc123' | gh api repos/o/r/issues/1/comments -F body=@-`).allow()
 		f.write("body.md", "fixed H001\n")
 		f.guard("gh api repos/o/r/issues/1/comments -F body=@- <" + f.tmp + "/body.md").deny()
+	}},
+	{"ship cwd: a repository named by an attached -R, a PR URL, GH_REPO or an API path is judged as that repo", func(f *fx) {
+		f.own()
+		f.shipRepo()
+		f.guard(`gh pr merge 3 -Rwork/app`).deny()
+		f.guard(`gh pr merge https://github.com/work/app/pull/3 --squash`).deny()
+		f.guard(`GH_REPO=work/app gh pr merge 3`).deny()
+		f.guard(`export GH_REPO=work/app; gh pr merge 3`).deny()
+		f.guard(`gh api -X PUT repos/work/app/pulls/3/merge`).deny()
+		f.guard(`gh api -X PUT /repos/work/app/pulls/3/merge`).deny()
+		f.guard(`gh pr merge https://github.com/work/app/pull/3 -R me/app`).deny()
+		f.guard(`gh pr merge "https://github.com/work/app/pull/3"`).deny()
+		f.guard(`gh api -X PUT "repos/work/app/pulls/3/merge"`).deny()
+		f.guard(`GH_REPO="work/app" gh pr merge 3`).deny()
+		f.guard(`gh api -X PATCH repos/work/app/pulls/3 -F draft=false`).deny()
+		f.guard(`gh pr merge 3 -R "$R"`).deny()
+		f.guard(`gh api -X PATCH repos/me/app/pulls/3 -F draft=false`).allow()
+		f.guard(`gh pr merge 3 -Rme/app`).allow()
+		f.guard(`gh pr merge https://github.com/me/app/pull/3 --squash`).allow()
+		f.guard(`GH_REPO=me/app gh pr merge 3`).allow()
+		f.guard(`gh api -X PUT repos/me/app/pulls/3/merge`).allow()
+		f.guard(`gh api -X PUT repos/{owner}/{repo}/pulls/3/merge`).allow()
+	}},
+	{"strict cwd: a PR URL naming a ship repo is judged as that repo", func(f *fx) {
+		f.write("autonomy.conf", "ship me/*\n")
+		f.guard(`gh pr merge https://github.com/me/app/pull/3`).allow()
+		f.guard(`gh api -X PUT repos/me/app/pulls/3/merge`).allow()
 	}},
 }
 

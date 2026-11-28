@@ -185,7 +185,7 @@ func (g *guard) run(payload []byte) {
 			if strings.HasPrefix(c.Rest, "gh api") && !globMatch(`gh api*:\?*`, c.Rest+":"+c.Dir) && apiDir == "" {
 				apiDir = c.Dir
 			}
-			g.judgePR(c.Dir, c.Rest)
+			g.judgePR(c.Dir, c.Rest, c.Repos)
 		case "push":
 			g.judgePush(c.Dir, c.Rest)
 		case "text":
@@ -253,8 +253,9 @@ var (
 
 func isCmd(gh, name string) bool { return gh == name || strings.HasPrefix(gh, name+" ") }
 
-// judgePR denies what a strict repository does not allow.
-func (g *guard) judgePR(dir, gh string) {
+// judgePR denies what a strict repository does not allow: every repository
+// gh names must be ship, or, when it names none, the one dir belongs to.
+func (g *guard) judgePR(dir, gh string, repos []string) {
 	reason, cut := "", false
 	hint := "-R <owner/name> を付けるか cd <絶対パス> で始める"
 	if strings.HasSuffix(gh, " ?") {
@@ -285,59 +286,28 @@ func (g *guard) judgePR(dir, gh string) {
 	if cut {
 		decide("deny", "gh の引数を判定できない。command substitution を使わず値を直接書く")
 	}
-	repo := lastRepoOption(gh)
-	switch {
-	case repo == "":
+	targets := repos
+	if len(targets) == 0 {
 		switch dir {
 		case "?case":
 			decide("deny", "case 文と同じ行では gh を実行するリポジトリを判定できない。-R <owner/name> を付けるか別のコマンドに分ける")
 		case "?":
 			decide("deny", "gh を実行するリポジトリを判定できない。"+hint)
 		}
-		repo = repoSlug(dir)
-	case strings.ContainsAny(repo, `"'`):
-		repo = ""
+		targets = []string{repoSlug(dir)}
 	}
-	if g.autonomyMode(repo) != "strict" {
-		return
-	}
-	if g.shipConfigured(repo) {
-		if strings.Contains(gh, " -R ") || strings.Contains(gh, " --repo") {
-			dir = "<" + repo + " の checkout>"
-		}
-		reason += "（ship の設定はあるが、default branch の保護を確かめた記録がない。" + g.env.LibDir + "/autonomy.sh \"" + dir + "\" を実行する）"
-	}
-	decide("deny", reason)
-}
-
-// lastRepoOption returns the value of the last -R / --repo of gh.
-func lastRepoOption(gh string) string {
-	for k := len(gh) - 1; k >= 0; k-- {
-		p := k
-		if isSpace(gh[k]) {
-			p = k + 1
-		} else if k != 0 {
+	for _, repo := range targets {
+		if g.autonomyMode(repo) != "strict" {
 			continue
 		}
-		for _, opt := range []string{"-R", "--repo"} {
-			if !strings.HasPrefix(gh[p:], opt) {
-				continue
+		if g.shipConfigured(repo) {
+			if len(repos) > 0 {
+				dir = "<" + repo + " の checkout>"
 			}
-			q := p + len(opt)
-			r := q
-			for r < len(gh) && (isSpace(gh[r]) || gh[r] == '=') {
-				r++
-			}
-			e := r
-			for e < len(gh) && !isSpace(gh[e]) {
-				e++
-			}
-			if r > q && e > r {
-				return gh[r:e]
-			}
+			reason += "（ship の設定はあるが、default branch の保護を確かめた記録がない。" + g.env.LibDir + "/autonomy.sh \"" + dir + "\" を実行する）"
 		}
+		decide("deny", reason)
 	}
-	return ""
 }
 
 func git(dir string, args ...string) (string, bool) {

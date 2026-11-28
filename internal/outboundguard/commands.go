@@ -1,6 +1,9 @@
 package outboundguard
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 // command is one command on the line that sends something out.
 //
@@ -11,9 +14,11 @@ import "strings"
 //	text: Rest is "git" or "gh", for a command that carries a message.
 //
 // Dir is "?" when the line does not show it and "?case" when a case statement
-// precedes the command.
+// precedes the command. Repos, for pr, lists the repositories the command
+// names ("" for one whose value the line does not show).
 type command struct {
 	Kind, Dir, Rest string
+	Repos           []string
 }
 
 type literal struct {
@@ -36,6 +41,7 @@ type commandParser struct {
 	opaque bool
 	home   *string
 	out    []command
+	ghRepo []string
 }
 
 func strPtr(s string) *string { return &s }
@@ -269,8 +275,9 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 			}
 			args = append(args, v)
 		}
-		p.out = append(p.out, command{"push", orUnknown(in, unknown), strings.Join(args, " ")})
+		p.out = append(p.out, command{"push", orUnknown(in, unknown), strings.Join(args, " "), nil})
 	}
+	p.noteGhRepo(text)
 	for from := 0; ; {
 		start, end, ok := findGh(text, from, ghPRSend)
 		if !ok {
@@ -282,23 +289,117 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 		if k := strings.IndexByte(gh, ')'); k >= 0 {
 			gh, closedParen = gh[:k], true
 		}
+		repos := append(append([]string{}, p.ghRepo...), p.namedRepos(gh)...)
 		gh = p.emptyQuotes(gh)
 		if cut && !closedParen {
 			gh += " ?"
 		}
 		gh = strings.Join(splitKeepEmpty(gh), " ")
 		gh = strings.TrimSuffix(gh, " ")
-		p.out = append(p.out, command{"pr", orUnknown(at, unknown), gh})
+		p.out = append(p.out, command{"pr", orUnknown(at, unknown), gh, repos})
 	}
 	if _, opts, _, ok := gitSub(text, "commit", 0); ok {
 		in := at
 		if c, found := optionC(opts); found {
 			in = p.enter(at, c)
 		}
-		p.out = append(p.out, command{"text", orUnknown(in, unknown), "git"})
+		p.out = append(p.out, command{"text", orUnknown(in, unknown), "git", nil})
 	} else if _, _, ok := findGh(text, 0, ghPRText); ok {
-		p.out = append(p.out, command{"text", orUnknown(at, unknown), "gh"})
+		p.out = append(p.out, command{"text", orUnknown(at, unknown), "gh", nil})
 	}
+}
+
+var (
+	pullURL = regexp.MustCompile(`^https?://[^/]+/([^/]+/[^/]+)/pull/`)
+	apiRepo = regexp.MustCompile(`(^|/)repos/([^/]+)/([^/?#]+)`)
+)
+
+// noteGhRepo records each GH_REPO=value in text: gh reads its repository
+// from that variable.
+func (p *commandParser) noteGhRepo(text string) {
+	const name = "GH_REPO="
+	for i := strings.Index(text, name); i >= 0; {
+		if i == 0 || !isWord(text[i-1]) && text[i-1] != '$' {
+			p.ghRepo = append(p.ghRepo, p.known(argWord(text, i+len(name))))
+		}
+		k := strings.Index(text[i+1:], name)
+		if k < 0 {
+			break
+		}
+		i += 1 + k
+	}
+}
+
+// argWord returns the word at p, ended by whitespace or a shell operator.
+func argWord(s string, p int) string {
+	q := p
+	for q < len(s) && !isSpace(s[q]) && strings.IndexByte(";&|()<>", s[q]) < 0 {
+		q++
+	}
+	return s[p:q]
+}
+
+// known is the value of word, or "" when the line does not show it.
+func (p *commandParser) known(word string) string {
+	v, ok := p.value(word)
+	if !ok {
+		return ""
+	}
+	return v
+}
+
+// namedRepos lists the repositories gh names: -R / --repo values, pull
+// request URLs and repos/OWNER/NAME API paths. {owner}/{repo} is the
+// directory's own repository and is not listed.
+func (p *commandParser) namedRepos(gh string) []string {
+	var out []string
+	toks := fields(gh)
+	for i := 0; i < len(toks); i++ {
+		t := toks[i]
+		switch {
+		case t == "-R" || t == "--repo":
+			if i+1 < len(toks) {
+				i++
+				out = append(out, p.known(toks[i]))
+			}
+			continue
+		case strings.HasPrefix(t, "--repo="):
+			out = append(out, p.known(t[len("--repo="):]))
+			continue
+		case strings.HasPrefix(t, "-R"):
+			out = append(out, p.known(t[2:]))
+			continue
+		}
+		v, ok := p.value(t)
+		if !ok {
+			raw := p.literalText(t)
+			if strings.Contains(raw, "://") || strings.Contains(raw, "repos/") {
+				out = append(out, "")
+			}
+			continue
+		}
+		if m := pullURL.FindStringSubmatch(v); m != nil {
+			out = append(out, m[1])
+		} else if m := apiRepo.FindStringSubmatch(v); m != nil && (m[2] != "{owner}" || m[3] != "{repo}") {
+			out = append(out, m[2]+"/"+m[3])
+		}
+	}
+	return out
+}
+
+// literalText replaces each marker in s with the text it holds, unexpanded.
+func (p *commandParser) literalText(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if idx, end, ok := markerAt(s, i); ok && idx < len(p.lit) {
+			b.WriteString(p.lit[idx].content)
+			i = end
+			continue
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
 }
 
 // splitKeepEmpty collapses each whitespace run of s to one space boundary:
@@ -394,6 +495,7 @@ func (p *commandParser) command(text string) {
 	}
 	toks := fields(text)
 	if assigns, ok := assignments(toks); ok {
+		p.noteGhRepo(text)
 		for _, a := range assigns {
 			eq := strings.IndexByte(a, '=')
 			if v, ok := p.value(a[eq+1:]); ok {
