@@ -14,11 +14,13 @@ import (
 //	text: Rest is "git" or "gh", for a command that carries a message.
 //
 // Dir is "?" when the line does not show it and "?case" when a case statement
-// precedes the command. Repos, for pr, lists the repositories the command
-// names ("" for one whose value the line does not show).
+// precedes the command. For pr, Repos are the repositories gh is told to use
+// instead of Dir's (-R, --repo, an exported or prefixed GH_REPO) and Also the
+// ones it may act on besides (a pull request URL, a repos/OWNER/NAME path, a
+// GH_REPO assigned without export); "" stands for one the line does not show.
 type command struct {
 	Kind, Dir, Rest string
-	Repos           []string
+	Repos, Also     []string
 }
 
 type literal struct {
@@ -42,6 +44,7 @@ type commandParser struct {
 	home   *string
 	out    []command
 	ghRepo []string
+	ghMay  []string
 }
 
 func strPtr(s string) *string { return &s }
@@ -275,9 +278,8 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 			}
 			args = append(args, v)
 		}
-		p.out = append(p.out, command{"push", orUnknown(in, unknown), strings.Join(args, " "), nil})
+		p.out = append(p.out, command{"push", orUnknown(in, unknown), strings.Join(args, " "), nil, nil})
 	}
-	p.noteGhRepo(text)
 	for from := 0; ; {
 		start, end, ok := findGh(text, from, ghPRSend)
 		if !ok {
@@ -289,45 +291,52 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 		if k := strings.IndexByte(gh, ')'); k >= 0 {
 			gh, closedParen = gh[:k], true
 		}
-		repos := append(append([]string{}, p.ghRepo...), p.namedRepos(gh)...)
+		repos, also := p.namedRepos(gh)
+		repos = append(append(append([]string{}, p.ghRepo...), p.prefixGhRepo(text[:start])...), repos...)
+		also = append(append([]string{}, p.ghMay...), also...)
 		gh = p.emptyQuotes(gh)
 		if cut && !closedParen {
 			gh += " ?"
 		}
 		gh = strings.Join(splitKeepEmpty(gh), " ")
 		gh = strings.TrimSuffix(gh, " ")
-		p.out = append(p.out, command{"pr", orUnknown(at, unknown), gh, repos})
+		p.out = append(p.out, command{"pr", orUnknown(at, unknown), gh, repos, also})
 	}
 	if _, opts, _, ok := gitSub(text, "commit", 0); ok {
 		in := at
 		if c, found := optionC(opts); found {
 			in = p.enter(at, c)
 		}
-		p.out = append(p.out, command{"text", orUnknown(in, unknown), "git", nil})
+		p.out = append(p.out, command{"text", orUnknown(in, unknown), "git", nil, nil})
 	} else if _, _, ok := findGh(text, 0, ghPRText); ok {
-		p.out = append(p.out, command{"text", orUnknown(at, unknown), "gh", nil})
+		p.out = append(p.out, command{"text", orUnknown(at, unknown), "gh", nil, nil})
 	}
 }
 
 var (
-	pullURL = regexp.MustCompile(`^https?://[^/]+/([^/]+/[^/]+)/pull/`)
-	apiRepo = regexp.MustCompile(`(^|/)repos/([^/]+)/([^/?#]+)`)
+	pullURL = regexp.MustCompile(`https?://[^/[:space:]]+/([^/[:space:]]+/[^/[:space:]]+)/pull/`)
+	apiRepo = regexp.MustCompile(`(^|/)repos/([^/[:space:]]+)/([^/?#[:space:]]+)`)
 )
 
-// noteGhRepo records each GH_REPO=value in text: gh reads its repository
-// from that variable.
-func (p *commandParser) noteGhRepo(text string) {
-	const name = "GH_REPO="
-	for i := strings.Index(text, name); i >= 0; {
-		if i == 0 || !isWord(text[i-1]) && text[i-1] != '$' {
-			p.ghRepo = append(p.ghRepo, p.known(argWord(text, i+len(name))))
+// prefixGhRepo returns the GH_REPO values assigned in the words that
+// directly precede gh (`GH_REPO=x gh`, `env GH_REPO=x gh`).
+func (p *commandParser) prefixGhRepo(before string) []string {
+	var out []string
+	toks := fields(before)
+	for k := len(toks) - 1; k >= 0; k-- {
+		t := toks[k]
+		if t == "env" {
+			continue
 		}
-		k := strings.Index(text[i+1:], name)
-		if k < 0 {
+		eq := strings.IndexByte(t, '=')
+		if eq < 1 || !allWord(t[:eq]) {
 			break
 		}
-		i += 1 + k
+		if t[:eq] == "GH_REPO" {
+			out = append(out, p.known(t[eq+1:]))
+		}
 	}
+	return out
 }
 
 // argWord returns the word at p, ended by whitespace or a shell operator.
@@ -348,11 +357,11 @@ func (p *commandParser) known(word string) string {
 	return v
 }
 
-// namedRepos lists the repositories gh names: -R / --repo values, pull
-// request URLs and repos/OWNER/NAME API paths. {owner}/{repo} is the
-// directory's own repository and is not listed.
-func (p *commandParser) namedRepos(gh string) []string {
-	var out []string
+// namedRepos returns the repositories gh is told to use (-R / --repo
+// values) and, from any word, the pull request URLs and repos/OWNER/NAME
+// paths it may act on. {owner}/{repo} is the directory's own repository and
+// is not listed.
+func (p *commandParser) namedRepos(gh string) (repos, also []string) {
 	toks := fields(gh)
 	for i := 0; i < len(toks); i++ {
 		t := toks[i]
@@ -360,31 +369,34 @@ func (p *commandParser) namedRepos(gh string) []string {
 		case t == "-R" || t == "--repo":
 			if i+1 < len(toks) {
 				i++
-				out = append(out, p.known(toks[i]))
+				repos = append(repos, p.known(toks[i]))
 			}
 			continue
 		case strings.HasPrefix(t, "--repo="):
-			out = append(out, p.known(t[len("--repo="):]))
+			repos = append(repos, p.known(t[len("--repo="):]))
 			continue
 		case strings.HasPrefix(t, "-R"):
-			out = append(out, p.known(t[2:]))
+			repos = append(repos, p.known(t[2:]))
 			continue
 		}
 		v, ok := p.value(t)
 		if !ok {
 			raw := p.literalText(t)
 			if strings.Contains(raw, "://") || strings.Contains(raw, "repos/") {
-				out = append(out, "")
+				also = append(also, "")
 			}
 			continue
 		}
-		if m := pullURL.FindStringSubmatch(v); m != nil {
-			out = append(out, m[1])
-		} else if m := apiRepo.FindStringSubmatch(v); m != nil && (m[2] != "{owner}" || m[3] != "{repo}") {
-			out = append(out, m[2]+"/"+m[3])
+		for _, m := range pullURL.FindAllStringSubmatch(v, -1) {
+			also = append(also, m[1])
+		}
+		for _, m := range apiRepo.FindAllStringSubmatch(v, -1) {
+			if m[2] != "{owner}" || m[3] != "{repo}" {
+				also = append(also, m[2]+"/"+m[3])
+			}
 		}
 	}
-	return out
+	return repos, also
 }
 
 // literalText replaces each marker in s with the text it holds, unexpanded.
@@ -495,9 +507,15 @@ func (p *commandParser) command(text string) {
 	}
 	toks := fields(text)
 	if assigns, ok := assignments(toks); ok {
-		p.noteGhRepo(text)
 		for _, a := range assigns {
 			eq := strings.IndexByte(a, '=')
+			if a[:eq] == "GH_REPO" {
+				if toks[0] == "export" {
+					p.ghRepo = append(p.ghRepo, p.known(a[eq+1:]))
+				} else {
+					p.ghMay = append(p.ghMay, p.known(a[eq+1:]))
+				}
+			}
 			if v, ok := p.value(a[eq+1:]); ok {
 				p.vars[a[:eq]] = v
 			} else {

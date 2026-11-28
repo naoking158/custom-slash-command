@@ -186,7 +186,7 @@ func (g *guard) run(payload []byte) {
 			if strings.HasPrefix(c.Rest, "gh api") {
 				apiDirs = append(apiDirs, c.Dir)
 			}
-			g.judgePR(c.Dir, c.Rest, c.Repos)
+			g.judgePR(c.Dir, c.Rest, c.Repos, c.Also)
 		case "push":
 			g.judgePush(c.Dir, c.Rest)
 		case "text":
@@ -254,9 +254,10 @@ var (
 
 func isCmd(gh, name string) bool { return gh == name || strings.HasPrefix(gh, name+" ") }
 
-// judgePR denies what a strict repository does not allow: every repository
-// gh names must be ship, or, when it names none, the one dir belongs to.
-func (g *guard) judgePR(dir, gh string, repos []string) {
+// judgePR denies what a strict repository does not allow. The repositories
+// judged are those gh is told to use, or dir's when it is told none, and
+// every other one it may act on: all of them must be ship.
+func (g *guard) judgePR(dir, gh string, repos, also []string) {
 	reason, cut := "", false
 	hint := "-R <owner/name> を付けるか cd <絶対パス> で始める"
 	if strings.HasSuffix(gh, " ?") {
@@ -297,12 +298,13 @@ func (g *guard) judgePR(dir, gh string, repos []string) {
 		}
 		targets = []string{repoSlug(dir)}
 	}
+	targets = append(targets, also...)
 	for _, repo := range targets {
 		if g.autonomyMode(repo) != "strict" {
 			continue
 		}
 		if g.shipConfigured(repo) {
-			if len(repos) > 0 {
+			if len(repos) > 0 || repo != targets[0] {
 				dir = "<" + repo + " の checkout>"
 			}
 			reason += "（ship の設定はあるが、default branch の保護を確かめた記録がない。" + g.env.LibDir + "/autonomy.sh \"" + dir + "\" を実行する）"

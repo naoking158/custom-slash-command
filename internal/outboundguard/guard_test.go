@@ -856,6 +856,8 @@ var guardTests = []struct {
 		f.guard(`export GH_REPO=work/app; gh pr merge 3`).deny()
 		f.guard(`gh api -X PUT repos/work/app/pulls/3/merge`).deny()
 		f.guard(`gh api -X PUT /repos/work/app/pulls/3/merge`).deny()
+		f.guard(`GH_REPO=work/app; gh pr merge 3`).deny()
+		f.guard(`gh pr merge 3 --subject https://github.com/work/app/pull/9`).deny()
 		f.guard(`gh pr merge https://github.com/work/app/pull/3 -R me/app`).deny()
 		f.guard(`gh pr merge "https://github.com/work/app/pull/3"`).deny()
 		f.guard(`gh api -X PUT "repos/work/app/pulls/3/merge"`).deny()
@@ -869,10 +871,20 @@ var guardTests = []struct {
 		f.guard(`gh api -X PUT repos/me/app/pulls/3/merge`).allow()
 		f.guard(`gh api -X PUT repos/{owner}/{repo}/pulls/3/merge`).allow()
 	}},
-	{"strict cwd: a PR URL naming a ship repo is judged as that repo", func(f *fx) {
+	{"strict cwd: a URL, an API path or an unexported GH_REPO does not stand in for the directory's repo", func(f *fx) {
 		f.write("autonomy.conf", "ship me/*\n")
-		f.guard(`gh pr merge https://github.com/me/app/pull/3`).allow()
-		f.guard(`gh api -X PUT repos/me/app/pulls/3/merge`).allow()
+		f.guard(`gh pr merge https://github.com/me/app/pull/3`).deny()
+		f.guard(`gh api -X PUT repos/me/app/pulls/3/merge`).deny()
+		f.guard(`gh pr merge 3 --subject https://github.com/me/app/pull/9`).deny()
+		f.guard(`echo GH_REPO=me/app; gh pr merge 3`).deny()
+		f.guard(`GH_REPO=me/app true; gh pr merge 3`).deny()
+		f.guard(`GH_REPO=me/app; gh pr merge 3`).deny()
+		f.guard(`gh api -X PUT repos/{owner}/{repo}/pulls/3/merge -f x=/repos/me/app`).deny()
+		f.guard(`gh api graphql -f query='mutation{mergePullRequest(input:{pullRequestId:"x"}){clientMutationId}}' -f n=/repos/me/app`).deny()
+		f.guard(`gh pr create --title https://github.com/me/app/pull/1 --body b`).deny()
+		f.guard(`gh pr merge 3 -R me/app`).allow()
+		f.guard(`GH_REPO=me/app gh pr merge 3`).allow()
+		f.guard(`export GH_REPO=me/app; gh pr merge 3`).allow()
 	}},
 	{"ship: a protection record older than 7 days or dated in the future is strict", func(f *fx) {
 		f.own()
