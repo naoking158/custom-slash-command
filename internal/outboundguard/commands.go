@@ -506,10 +506,13 @@ func envChdir(t string) bool {
 var (
 	shellKeywords = map[string]bool{"if": true, "then": true, "elif": true, "else": true, "fi": true,
 		"while": true, "until": true, "do": true, "done": true, "{": true, "}": true, "!": true}
-	// quietCommands set no shell variable and run no code their arguments
-	// give, whatever those say.
+	// quietCommands set no variable of the shell that runs them, whatever
+	// their arguments say.
 	quietCommands = map[string]bool{"git": true, "gh": true, "echo": true, "printf": true,
 		"cat": true, "grep": true, "jq": true, "true": true, "cd": true}
+	// runsInShell matches a bash 5.3 ${ cmd; } or ${| cmd; } substitution,
+	// which runs cmd in the current shell.
+	runsInShell = regexp.MustCompile(`\$\{[[:space:]|]`)
 	// definesFunction matches `name()`, `name ()` and `function name`.
 	definesFunction = regexp.MustCompile(`[A-Za-z0-9_.:-][[:space:]]*\([[:space:]]*\)|(^|[^A-Za-z0-9_])function[[:space:]]`)
 	assignWord      = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?\+?=`)
@@ -517,17 +520,18 @@ var (
 
 // envText is the command line s as setsGitEnv reads it, one command a line,
 // with quotes and backslashes removed. When every command of the line is one
-// of quietCommands (printf without -v) and the line defines no function,
-// their quoted arguments become a space unless they expand something ($ or `
-// in double quotes), so a word in a commit message or a PR body is not taken
-// for an assignment. A line with any other command (export, eval, env, alias,
+// of quietCommands (printf without -v), and the line neither defines a
+// function nor runs a command in the current shell through ${ cmd; }, their
+// quoted arguments become a space unless they expand something ($ or ` in
+// double quotes), so a word in a commit message or a PR body is not taken for
+// an assignment. A line with any other command (export, eval, env, alias,
 // source ...) is read whole: such a command can turn a quoted string, or a
 // file a quiet command wrote, into an assignment.
 func (p *commandParser) envText(s string) string {
 	segs := splitOn(s, listSep(true, "<>|&"))
 	words := make([][]string, len(segs))
 	at := make([]int, len(segs))
-	quiet := !definesFunction.MatchString(p.wordValue(s))
+	quiet := !definesFunction.MatchString(p.wordValue(s)) && !runsInShell.MatchString(p.argText(s))
 	for n, seg := range segs {
 		words[n], at[n] = fields(seg), -1
 		for i, t := range words[n] {

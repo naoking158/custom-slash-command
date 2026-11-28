@@ -501,7 +501,7 @@ func (g *guard) judgePush(dir, args string) {
 	case "?":
 		decide("deny", unknownDir)
 	case gitElsewhereDir:
-		decide("deny", "git push を実行する directory を判定できない。同じ行で git に別の repository・work tree・設定を指している（GIT_DIR や HOME などへの代入、--git-dir、--work-tree、-c の鍵、env -C）。それを外すか、push を別の Bash 呼び出しに分ける")
+		decide("deny", "git push を実行する directory を判定できない。同じ行で git に別の repository・work tree・設定を指している（GIT_DIR や HOME などへの代入、--git-dir、--work-tree、--namespace、-c や --config-env の鍵、env -C）。それを外すか、push を別の Bash 呼び出しに分ける")
 	}
 	protected := []string{"main", "master"}
 	if ref, _ := git(dir, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"); ref != "" {
