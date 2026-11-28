@@ -3,20 +3,25 @@ package outboundguard
 import "strings"
 
 // held keeps the quoted strings and heredoc bodies of a line set aside: whole
-// is the text as written (quotes included), content what it stands for.
+// is the text as written (quotes included), content what it stands for, and
+// expands whether the shell runs the substitutions in it.
 type held struct {
 	whole, content []string
+	expands        []bool
 }
 
 // holdLine sets heredoc bodies and quoted strings of cmd aside behind markers.
 func holdLine(cmd string) (string, *held) {
 	h := &held{}
-	add := func(whole, content string) string {
+	add := func(whole, content string, expands bool) string {
 		h.whole = append(h.whole, whole)
 		h.content = append(h.content, content)
+		h.expands = append(h.expands, expands)
 		return marker(len(h.whole) - 1)
 	}
-	s := heredocs(cmd, func(header, body, rest string) string { return header + add(body, body) + rest })
+	s := heredocs(cmd, func(header, body, rest string) string {
+		return header + add(body, body, !strings.ContainsAny(header, `"'`)) + rest
+	})
 	s = quotes(s, func(kind quoteKind, whole, content string) string {
 		switch kind {
 		case escaped:
@@ -24,7 +29,7 @@ func holdLine(cmd string) (string, *held) {
 		case comment:
 			return ""
 		}
-		return add(whole, content)
+		return add(whole, content, kind == doubleQuoted)
 	})
 	return strings.ReplaceAll(s, "\\\n", " "), h
 }
@@ -53,6 +58,124 @@ func (h *held) put(s string, asContent bool) string {
 		}
 		s = b.String()
 	}
+}
+
+// takeReads removes from s each command substitution that only reads files
+// ($(cat f...), $(<f), `cat f`), where the shell expands it, and returns s
+// without them and the files they read: "" for one the line does not show.
+func (h *held) takeReads(s string) (string, []string) {
+	var files []string
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if idx, end, ok := markerAt(s, i); ok {
+			if idx < len(h.expands) && h.expands[idx] {
+				c, fs := h.takeReads(h.content[idx])
+				if c != h.content[idx] {
+					if h.whole[idx] != h.content[idx] {
+						h.whole[idx] = h.whole[idx][:1] + c + h.whole[idx][len(h.whole[idx])-1:]
+					} else {
+						h.whole[idx] = c
+					}
+					h.content[idx] = c
+				}
+				files = append(files, fs...)
+			}
+			b.WriteString(s[i:end])
+			i = end
+			continue
+		}
+		body, next := "", -1
+		switch {
+		case strings.HasPrefix(s[i:], "$(") && !strings.HasPrefix(s[i:], "$(("):
+			if k := strings.IndexByte(s[i:], ')'); k >= 0 {
+				body, next = s[i+2:i+k], i+k+1
+			}
+		case s[i] == '`':
+			if k := strings.IndexByte(s[i+1:], '`'); k >= 0 {
+				body, next = s[i+1:i+1+k], i+k+2
+			}
+		}
+		if next >= 0 {
+			if fs, whole := h.reads(body); fs != nil {
+				files = append(files, fs...)
+				if whole {
+					i = next
+					continue
+				}
+			}
+		} else if strings.HasPrefix(s[i:], "$(cat") || strings.HasPrefix(s[i:], "$(<") || strings.HasPrefix(s[i:], "`cat") {
+			files = append(files, "")
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String(), files
+}
+
+// reads returns the files a substitution body reads with cat or <, and
+// whether reading them is all it does; nil when it is not such a reader.
+func (h *held) reads(body string) ([]string, bool) {
+	body = trimSpace(body)
+	if strings.HasPrefix(body, "<") && !strings.HasPrefix(body, "<<") {
+		w := trimSpace(body[1:])
+		if w == "" || strings.ContainsAny(w, " \t\n;&|()<>") {
+			return []string{""}, false
+		}
+		return []string{h.word(w)}, true
+	}
+	toks := fields(body)
+	if len(toks) == 0 || toks[0] != "cat" {
+		return nil, false
+	}
+	files := []string{}
+	for _, t := range toks[1:] {
+		if strings.ContainsAny(t[:1], ";&|<>") {
+			return files, false
+		}
+		if t != "-" && !strings.HasPrefix(t, "-") {
+			files = append(files, h.word(t))
+		}
+	}
+	return files, true
+}
+
+// word is the value of a word that names a file: "" when it holds a variable
+// or a substitution the line does not show.
+func (h *held) word(w string) string {
+	v := h.put(w, true)
+	if strings.ContainsAny(v, "$`") {
+		return ""
+	}
+	return v
+}
+
+// takeFed removes from a stage that pipes into an outbound command the files
+// it reads (the arguments of cat, a < redirect) and returns them.
+func (h *held) takeFed(st string) (string, []string) {
+	var files []string
+	in := findAll(st, stdinAt("123456789"))
+	for _, m := range in {
+		files = append(files, h.word(st[m.wordStart:m.end]))
+	}
+	st = removeSpans(st, in)
+	p := skipSpaces(st, 0)
+	if !strings.HasPrefix(st[p:], "cat") || (p+3 < len(st) && !isSpace(st[p+3])) {
+		return st, files
+	}
+	var args []span
+	for q := p + 3; ; {
+		ws, e, ok := wordAfter(st, q)
+		if !ok {
+			break
+		}
+		w := st[ws:e]
+		if !strings.HasPrefix(w, "-") && !strings.ContainsAny(w[:1], "<>&|;") && !strings.Contains(w, ">") {
+			files = append(files, h.word(w))
+			args = append(args, span{ws, e, ws})
+		}
+		q = e
+	}
+	return removeSpans(st, args), files
 }
 
 type span struct{ start, end, wordStart int }
@@ -234,27 +357,10 @@ func outboundTextAt(s string) (int, bool) {
 // (for `-`, its < redirect), and its text without those arguments, together
 // with the pipeline stages that feed it.
 func outboundText(cmd string) string {
-	var written, out []string
+	var out []string
 	s, h := holdLine(cmd)
 	segs := splitOn(s, listSep(false, "<>|"))
-	for _, seg := range segs {
-		for _, st := range splitOn(seg, pipeSep(true)) {
-			for _, m := range findAll(st, writeAt) {
-				written = append(written, h.put(st[m.wordStart:m.end], true))
-			}
-			if words, ok := commandWordAt(st, "tee", 1); ok {
-				for _, w := range words {
-					if !strings.HasPrefix(w, "-") {
-						written = append(written, h.put(w, true))
-					}
-				}
-			}
-			args := removeSpans(st, findAll(st, redirectArgAt))
-			if words, ok := cpOrMv(args); ok {
-				written = append(written, h.put(words[len(words)-1], true))
-			}
-		}
-	}
+	written := writtenFiles(segs, h)
 	for _, seg := range segs {
 		stages := splitOn(seg, pipeSep(true))
 		k, start := -1, 0
@@ -286,7 +392,11 @@ func outboundText(cmd string) string {
 			}
 			own = removeSpans(own, in)
 		}
-		out = append(out, h.put(dropWrites(append(append([]string{}, stages[:k]...), own)), false))
+		sent, read := h.takeSent(stages[:k], own)
+		for _, f := range read {
+			out = append(out, "\x02"+f)
+		}
+		out = append(out, h.put(dropWrites(sent), false))
 	}
 	var b strings.Builder
 	for _, w := range written {
@@ -305,6 +415,50 @@ func dropWrites(stages []string) string {
 		stages[i] = removeSpans(st, findAll(st, writeAt))
 	}
 	return strings.Join(stages, " | ")
+}
+
+// writtenFiles lists the files the commands of segs write: >, >>, >|, n>, &>,
+// tee, the last argument of cp / mv.
+func writtenFiles(segs []string, h *held) []string {
+	var written []string
+	for _, seg := range segs {
+		for _, st := range splitOn(seg, pipeSep(true)) {
+			for _, m := range findAll(st, writeAt) {
+				written = append(written, h.put(st[m.wordStart:m.end], true))
+			}
+			if words, ok := commandWordAt(st, "tee", 1); ok {
+				for _, w := range words {
+					if !strings.HasPrefix(w, "-") {
+						written = append(written, h.put(w, true))
+					}
+				}
+			}
+			args := removeSpans(st, findAll(st, redirectArgAt))
+			if words, ok := cpOrMv(args); ok {
+				written = append(written, h.put(words[len(words)-1], true))
+			}
+		}
+	}
+	return written
+}
+
+// takeSent returns the stages that feed an outbound command, then its own
+// text, with the file reads of takeFed and takeReads taken out, and the files
+// those reads name.
+func (h *held) takeSent(feed []string, own string) ([]string, []string) {
+	var files []string
+	sent := append([]string{}, feed...)
+	sent = append(sent, own)
+	for i := range sent {
+		var fs []string
+		if i < len(feed) {
+			sent[i], fs = h.takeFed(sent[i])
+			files = append(files, fs...)
+		}
+		sent[i], fs = h.takeReads(sent[i])
+		files = append(files, fs...)
+	}
+	return sent, files
 }
 
 // cpOrMv returns the words after the first cp or mv that has two or more.
@@ -331,11 +485,13 @@ type apiCall struct {
 	text   string
 }
 
-// apiCalls lists every `gh api` on the line, in the order it appears.
-func apiCalls(cmd string) []apiCall {
+// apiCalls lists every `gh api` on the line, in the order it appears, and the
+// files the line writes.
+func apiCalls(cmd string) ([]apiCall, []string) {
 	var calls []apiCall
 	s, h := holdLine(cmd)
-	for _, seg := range splitOn(s, listSep(false, "<>|")) {
+	segs := splitOn(s, listSep(false, "<>|"))
+	for _, seg := range segs {
 		stages := splitOn(seg, pipeSep(false))
 		for k, st := range stages {
 			for from := 0; ; {
@@ -348,7 +504,7 @@ func apiCalls(cmd string) []apiCall {
 			}
 		}
 	}
-	return calls
+	return calls, writtenFiles(segs, h)
 }
 
 func apiCallAt(feed []string, gh string, h *held) apiCall {
@@ -391,7 +547,9 @@ func apiCallAt(feed []string, gh string, h *held) apiCall {
 		}
 	}
 	gh = removeSpans(gh, sent)
-	c.text = h.put(dropWrites(append(append([]string{}, feed...), gh)), false)
+	stages, read := h.takeSent(feed, gh)
+	c.files = append(c.files, read...)
+	c.text = h.put(dropWrites(stages), false)
 	return c
 }
 

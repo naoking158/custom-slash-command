@@ -815,6 +815,38 @@ var guardTests = []struct {
 		f.guard("gh pr comment 3 --body-file - > /Users/alice/out.log <<'EOF'\nsee /Users/me/notes.md\nEOF").deny()
 		f.guard(`gh api --method POST repos/o/r/issues/1/comments --input - <<< '{"body":"fixed H001"}' > /Users/alice/out.json`).deny()
 	}},
+	{"a body read through cat or a substitution is checked", func(f *fx) {
+		f.write("leak.md", "see /Users/alice/x\n")
+		f.write("clean.md", "fixed in abc123\n")
+		f.write("leak.json", `{"body":"fixed H001"}`)
+		f.write("clean.json", `{"body":"fixed in abc123"}`)
+		f.guard(`gh pr comment 3 --body "$(cat ` + f.tmp + `/leak.md)"`).deny()
+		f.guard(`gh pr comment 3 --body "$(cat ` + f.tmp + `/clean.md)"`).allow()
+		f.guard(`gh pr comment 3 --body "$(<` + f.tmp + `/leak.md)"`).deny()
+		f.guard("gh pr comment 3 --body \"`cat " + f.tmp + "/leak.md`\"").deny()
+		f.guard(`cat ` + f.tmp + `/leak.md | gh pr comment 3 --body-file -`).deny()
+		f.guard(`cat ` + f.tmp + `/clean.md | gh pr comment 3 --body-file -`).allow()
+		f.guard(`cat ` + f.tmp + `/leak.json | gh api --method POST repos/o/r/issues/1/comments --input -`).deny()
+		f.guard(`cat ` + f.tmp + `/clean.json | gh api --method POST repos/o/r/issues/1/comments --input -`).allow()
+		f.guard(`gh api --method POST repos/o/r/issues/1/comments -f body="$(cat ` + f.tmp + `/leak.md)"`).deny()
+		f.guard(`gh api --method POST repos/o/r/issues/1/comments -f body="$(cat ` + f.tmp + `/clean.md)"`).allow()
+		f.in(f.tmp, `gh pr comment 3 --body "$(cat leak.md)"`).deny()
+		f.guard(`gh pr comment 3 --body 'run $(cat nofile) to see it'`).allow()
+		f.guard(`gh pr comment 3 --body "$(cat "$F")"`).deny()
+		f.guard(`echo x > ` + f.tmp + `/clean.md && gh pr comment 3 --body "$(cat ` + f.tmp + `/clean.md)"`).deny()
+		f.guard(`echo x > ` + f.tmp + `/clean.json && cat ` + f.tmp + `/clean.json | gh api --method POST repos/o/r/issues/1/comments --input -`).deny()
+		f.guard(`gh pr create --draft --title $(echo t) --body "$(git log -1 --format=%b)"`).allow()
+	}},
+	{"a clean body read through cat from a local path is allowed", func(f *fx) {
+		f.write("home/clean.md", "fixed in abc123\n")
+		f.write("home/leak.md", "fixed H001\n")
+		home := filepath.Join(f.tmp, "home")
+		f.env.Home = &home
+		f.guard(`gh pr comment 3 --body "$(cat ~/clean.md)"`).allow()
+		f.guard(`cat ~/clean.md | gh pr comment 3 --body-file -`).allow()
+		f.guard(`gh api --method POST repos/o/r/issues/1/comments -F body=@- < ~/clean.md`).allow()
+		f.guard(`gh pr comment 3 --body "$(cat ~/leak.md)"`).deny()
+	}},
 	{"ship cwd: a repository named by an attached -R, a PR URL, GH_REPO or an API path is judged as that repo", func(f *fx) {
 		f.own()
 		f.shipRepo()

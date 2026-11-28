@@ -585,6 +585,9 @@ func (g *guard) textCheck(textDir string) {
 	}
 	for _, f := range grepLines(text, "\x02", true) {
 		f = f[1:]
+		if f == "" {
+			decide("deny", "本文を読むコマンドの引数を判定できない。ファイルのパスを直接書く")
+		}
 		if strings.HasPrefix(f, "/dev/fd/") || f == "/dev/null" {
 			continue
 		}
@@ -618,7 +621,7 @@ var (
 // dirs are the directories the parser followed for each `gh api` on the line;
 // a relative file is read from its own call's directory.
 func (g *guard) apiCheck(dirs []string) {
-	calls := apiCalls(g.cmd)
+	calls, written := apiCalls(g.cmd)
 	for i, c := range calls {
 		if !c.writes {
 			continue
@@ -629,6 +632,14 @@ func (g *guard) apiCheck(dirs []string) {
 		}
 		text := shellOut(c.text)
 		for _, f := range c.files {
+			if f == "" {
+				decide("deny", "gh api が送る本文を読むコマンドの引数を判定できない。ファイルのパスを直接書く")
+			}
+			for _, w := range written {
+				if basename(w) == basename(f) {
+					decide("deny", "gh api が送るファイル "+basename(f)+" を同じ呼び出しで書いている。ファイルを書くコマンドと gh api を別の Bash 呼び出しに分ける")
+				}
+			}
 			f = g.tilde(f)
 			if !strings.HasPrefix(f, "/") {
 				if dir == "" {
