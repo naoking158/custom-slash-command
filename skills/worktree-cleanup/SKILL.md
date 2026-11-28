@@ -58,6 +58,6 @@ Per approved path:
 
 Run `df -h /` and `git -C <repo> worktree list` again.
 
-**Reply:** `df -h /` before and after with the space reclaimed, the worktrees removed, and for each one kept, its reason in one line (uncommitted work, open PR, active in Orca, or in use by which session).
+**Reply:** `df -h /` before and after with the space reclaimed, the worktrees removed, and for each one kept, its reason in one line (uncommitted work, open PR, active in Orca, Orca state unknown, or in use by which session).
 
 Adapted from pstack `poteto-mode` playbook `worktree-cleanup` (github.com/cursor/plugins, MIT).
