@@ -1,7 +1,7 @@
 ---
 name: review
 description: Review an artifact (spec, plan, code, commit, PR, PRD) against perspective checklists and write a review report. Use for any request to review, critique, or verify a document or a change — self-review and adversarial checks included — whether it is phrased in English or Japanese (レビュー, 検証).
-argument-hint: "[perspective:]<target> [--no-screen] [--report-dir <dir>]  e.g. code:user-auth, commit:abc1234, pr:current"
+argument-hint: "[perspective:]<target> [--no-screen] [--report-dir <dir>] [--since <sha>]  e.g. code:user-auth, commit:abc1234, pr:current"
 context: fork
 agent: reviewer
 ---
@@ -55,11 +55,41 @@ review, the JSON, and the HTML screen, leaving exactly the markdown-only
 behavior. It is meaningful for `code:` / `commit:` / `pr:` only — on a doc
 target, ignore it and report one line saying it applies to diff targets only.
 
-`--report-dir <dir>` may appear anywhere in the arguments. It replaces
-`docs/reviews` as the root of every output path in the steps below: the report
-goes to `<dir>/{type}/{id}.md`, and a screen review's `.json` and `.html` go
-beside it. Use it when the report does not belong in the checkout you run in;
-autopilot passes its state directory.
+`--report-dir <dir>` may appear anywhere in the arguments. It moves the
+outputs out of `docs/reviews` into `<dir>`, and gives every run its own name,
+so that a second review of the same target keeps the first one's report. Use
+it when the report does not belong in the checkout you run in; autopilot
+passes its state directory.
+
+`--since <sha>` (`pr:` targets only) reviews only what the PR changed after
+`<sha>`, a head an earlier review already read: the diff is
+`git -c core.quotepath=false diff {sha} {head}` instead of `gh pr diff`. Run
+`git merge-base --is-ancestor {sha} {head}` and `git rev-list --merges
+{sha}..{head}` first; when the first fails (the branch was rebased, or the sha
+is not the PR's) or the second prints anything (a merge brought in other
+people's changes), stop and report that a full review is needed. Report
+findings only on the lines this diff changes, still checking them against
+their surroundings as Step 2 says: what lies before `<sha>` was the earlier
+review's, so a test or plan item that it covers is not missing here.
+
+### Name the outputs
+
+Every output path below is `{out}` plus `.md`, `.json` or `.html`. Get `{out}`
+once, before writing anything, from
+`"${CLAUDE_SKILL_DIR}/scripts/report-path.sh"` with `--type {type}` (Step 4
+lists the types), `--id {id}`, `--perspective {perspective}` when one was
+given, and `--report-dir <dir>` when one was given. For a `pr:` target also
+pass `--head {head}` (below) and, with `--since`, `--since <sha>`. Without
+`--report-dir`, `{out}` is `docs/reviews/{type}/{id}`, or
+`docs/reviews/{type}/{id}-{since7}..{head7}` for a delta review; with it,
+`<dir>/{type}/{id}-{head7}` for a PR, `{id}-{since7}..{head7}` for a delta
+review, and `-2`, `-3` … appended when that name is taken. Report `{out}` as
+the script printed it; do not rebuild it.
+
+For a `pr:` target, read `{head}` before fetching the diff and again after;
+if it moved, fetch the diff again, so that the name and the report describe
+the same commit. A report written in Step 4 also gives the full `{head}`
+(and the `--since` sha) on its Target line.
 
 ### Leave the checkout as you found it
 
@@ -191,7 +221,7 @@ Pass 2's obligations toward Pass 1:
 
 ### 3.4 Write `review.json`
 
-Write `docs/reviews/{type}/{id}.json` following
+Write `{out}.json` following
 `${CLAUDE_SKILL_DIR}/review-json.md`. That file is the contract; it is
 machine-checked in the next step.
 
@@ -199,8 +229,8 @@ machine-checked in the next step.
 
 ```bash
 "${CLAUDE_SKILL_DIR}/scripts/build-screen.sh" \
-  --diff "$W/diff.patch" --review docs/reviews/{type}/{id}.json \
-  --out docs/reviews/{type}/{id}.html
+  --diff "$W/diff.patch" --review "{out}.json" \
+  --out "{out}.html"
 ```
 
 Add `--pass1 "$W/pass1.json"` when `passes == 2`. If the HTML already exists,
@@ -215,25 +245,24 @@ report the path being overwritten on one line first.
 
 ```bash
 "${CLAUDE_SKILL_DIR}/scripts/render-report.sh" \
-  --review docs/reviews/{type}/{id}.json --out docs/reviews/{type}/{id}.md
+  --review "{out}.json" --out "{out}.md"
 ```
 
 This replaces Step 4 for diff targets — do not hand-write the markdown as
-well. With a perspective, all three outputs take the suffix:
-`{id}--{perspective}.{md,json,html}`.
+well.
 
-`{id}.json` and `{id}.html` are regenerable build artifacts and are
-gitignored; `{id}.md` is the committed record.
+Under `docs/reviews`, `{out}.json` and `{out}.html` are regenerable build
+artifacts and are gitignored; `{out}.md` is the committed record.
 
 ## Step 4 — Write the report
 
 For doc targets, and for diff targets run with `--no-screen`. (Diff targets
 that went through Step 3 already have their report and skip this step.)
 
-- Output: `docs/reviews/{type}/{id}.md`, where `{type}` ∈
+- Output: `{out}.md`, where `{type}` ∈
   `specs | plans | code | commits | prs | research | changes | prd | product-specs`.
-  With an explicit perspective: `docs/reviews/{type}/{id}--{perspective}.md`.
-  (`commit:` targets use the short hash as `{id}`; `pr:` targets the number.)
+  (`commit:` targets use the short hash as `{id}`, a range `{from7}..{to7}`;
+  `pr:` targets the number.)
 - Structure: `${CLAUDE_SKILL_DIR}/template.md`.
 - Every finding: severity, location (`file:line` where possible), impact, and
   a concrete recommendation.

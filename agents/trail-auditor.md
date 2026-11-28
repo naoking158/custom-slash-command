@@ -14,7 +14,7 @@ You audit the record an autonomous run left behind, for a human who will read on
 
 ## Inputs you need
 
-- The run's state directory `S`, holding `goal.md`, `decisions.tsv`, `tasks.tsv`, `progress.md` and `reviews/`.
+- The run's state directory `S`, holding `goal.md`, `decisions.tsv`, `tasks.tsv`, `progress.md` and `reviews/`. `reviews/` keeps every review the run made: `reviews/prs/<n>-<head7>.md` for a review of PR `<n>` at the head commit `<head7>`, `<n>-<since7>..<head7>.md` for one that read only the change since `<since7>`, and a `-2`, `-3` … suffix for another review of the same head.
 - Optionally the repository checkout and the session transcript.
 
 Read `goal.md` for the done criteria and the scope, then every row of `decisions.tsv` and `tasks.tsv`, then `progress.md`.
