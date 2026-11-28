@@ -160,6 +160,45 @@ func fileValue(v string) string {
 	return v
 }
 
+// attachText is what gh puts in the body for an --attach value FILE#ALT: the
+// alt text, or the file's name when there is none. The file is an image or a
+// video, uploaded as it is.
+func attachText(v string) string {
+	if file, alt, ok := strings.Cut(v, "#"); ok {
+		return alt + "\n" + basename(file)
+	}
+	return basename(v)
+}
+
+// arguments returns the indexes of the words that are neither options nor
+// their values.
+func arguments(words []word, opts []option) []int {
+	taken := make([]bool, len(words))
+	for _, o := range opts {
+		for i := o.first; i <= o.last; i++ {
+			taken[i] = true
+		}
+	}
+	var out []int
+	dashes := false
+	for i, w := range words {
+		switch {
+		case taken[i]:
+		case w.text == "--" && !dashes:
+			dashes = true
+		case !dashes && len(w.text) > 1 && w.text[0] == '-':
+		default:
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+func sortSpans(s []span) []span {
+	sort.Slice(s, func(a, b int) bool { return s[a].start < s[b].start })
+	return s
+}
+
 // withoutSubstitutions drops the $( ) and ` ` command substitutions from v:
 // the text of the command they run is not what they put in its place, and
 // the files a cat in them reads are checked where the line is read.
@@ -392,22 +431,37 @@ func outboundText(cmd string) string {
 		own := stages[k][start:]
 		stdin := false
 		words := lineWords(own, args-start, h)
-		var files []span
-		for _, o := range g.options(words) {
-			if o.attached {
-				out = append(out, withoutSubstitutions(o.value))
-			}
-			if !o.hasValue || !o.is("F", "file", "body-file") {
-				continue
-			}
-			files = append(files, span{words[o.first].start, words[o.last].end, 0})
-			if f := fileValue(o.value); f == "-" || f == "/dev/stdin" {
+		var files, cut []span
+		readFile := func(v string) {
+			if f := fileValue(v); f == "-" || f == "/dev/stdin" {
 				stdin = true
 			} else {
 				out = append(out, "\x02"+f)
 			}
 		}
-		own = removeSpans(own, files)
+		opts := g.options(words)
+		for _, o := range opts {
+			at := span{words[o.first].start, words[o.last].end, 0}
+			switch {
+			case o.hasValue && o.is(g.files...):
+				files = append(files, at)
+				readFile(o.value)
+			case o.hasValue && o.is("attach"):
+				cut = append(cut, at)
+				out = append(out, attachText(o.value))
+			case o.attached:
+				out = append(out, withoutSubstitutions(o.value))
+			}
+		}
+		if g.args != argsText {
+			for _, i := range arguments(words, opts) {
+				cut = append(cut, span{words[i].start, words[i].end, 0})
+				if g.args == argsFiles {
+					readFile(words[i].text)
+				}
+			}
+		}
+		own = removeSpans(own, sortSpans(append(files, cut...)))
 		if stdin {
 			for _, f := range stdinFiles(stages[k][:start], h) {
 				out = append(out, "\x02"+f)
@@ -584,15 +638,15 @@ func apiCallAt(feed []string, before, gh string, args int, h *held) apiCall {
 		if !o.hasValue {
 			continue
 		}
-		if o.attached {
-			attached = append(attached, withoutSubstitutions(o.value))
+		f, isFile := o.value, o.is("input")
+		if ff, ok := fieldFile(o.value); ok && o.is("F", "field") {
+			f, isFile = ff, true
 		}
-		f := o.value
-		if !o.is("input") {
-			var ok bool
-			if f, ok = fieldFile(o.value); !ok || !o.is("F", "field") {
-				continue
+		if !isFile {
+			if o.attached {
+				attached = append(attached, withoutSubstitutions(o.value))
 			}
+			continue
 		}
 		cut = append(cut, span{words[o.first].start, words[o.last].end, 0})
 		if f == "-" {

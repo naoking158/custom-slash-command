@@ -11,7 +11,8 @@ import (
 //	      expanded, "?" for one the line does not show).
 //	pr:   Rest is the gh command with quoted strings and $( ) emptied; it ends
 //	      in " ?" when the line cuts its arguments short.
-//	text: Rest is "git" or "gh", for a command that carries a message.
+//	text: Rest is "git" or "gh", for a command that carries a message, or
+//	      "gh pr merge", whose directory the PR rules judge.
 //
 // Dir is "?" when the line does not show it and "?case" when a case statement
 // precedes the command. For pr, Repos are the repositories gh is told to use
@@ -302,8 +303,12 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 	if _, opts, _, ok := gitSub(text, "commit", 0); ok {
 		in := p.gitDir(at, opts)
 		p.out = append(p.out, command{"text", orUnknown(in, unknown), "git", nil, nil})
-	} else if _, _, ok := findGh(text, 0, ghPRText); ok {
-		p.out = append(p.out, command{"text", orUnknown(at, unknown), "gh", nil, nil})
+	} else if start, end, ok := findGh(text, 0, ghPRText); ok {
+		rest := "gh"
+		if isCmd(strings.Join(fields(text[start:end]), " "), "gh pr merge") {
+			rest = "gh pr merge"
+		}
+		p.out = append(p.out, command{"text", orUnknown(at, unknown), rest, nil, nil})
 	}
 }
 

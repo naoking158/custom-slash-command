@@ -449,8 +449,13 @@ func findGh(s string, from int, alts [][2][]string) (start, end int, ok bool) {
 }
 
 var (
-	ghPRSend    = [][2][]string{{{"pr"}, {"create", "new", "merge", "ready"}}, {{"api"}, nil}}
-	ghPRText    = [][2][]string{{{"pr", "issue"}, {"create", "new", "comment", "edit", "review"}}}
+	ghPRSend = [][2][]string{{{"pr"}, {"create", "new", "merge", "ready"}}, {{"api"}, nil}}
+	ghPRText = [][2][]string{
+		{{"pr", "issue"}, {"create", "new", "comment", "edit", "review", "close", "reopen"}},
+		{{"pr"}, {"merge"}},
+		{{"release"}, {"create", "edit"}},
+		{{"gist"}, {"create", "new", "edit"}},
+	}
 	ghAPI       = [][2][]string{{{"api"}, nil}}
 	ghLabelCmds = [][2][]string{{{"pr", "issue"}, {"create", "new", "edit"}}}
 	moveWords   = []string{"cd", "pushd", "popd"}

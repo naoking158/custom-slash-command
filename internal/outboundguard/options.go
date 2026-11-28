@@ -12,10 +12,21 @@ type grammar struct {
 	long     []string // long options that take a value (--name=v or --name v)
 	prefixes bool     // a unique prefix of a long option names it (git)
 	shortEq  bool     // -x=v gives v, and a flag letter accepts =v too (pflag)
+	files    []string // options whose value is a file the command sends as text
+	args     argUse   // what the command does with the words that are not options
 }
 
+// argUse is what a command does with its arguments.
+type argUse int
+
+const (
+	argsText  argUse = iota // they are part of what it sends
+	argsFiles               // they are files it sends as text
+	argsOther               // they are not text (a tag, files uploaded as assets)
+)
+
 var (
-	gitCommitGrammar = grammar{value: "FmcCtU", attached: "Su", prefixes: true,
+	gitCommitGrammar = grammar{value: "FmcCtU", attached: "Su", prefixes: true, files: []string{"F", "file"},
 		long: []string{"file", "message", "reedit-message", "reuse-message", "template", "fixup", "squash",
 			"author", "date", "cleanup", "trailer", "pathspec-from-file", "unified"}}
 	gitPushGrammar = grammar{value: "o", prefixes: true,
@@ -23,15 +34,23 @@ var (
 	ghAPIGrammar = grammar{value: "FfHXpqt", shortEq: true,
 		long: []string{"field", "raw-field", "header", "method", "preview", "jq", "template", "input", "hostname", "cache"}}
 	ghGrammars = map[string]grammar{
-		"pr create":     {value: "aBbFHlmprTtR", shortEq: true, long: ghLong("assignee", "attach", "base", "body", "body-file", "head", "label", "milestone", "project", "recover", "reviewer", "template", "title")},
-		"pr comment":    {value: "bFR", shortEq: true, long: ghLong("attach", "body", "body-file")},
-		"pr edit":       {value: "BbFmtR", shortEq: true, long: ghLong("add-assignee", "add-label", "add-project", "add-reviewer", "attach", "base", "body", "body-file", "milestone", "remove-assignee", "remove-label", "remove-project", "remove-reviewer", "title")},
-		"pr review":     {value: "bFR", shortEq: true, long: ghLong("body", "body-file")},
-		"pr merge":      {value: "AbFtR", shortEq: true, long: ghLong("author-email", "body", "body-file", "match-head-commit", "subject")},
-		"pr ready":      {value: "R", shortEq: true, long: ghLong()},
-		"issue create":  {value: "abFlmpTtR", shortEq: true, long: ghLong("assignee", "attach", "blocked-by", "blocking", "body", "body-file", "label", "milestone", "parent", "project", "recover", "template", "title", "type")},
-		"issue comment": {value: "bFR", shortEq: true, long: ghLong("attach", "body", "body-file")},
-		"issue edit":    {value: "bFmtR", shortEq: true, long: ghLong("add-assignee", "add-blocked-by", "add-blocking", "add-label", "add-project", "add-sub-issue", "attach", "body", "body-file", "milestone", "parent", "remove-assignee", "remove-blocked-by", "remove-blocking", "remove-label", "remove-project", "remove-sub-issue", "title", "type")},
+		"pr create":      {value: "aBbFHlmprTtR", shortEq: true, files: []string{"F", "body-file"}, long: ghLong("assignee", "attach", "base", "body", "body-file", "head", "label", "milestone", "project", "recover", "reviewer", "template", "title")},
+		"pr comment":     {value: "bFR", shortEq: true, files: []string{"F", "body-file"}, long: ghLong("attach", "body", "body-file")},
+		"pr edit":        {value: "BbFmtR", shortEq: true, files: []string{"F", "body-file"}, long: ghLong("add-assignee", "add-label", "add-project", "add-reviewer", "attach", "base", "body", "body-file", "milestone", "remove-assignee", "remove-label", "remove-project", "remove-reviewer", "title")},
+		"pr review":      {value: "bFR", shortEq: true, files: []string{"F", "body-file"}, long: ghLong("body", "body-file")},
+		"pr merge":       {value: "AbFtR", shortEq: true, files: []string{"F", "body-file"}, long: ghLong("author-email", "body", "body-file", "match-head-commit", "subject")},
+		"pr ready":       {value: "R", shortEq: true, long: ghLong()},
+		"issue create":   {value: "abFlmpTtR", shortEq: true, files: []string{"F", "body-file"}, long: ghLong("assignee", "attach", "blocked-by", "blocking", "body", "body-file", "label", "milestone", "parent", "project", "recover", "template", "title", "type")},
+		"issue comment":  {value: "bFR", shortEq: true, files: []string{"F", "body-file"}, long: ghLong("attach", "body", "body-file")},
+		"issue edit":     {value: "bFmtR", shortEq: true, files: []string{"F", "body-file"}, long: ghLong("add-assignee", "add-blocked-by", "add-blocking", "add-label", "add-project", "add-sub-issue", "attach", "body", "body-file", "milestone", "parent", "remove-assignee", "remove-blocked-by", "remove-blocking", "remove-label", "remove-project", "remove-sub-issue", "title", "type")},
+		"pr close":       {value: "cR", shortEq: true, long: ghLong("comment")},
+		"pr reopen":      {value: "cR", shortEq: true, long: ghLong("comment")},
+		"issue close":    {value: "crR", shortEq: true, long: ghLong("comment", "duplicate-of", "reason")},
+		"issue reopen":   {value: "cR", shortEq: true, long: ghLong("comment")},
+		"release create": {value: "nFtR", shortEq: true, files: []string{"F", "notes-file"}, args: argsOther, long: ghLong("discussion-category", "notes", "notes-file", "notes-start-tag", "target", "title")},
+		"release edit":   {value: "nFtR", shortEq: true, files: []string{"F", "notes-file"}, args: argsOther, long: ghLong("discussion-category", "notes", "notes-file", "tag", "target", "title")},
+		"gist create":    {value: "df", shortEq: true, args: argsFiles, long: []string{"desc", "filename"}},
+		"gist edit":      {value: "adfr", shortEq: true, files: []string{"a", "add"}, long: []string{"add", "desc", "filename", "remove"}},
 	}
 )
 
