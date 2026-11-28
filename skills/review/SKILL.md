@@ -263,7 +263,9 @@ that went through Step 3 already have their report and skip this step.)
   `specs | plans | code | commits | prs | research | changes | prd | product-specs`.
   (`commit:` targets use the short hash as `{id}`, a range `{from7}..{to7}`;
   `pr:` targets the number.)
-- Structure: `${CLAUDE_SKILL_DIR}/template.md`.
+- Structure: `${CLAUDE_SKILL_DIR}/template.md`. Keep its `## Overall Assessment`
+  section with a line that is only `**PASS**` or `**NEEDS_REVISION**`: autopilot
+  reads that line to decide whether a PR head was reviewed.
 - Every finding: severity, location (`file:line` where possible), impact, and
   a concrete recommendation.
 - Doc targets produce no `.json` and no `.html`.
