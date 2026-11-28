@@ -469,20 +469,16 @@ func (p *commandParser) emptyQuotes(s string) string {
 }
 
 // gitDir is the directory git runs in from at, given the words before it
-// (before) and its options: moved by each -C, and unknown when the line points
-// git at another repository or work tree (--git-dir, --work-tree, the
-// core.worktree config, a GIT_DIR / GIT_WORK_TREE / GIT_CONFIG* variable).
+// (before) and its options: moved by each -C, and unknown when the line may
+// point git at another repository, work tree or push target (--git-dir,
+// --work-tree, a gitElsewhereKey config, a gitEnv variable assigned anywhere
+// before it, `command`, `env` or `exec` in between included).
 func (p *commandParser) gitDir(at *string, before, opts string) *string {
 	if p.gitEnv {
 		return nil
 	}
-	toks := fields(before)
-	for k := len(toks) - 1; k >= 0 && toks[k] != "env"; k-- {
-		eq := strings.IndexByte(toks[k], '=')
-		if eq < 1 || !allWord(toks[k][:eq]) {
-			break
-		}
-		if gitEnv(toks[k][:eq]) {
+	for _, t := range fields(before) {
+		if eq := strings.IndexByte(t, '='); eq > 0 && allWord(t[:eq]) && gitEnv(t[:eq]) {
 			return nil
 		}
 	}
@@ -495,8 +491,8 @@ func (p *commandParser) gitDir(at *string, before, opts string) *string {
 		}
 		switch {
 		case strings.HasPrefix(w, "--git-dir"), strings.HasPrefix(w, "--work-tree"),
-			(w == "-c" || w == "--config-env") && strings.HasPrefix(next, "core.worktree"),
-			strings.HasPrefix(strings.ToLower(w), "--config-env=core.worktree"):
+			(w == "-c" || w == "--config-env") && gitElsewhereKey(next),
+			strings.HasPrefix(w, "--config-env=") && gitElsewhereKey(w[len("--config-env="):]):
 			return nil
 		case w == "-C" && n+1 < len(words):
 			at = p.enter(at, words[n+1])

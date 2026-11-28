@@ -641,6 +641,12 @@ var guardTests = []struct {
 			`git -c core.worktree=/x push origin feature/x`,
 			`git -c Core.WorkTree=/x push origin feature/x`,
 			`git --config-env core.worktree=W push origin feature/x`,
+			`GIT_DIR=/x/.git command git push origin feature/x`,
+			`GIT_DIR=/x/.git env git push origin feature/x`,
+			`GIT_DIR=/x/.git timeout 60 git push origin feature/x`,
+			`GIT_COMMON_DIR=/x/.git git push origin feature/x`,
+			`git -c remote.origin.push=HEAD:main push origin`,
+			`git -c Push.Default=current push`,
 		} {
 			f.guard(c).deny()
 			if !strings.Contains(f.out, "directory を判定できない") {

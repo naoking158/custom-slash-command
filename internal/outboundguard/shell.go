@@ -385,10 +385,28 @@ func gitGlobals(s string, p int, val func(string) string) []span {
 	}
 }
 
-// gitEnv reports whether an environment variable named name points git at
-// another repository or work tree, or sets its config (core.worktree).
+// gitEnv reports whether an environment variable named name may point git at
+// another repository or work tree or change its config: GIT_DIR,
+// GIT_WORK_TREE, GIT_COMMON_DIR, and every GIT_CONFIG* (GIT_CONFIG_KEY_n
+// sets any key; the others are denied with them rather than told apart).
 func gitEnv(name string) bool {
-	return name == "GIT_DIR" || name == "GIT_WORK_TREE" || strings.HasPrefix(name, "GIT_CONFIG")
+	return name == "GIT_DIR" || name == "GIT_WORK_TREE" || name == "GIT_COMMON_DIR" || strings.HasPrefix(name, "GIT_CONFIG")
+}
+
+// gitElsewhereKey reports whether a config key given with -c or --config-env
+// may change where git works or where and what it pushes: core.worktree and
+// the remote.*, branch.*, push.* and url.* keys.
+func gitElsewhereKey(key string) bool {
+	key = strings.ToLower(key)
+	if strings.HasPrefix(key, "core.worktree") {
+		return true
+	}
+	for _, p := range []string{"remote.", "branch.", "push.", "url."} {
+		if strings.HasPrefix(key, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // ghWords matches `gh <first> <one of second>` (second empty: first alone)
