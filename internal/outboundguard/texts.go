@@ -160,6 +160,37 @@ func fileValue(v string) string {
 	return v
 }
 
+// withoutSubstitutions drops the $( ) and ` ` command substitutions from v:
+// the text of the command they run is not what they put in its place, and
+// the files a cat in them reads are checked where the line is read.
+func withoutSubstitutions(v string) string {
+	var b strings.Builder
+	for i := 0; i < len(v); i++ {
+		switch {
+		case strings.HasPrefix(v[i:], "$("):
+			depth := 0
+			for i++; i < len(v); i++ {
+				if v[i] == '(' {
+					depth++
+				} else if v[i] == ')' {
+					if depth--; depth == 0 {
+						break
+					}
+				}
+			}
+		case v[i] == '`':
+			if k := strings.IndexByte(v[i+1:], '`'); k >= 0 {
+				i += k + 1
+			} else {
+				i = len(v)
+			}
+		default:
+			b.WriteByte(v[i])
+		}
+	}
+	return b.String()
+}
+
 // takeFed removes from a stage that pipes into an outbound command the files
 // it reads (the arguments of cat, a < redirect) and returns them.
 func (h *held) takeFed(st string) (string, []string) {
@@ -364,7 +395,7 @@ func outboundText(cmd string) string {
 		var files []span
 		for _, o := range g.options(words) {
 			if o.attached {
-				out = append(out, o.value)
+				out = append(out, withoutSubstitutions(o.value))
 			}
 			if !o.hasValue || !o.is("F", "file", "body-file") {
 				continue
@@ -467,33 +498,40 @@ func (h *held) takeSent(feed []string, own string) ([]string, []string) {
 	return sent, files
 }
 
-// gitOptionSpans returns the -C <dir> and -c <name=value> options each git
-// in s is given before its subcommand: they say where and how git runs, not
-// what it sends.
+// gitOptionSpans returns the -C <dir> and -c <name=value> options given to
+// git before its subcommand, when git is the command s runs (after any ( or {
+// and NAME=value words): they say where and how git runs, not what it sends.
+// A git written anywhere else in s is text and is left as it is.
 func gitOptionSpans(s string) []span {
-	var out []span
-	for i := 0; ; i++ {
-		k := strings.Index(s[i:], "git")
-		if k < 0 {
-			return out
-		}
-		i += k
-		if prevIs(s, i, wordOrDash) {
+	i := 0
+	for {
+		i = skipSpaces(s, i)
+		if i < len(s) && (s[i] == '(' || s[i] == '{') {
+			i++
 			continue
 		}
-		p := i + 3
-		for {
-			q := skipSpaces(s, p)
-			if q == p || q+1 >= len(s) || s[q] != '-' || (s[q+1] != 'C' && s[q+1] != 'c') {
-				break
-			}
-			ws, e, ok := wordAfter(s, q+2)
-			if !ok || ws == q+2 {
-				break
-			}
-			out = append(out, span{q, e, ws})
-			p = e
+		e := wordEnd(s, i)
+		if eq := strings.IndexByte(s[i:e], '='); eq > 0 && allWord(s[i:i+eq]) {
+			i = e
+			continue
 		}
+		break
+	}
+	if !strings.HasPrefix(s[i:], "git") || (i+3 < len(s) && !isSpace(s[i+3])) {
+		return nil
+	}
+	var out []span
+	for p := i + 3; ; {
+		q := skipSpaces(s, p)
+		if q == p || q+1 >= len(s) || s[q] != '-' || (s[q+1] != 'C' && s[q+1] != 'c') {
+			return out
+		}
+		ws, e, ok := wordAfter(s, q+2)
+		if !ok || ws == q+2 {
+			return out
+		}
+		out = append(out, span{q, e, ws})
+		p = e
 	}
 }
 
@@ -558,7 +596,7 @@ func apiCallAt(feed []string, before, gh string, args int, h *held) apiCall {
 			continue
 		}
 		if o.attached {
-			attached = append(attached, o.value)
+			attached = append(attached, withoutSubstitutions(o.value))
 		}
 		f := o.value
 		if !o.is("input") {

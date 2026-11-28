@@ -570,6 +570,8 @@ var guardTests = []struct {
 		f.guard("git commit -q -F " + f.tmp + "/m.txt").deny()
 		f.guard("gh pr comment 3 --body-file " + f.tmp + "/m.txt").deny()
 		f.guard(`gh pr comment 3 --body "run git -C /Users/me/x"`).deny()
+		f.guard(`echo see git -C H001 | gh pr comment 3 --body-file -`).deny()
+		f.guard(`git log -1 --format="git -C H001" | gh pr comment 3 --body-file -`).deny()
 	}},
 	{"git -C before commit and -C after it are not message text", func(f *fx) {
 		f.guard(`git -C /Users/me/tmp/w commit -m ok`).allow()
@@ -814,6 +816,14 @@ var guardTests = []struct {
 	{"api: a read-only gh api call is allowed", func(f *fx) {
 		f.guard(`gh api repos/o/r/pulls/1/comments`).allow()
 		f.guard(`gh api --paginate repos/o/r/pulls/1/comments --jq '.[] | select(.body | test("H001"))'`).allow()
+	}},
+	{"a file read into a message written after -m is checked as the file, not as its path", func(f *fx) {
+		f.write("home/clean.md", "fix x\n")
+		f.write("home/leak.md", "fix H001\n")
+		home := filepath.Join(f.tmp, "home")
+		f.env.Home = &home
+		f.guard(`git commit -m"$(cat ~/clean.md)"`).allow()
+		f.guard(`git commit -m"$(cat ~/leak.md)"`).deny()
 	}},
 	{"api: fields bundled after a boolean short option are checked", func(f *fx) {
 		f.write("body.md", "fixed H001\n")
