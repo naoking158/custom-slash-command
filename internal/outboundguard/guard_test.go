@@ -647,6 +647,15 @@ var guardTests = []struct {
 			`GIT_COMMON_DIR=/x/.git git push origin feature/x`,
 			`git -c remote.origin.push=HEAD:main push origin`,
 			`git -c Push.Default=current push`,
+			`git -c include.path=/x/cfg push origin feature/x`,
+			`K=remote.origin.url; git -c "$K=/x" push origin feature/x`,
+			`git -c x.y=z push origin feature/x`,
+			`HOME=/x git push origin feature/x`,
+			`XDG_CONFIG_HOME=/x git push origin feature/x`,
+			`env -C /x git push origin feature/x`,
+			`read GIT_DIR <<< /x/.git; export GIT_DIR; git push origin feature/x`,
+			`for GIT_DIR in /x/.git; do export GIT_DIR; git push origin feature/x; done`,
+			`git --namespace n push origin feature/x`,
 		} {
 			f.guard(c).deny()
 			if !strings.Contains(f.out, "directory を判定できない") {
@@ -654,7 +663,7 @@ var guardTests = []struct {
 			}
 		}
 		f.guard(`GIT_INDEX_FILE=/tmp/i git push origin feature/x`).allow()
-		f.guard(`git -c x.y=z push origin feature/x`).allow()
+		f.guard(`git -c user.name=x -c color.ui=never push origin feature/x`).allow()
 	}},
 	{"quoted git options and subcommands are read by their value", func(f *fx) {
 		f.guard(`git "-P" commit -m "fix H001"`).deny()

@@ -386,23 +386,28 @@ func gitGlobals(s string, p int, val func(string) string) []span {
 }
 
 // gitEnv reports whether an environment variable named name may point git at
-// another repository or work tree or change its config: GIT_DIR,
-// GIT_WORK_TREE, GIT_COMMON_DIR, and every GIT_CONFIG* (GIT_CONFIG_KEY_n
-// sets any key; the others are denied with them rather than told apart).
+// another repository, work tree or push target, or change the config it
+// reads: GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR, GIT_NAMESPACE, every
+// GIT_CONFIG* (GIT_CONFIG_KEY_n sets any key), and HOME and XDG_CONFIG_HOME,
+// which choose the global config.
 func gitEnv(name string) bool {
-	return name == "GIT_DIR" || name == "GIT_WORK_TREE" || name == "GIT_COMMON_DIR" || strings.HasPrefix(name, "GIT_CONFIG")
-}
-
-// gitElsewhereKey reports whether a config key given with -c or --config-env
-// may change where git works or where and what it pushes: core.worktree and
-// the remote.*, branch.*, push.* and url.* keys.
-func gitElsewhereKey(key string) bool {
-	key = strings.ToLower(key)
-	if strings.HasPrefix(key, "core.worktree") {
+	switch name {
+	case "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_NAMESPACE", "HOME", "XDG_CONFIG_HOME":
 		return true
 	}
-	for _, p := range []string{"remote.", "branch.", "push.", "url."} {
-		if strings.HasPrefix(key, p) {
+	return strings.HasPrefix(name, "GIT_CONFIG")
+}
+
+// gitSafeKey reports whether a config key given with -c or --config-env
+// leaves alone where git works and where and what it pushes. Any other key,
+// one written with a variable and include.path among them, may change them.
+func gitSafeKey(key string) bool {
+	key = strings.ToLower(key)
+	if key == "core.pager" {
+		return true
+	}
+	for _, p := range []string{"credential.", "user.", "color.", "advice.", "http."} {
+		if strings.HasPrefix(key, p) && !strings.ContainsAny(key, "$`") {
 			return true
 		}
 	}
