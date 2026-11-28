@@ -874,7 +874,7 @@ var guardTests = []struct {
 		f.guard(`gh api -X PUT repos/me/app/pulls/3/merge`).allow()
 		f.guard(`gh api -X PUT repos/{owner}/{repo}/pulls/3/merge`).allow()
 	}},
-	{"strict cwd: a URL, an API path or an unexported GH_REPO does not stand in for the directory's repo", func(f *fx) {
+	{"strict cwd: only -R and a GH_REPO just before gh stand in for the directory's repo", func(f *fx) {
 		f.write("autonomy.conf", "ship me/*\n")
 		f.guard(`gh pr merge https://github.com/me/app/pull/3`).deny()
 		f.guard(`gh api -X PUT repos/me/app/pulls/3/merge`).deny()
@@ -887,7 +887,14 @@ var guardTests = []struct {
 		f.guard(`gh pr create --title https://github.com/me/app/pull/1 --body b`).deny()
 		f.guard(`gh pr merge 3 -R me/app`).allow()
 		f.guard(`GH_REPO=me/app gh pr merge 3`).allow()
-		f.guard(`export GH_REPO=me/app; gh pr merge 3`).allow()
+		f.guard(`export GH_REPO=me/app; gh pr merge 3`).deny()
+		f.guard(`export GH_REPO=me/app; unset GH_REPO; gh pr merge 3`).deny()
+		f.guard(`export GH_REPO=me/app; env -u GH_REPO gh pr merge 3`).deny()
+		f.guard(`false && export GH_REPO=me/app; gh pr merge 3`).deny()
+		f.guard(`if false; then export GH_REPO=me/app; fi; gh pr merge 3`).deny()
+		f.guard(`gh pr merge 3 -Rme/app`).deny()
+		f.guard(`gh pr merge 3 --subject -Rme/app`).deny()
+		f.guard(`gh api -X PUT repos/{owner}/{repo}/pulls/3/merge -q -Rme/app`).deny()
 	}},
 	{"ship: a protection record older than 7 days or dated in the future is strict", func(f *fx) {
 		f.own()

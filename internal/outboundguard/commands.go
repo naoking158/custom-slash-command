@@ -15,9 +15,10 @@ import (
 //
 // Dir is "?" when the line does not show it and "?case" when a case statement
 // precedes the command. For pr, Repos are the repositories gh is told to use
-// instead of Dir's (-R, --repo, an exported or prefixed GH_REPO) and Also the
-// ones it may act on besides (a pull request URL, a repos/OWNER/NAME path, a
-// GH_REPO assigned without export); "" stands for one the line does not show.
+// instead of Dir's (-R or --repo with its value as the next word, GH_REPO
+// assigned just before gh) and Also the ones it may act on besides (an
+// attached -R<repo>, a pull request URL, a repos/OWNER/NAME path, any other
+// GH_REPO assignment); "" stands for one the line does not show.
 type command struct {
 	Kind, Dir, Rest string
 	Repos, Also     []string
@@ -43,7 +44,6 @@ type commandParser struct {
 	opaque bool
 	home   *string
 	out    []command
-	ghRepo []string
 	ghMay  []string
 }
 
@@ -292,7 +292,7 @@ func (p *commandParser) emit(text string, at *string, cut bool) {
 			gh, closedParen = gh[:k], true
 		}
 		repos, also := p.namedRepos(gh)
-		repos = append(append(append([]string{}, p.ghRepo...), p.prefixGhRepo(text[:start])...), repos...)
+		repos = append(p.prefixGhRepo(text[:start]), repos...)
 		also = append(append([]string{}, p.ghMay...), also...)
 		gh = p.emptyQuotes(gh)
 		if cut && !closedParen {
@@ -339,15 +339,6 @@ func (p *commandParser) prefixGhRepo(before string) []string {
 	return out
 }
 
-// argWord returns the word at p, ended by whitespace or a shell operator.
-func argWord(s string, p int) string {
-	q := p
-	for q < len(s) && !isSpace(s[q]) && strings.IndexByte(";&|()<>", s[q]) < 0 {
-		q++
-	}
-	return s[p:q]
-}
-
 // known is the value of word, or "" when the line does not show it.
 func (p *commandParser) known(word string) string {
 	v, ok := p.value(word)
@@ -357,9 +348,10 @@ func (p *commandParser) known(word string) string {
 	return v
 }
 
-// namedRepos returns the repositories gh is told to use (-R / --repo
-// values) and, from any word, the pull request URLs and repos/OWNER/NAME
-// paths it may act on. {owner}/{repo} is the directory's own repository and
+// namedRepos returns the repositories gh is told to use (-R / --repo and the
+// next word) and, from any word, the ones it may act on: an attached
+// -R<repo>, which may be another option's value, pull request URLs and
+// repos/OWNER/NAME paths. {owner}/{repo} is the directory's own repository and
 // is not listed.
 func (p *commandParser) namedRepos(gh string) (repos, also []string) {
 	toks := fields(gh)
@@ -376,7 +368,7 @@ func (p *commandParser) namedRepos(gh string) (repos, also []string) {
 			repos = append(repos, p.known(t[len("--repo="):]))
 			continue
 		case strings.HasPrefix(t, "-R"):
-			repos = append(repos, p.known(t[2:]))
+			also = append(also, p.known(t[2:]))
 			continue
 		}
 		v, ok := p.value(t)
@@ -510,11 +502,7 @@ func (p *commandParser) command(text string) {
 		for _, a := range assigns {
 			eq := strings.IndexByte(a, '=')
 			if a[:eq] == "GH_REPO" {
-				if toks[0] == "export" {
-					p.ghRepo = append(p.ghRepo, p.known(a[eq+1:]))
-				} else {
-					p.ghMay = append(p.ghMay, p.known(a[eq+1:]))
-				}
+				p.ghMay = append(p.ghMay, p.known(a[eq+1:]))
 			}
 			if v, ok := p.value(a[eq+1:]); ok {
 				p.vars[a[:eq]] = v
