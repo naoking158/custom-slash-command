@@ -39,7 +39,7 @@ flowchart TB
   goals -.->|friction with my:* assets| signals
   signals --> retro
   you -->|approve| retro
-  retro -->|edits| toolkit
+  retro -->|PRs| toolkit
   toolkit -.->|loaded by every session| goals
 ```
 
@@ -112,7 +112,7 @@ Guardrails:
 | `/my:worktree-cleanup` | Audit git and Orca worktrees and remove the merged or abandoned ones after your approval | audit table, removals |
 | `/my:eval-skill` | Blind A/B evaluation of a skill, rule or agent change, judged against a hidden rubric and checked against the transcripts | Promote / Revise / Drop |
 | `/my:learn` | Capture a toolkit improvement signal to the machine-local journal | `~/.claude/my-toolkit/journal/` |
-| `/my:retro` | Cluster signals, propose toolkit edits, apply approved ones | toolkit repo edits (approval-gated) |
+| `/my:retro` | Cluster signals, propose toolkit edits, open a PR for each approved one | PRs to the toolkit repo (approval-gated) |
 | `/my:pdm-setup` | One-time config for the PdM skills (workspace, backlog destination, channels) | `~/.claude/my-toolkit/pdm/config.md` |
 | `/my:prd` | PRD from Slack/Notion context + bounded interview, self-checked | `{workspace}/docs/prd/` |
 | `/my:product-spec` | PRD → 機能仕様 (edge-case sweep, Given/When/Then AC) | `{workspace}/docs/product-specs/` |
@@ -285,8 +285,11 @@ otherwise.
   work on several goals at once. Start at most one goal at a time in a
   repository with a `verify-<app>` skill: verify runs one app stack, and
   nothing stops two goals from verifying at once. `<repo>` must be registered
-  in Orca (`orca repo add --path <repo>`). Exit codes: 0 launched, 2
-  configuration error, 3 Orca unusable.
+  in Orca (`orca repo add --path <repo>`). Exit codes: 0 launched and the
+  prompt started a turn, 2 configuration error, 3 Orca unusable or no turn
+  seen to start. In that last exit-3 case the worktree and session are kept,
+  and stderr names the terminal handle and the command that sends the
+  prompt by hand; in the others a worktree already made is removed.
 - `orca/profiles/<name>.conf`: the harness and model per role, one
   `<role> <harness> <model>` line each. run-role reads the `verify` line for
   `verifier`, the `review` line for `reviewer` and `diff-reviewer`, the
@@ -374,14 +377,14 @@ change**, promoted into real edits of this repo.
 [hooks]      SessionEnd → session index; UserPromptSubmit → correction queue
 [/my:learn]  explicit capture: "this my:* asset misbehaved / is missing X"
 [/my:retro]  cluster → classify (skill edit / rule / new skill / hook /
-             CLAUDE.md) → propose diffs → apply approved →
+             CLAUDE.md) → propose diffs → open a PR per approved one →
              archive promoted signals, prune stale ones
 ```
 
 ```bash
 /my:learn --category mistake --target skills/review "Medium の指摘を落とした"
-/my:retro                 # cluster + propose + apply (with approval)
-/my:retro --dry-run       # report only
+/my:retro                 # cluster + propose + PRs (with approval)
+/my:retro --dry-run       # report only: fetches origin, moves no checkout
 /my:retro --deep          # also mine transcripts before their ~30-day expiry
 ```
 
