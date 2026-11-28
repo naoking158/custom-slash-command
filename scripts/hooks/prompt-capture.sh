@@ -14,8 +14,9 @@
 # prompt that is all Orca text, or an Orca worker dispatch, is not stored.
 # A block whose end cannot be found is kept, since a stored false positive
 # can be dropped by retro but a missed correction cannot be recovered. The
-# `## First run` rules end at an `Orca: ` line, a blank line or the next Orca
-# block; `- ` lines that follow them directly are kept with them. A stored
+# `## First run` rules are `- ` lines that start with a capital letter and
+# end at an `Orca: ` line, a blank line or the next Orca block; any other
+# line right after them keeps them, as an end that cannot be found. A stored
 # prompt that still starts with Orca text keeps its last 500 characters,
 # where the owner's words are, instead of its first.
 #
@@ -41,8 +42,8 @@ strip_orca() {
     mode == "quote" { keep($0); if ($0 == ">>>") { buf = ""; mode = "after" } ; next }
     mode == "after" && index($0, "${ORCA_CLI_COMMAND:-orca}") { next }
     mode == "rules" && ($0 == "" || $0 == "## First run") { keep($0); next }
-    mode == "rules" && /^- / { keep($0); mode = "bullets"; next }
-    mode == "bullets" && /^- / { keep($0); next }
+    mode == "rules" && /^- [A-Z]/ { keep($0); mode = "bullets"; next }
+    mode == "bullets" && /^- [A-Z]/ { keep($0); next }
     mode == "bullets" && /^Orca: / { buf = ""; mode = ""; next }
     mode == "bullets" && $0 == "" { buf = ""; mode = ""; print; next }
     mode == "bullets" && /^(\[Orca: |──── From: )/ { buf = "" }

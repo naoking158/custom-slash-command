@@ -205,3 +205,13 @@ orca_payload() {
   [ "$status" -eq 0 ]
   [ "$(jq -r '.prompt' "$MY_TOOLKIT_DATA/corrections.jsonl")" = "ちがう、テストを先に書いて" ]
 }
+
+@test "prompt-capture: an owner - line right after first-run rules is kept also before a blank line" {
+  p="$(printf '%s\n' \
+    "[Orca: you are in your first run until your owner's first message here is handled.]" \
+    '' '## First run' '' "- Don't ask how to check in." \
+    '- 違う、テストを先に書いて' '' 'よろしく')"
+  run bash "$PROMPT_CAPTURE" < <(orca_payload "$p")
+  [ "$status" -eq 0 ]
+  [[ "$(jq -r '.prompt' "$MY_TOOLKIT_DATA/corrections.jsonl")" == *"- 違う、テストを先に書いて"* ]]
+}
