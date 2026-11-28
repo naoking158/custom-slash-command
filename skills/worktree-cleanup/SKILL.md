@@ -50,13 +50,14 @@ Get the user's explicit approval of the exact list of paths to remove. Keep `hol
 
 Per approved path:
 
-- `ORCA` is not `-` (Orca manages it): `orca worktree rm --worktree "path:<wt>" --json`. Add `--delete-branch` only when `MERGED=YES`: a squash-merged branch is not an ancestor of the base, and its branch is the only copy of commits made after the PR. Orca also keeps a branch it cannot prove merged.
-- `ORCA` is `-`: `git -C <repo> worktree remove --force <wt>`. `--force` also deletes untracked and ignored files, which is why step 3 lists them. When the directory survives, list what is left, then remove it. Finish with `git -C <repo> worktree prune`. A worktree on a branch keeps its commits on that branch; a detached one keeps them only if step 3 made a branch.
+- `ORCA` is `?` (unknown): remove it by neither command yet. Get Orca to answer (`orca status --json` reports the runtime reachable) and run the audit again. A row whose new bucket is a `hold-*` one is kept; any other row goes back to step 3 for approval with its new values, and its new `ORCA` value then picks the command below. If it is still `?`, keep the worktree and report it as kept because its Orca state is unknown.
+- `ORCA` is any other value but `-` (Orca manages it): `orca worktree rm --worktree "path:<wt>" --force --json`. `--force` removes a worktree that still has the untracked or ignored files step 3 listed and the user approved; it does not force branch deletion. Add `--delete-branch` only when `MERGED=YES`: a squash-merged branch is not an ancestor of the base, and its branch is the only copy of commits made after the PR. Orca also keeps a branch it cannot prove merged.
+- `ORCA` is `-` (Orca does not know it): `git -C <repo> worktree remove --force <wt>`. `--force` also deletes untracked and ignored files, which is why step 3 lists them. When the directory survives, list what is left, then remove it. Finish with `git -C <repo> worktree prune`. A worktree on a branch keeps its commits on that branch; a detached one keeps them only if step 3 made a branch.
 
 ## 5. Report
 
 Run `df -h /` and `git -C <repo> worktree list` again.
 
-**Reply:** `df -h /` before and after with the space reclaimed, the worktrees removed, and for each one kept, its reason in one line (uncommitted work, open PR, active in Orca, or in use by which session).
+**Reply:** `df -h /` before and after with the space reclaimed, the worktrees removed, and for each one kept, its reason in one line (uncommitted work, open PR, active in Orca, Orca state unknown, or in use by which session).
 
 Adapted from pstack `poteto-mode` playbook `worktree-cleanup` (github.com/cursor/plugins, MIT).
