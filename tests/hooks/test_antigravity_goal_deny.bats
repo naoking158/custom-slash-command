@@ -51,3 +51,14 @@ command_payload() { jq -cn --arg c "$1" '{toolCall: {name: "run_command", args: 
 @test "unreadable input is denied and exits 0" {
   [ "$(decision_for 'not json')" = deny ]
 }
+
+@test "a command prefix with regex metacharacters matches only itself" {
+  local kit="$BATS_TEST_TMPDIR/kit"
+  mkdir -p "$kit/scripts/hooks" "$kit/orca/settings"
+  cp "$HOOK" "$kit/scripts/hooks/"
+  printf '{"permissions":{"deny":["Bash(./deploy.sh:*)"]}}' >"$kit/orca/settings/goal.deny.json"
+  HOOK="$kit/scripts/hooks/antigravity-goal-deny.sh"
+  [ "$(decision_for "$(command_payload './deploy.sh prod')")" = deny ]
+  [ "$(decision_for "$(command_payload 'x/deploy.sh')")" = allow ]
+  [ "$(decision_for "$(command_payload 'xdeploy.sh')")" = allow ]
+}

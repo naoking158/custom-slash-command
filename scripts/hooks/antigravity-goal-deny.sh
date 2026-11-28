@@ -46,7 +46,7 @@ verdict="$(jq -cn --argjson p "$payload" --slurpfile f "$rules" '
   | if $server != null and any($servers[]; . as $s | $server | contains($s)) then
       "the goal session may not use the MCP server " + $server
     elif ($line | type) == "string"
-      and any($prefixes[]; . as $x | $line | test("(^|[;&|(`\"\u0027\\n])\\s*" + ($x | gsub("[.*+?^${}()|\\[\\]\\\\]"; "\\\\\(.)") | gsub(" +"; "\\s+")) + "(\\s|$)")) then
+      and any($prefixes[]; . as $x | $line | test("(^|[;&|(`\"\u0027\\n])\\s*" + ($x | gsub("(?<c>[.*+?^${}()|\\[\\]\\\\])"; "\\\(.c)") | gsub(" +"; "\\s+")) + "(\\s|$)")) then
       "the goal session may not run " + ($prefixes | join(", "))
     else "" end' 2>/dev/null)" || deny "cannot read the hook input or $rules"
 verdict="$(printf '%s' "$verdict" | jq -r .)"
