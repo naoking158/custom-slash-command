@@ -2,12 +2,14 @@
 # start-goal — Start one autopilot goal in its own Orca worktree and session.
 #
 # Usage:
-#   orca/bin/start-goal [--name <name>] <repo> "<goal>"
+#   orca/bin/start-goal [--name <name>] [--profile <profile>] <repo> "<goal>"
 #
 #   <repo>   a Git checkout registered in Orca (`orca repo add --path <repo>`).
 #   <goal>   the goal text, passed to the session as `/my:autopilot <goal>`.
 #   --name   Orca worktree name (default goal-<YYYYmmdd-HHMMSS>). Orca adds a
 #            numeric suffix when the name is taken.
+#   --profile  orca/profiles/<profile>.conf for this goal only, in place of
+#            $MY_ORCA_PROFILE and the machine's orca.conf.
 #
 # Steps, in this order:
 #   1. Create an Orca worktree of <repo> from origin's default branch
@@ -16,26 +18,34 @@
 #      .claude/settings.local.json, keeping what is already there, add that file
 #      to the repository's info/exclude unless Git already ignores it, and mark
 #      the worktree for autopilot in its Git dir (my-autopilot-worktree).
+#      For Antigravity, which has no settings file per workspace, also register
+#      scripts/hooks/antigravity-goal-deny.sh, which applies the same deny
+#      rules, in the worktree's .agents/hooks.json (keeping the hooks already
+#      there) and exclude that file the same way, or mark it skip-worktree
+#      when the repository tracks it, so the run never commits it.
 #   3. Launch the profile's `implement <harness> <model>` agent in the worktree
 #      as a terminal session with the prompt `/my:autopilot <goal>`. The harness
-#      must be claude: autopilot and the deny rules are Claude Code settings.
-#   4. Wait about two minutes, and at least 30 seconds after Claude Code is up,
+#      must be claude or antigravity.
+#   4. Wait about two minutes, and at least 30 seconds after the agent is up,
 #      for the prompt to start a turn (the agent shows in `orca agent list` with
 #      the prompt as its title). When Claude Code is idle with no title and the
 #      prompt is not in its input box, send the prompt once with
-#      `orca terminal send`.
+#      `orca terminal send`. Antigravity's input box is not read, so its prompt
+#      is never resent: that case exits 3 with the recovery command.
 # When step 2 or 3 fails, the worktree is removed again. When step 4 fails,
 # the worktree and the session are kept and stderr names the terminal handle
 # and the command that sends the prompt by hand.
 #
-# The profile is $MY_ORCA_PROFILE, else `profile <name>` in
+# The profile is --profile, else $MY_ORCA_PROFILE, else `profile <name>` in
 # ~/.claude/my-toolkit/orca.conf; it names orca/profiles/<name>.conf.
 #
 # Exit codes:
 #   0  the agent was launched in the new worktree and its prompt started a turn
 #   2  usage or configuration error (arguments, repo, profile, an implement
-#      harness other than claude, deny file, repo not registered in Orca,
-#      existing local settings that are not an object with a deny array)
+#      harness other than claude or antigravity, deny file, repo not
+#      registered in Orca, existing local settings that are not an object with
+#      a deny array, an existing .agents/hooks.json that is not an object, or
+#      for antigravity a missing scripts/hooks/antigravity-goal-deny.sh)
 #   3  Orca unusable: no orca command, runtime unreachable, Orca failed to
 #      create the worktree or launch the agent, or no turn was seen to start
 #      (the worktree is kept only in this last case)
@@ -47,6 +57,7 @@ set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 DENY_FILE="$ROOT/orca/settings/goal.deny.json"
+AGY_DENY_HOOK="$ROOT/scripts/hooks/antigravity-goal-deny.sh"
 MARKER=my-autopilot-worktree
 WT="-"
 
@@ -82,12 +93,16 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] && [ -n "$2" ] || die 2 "--name needs a value"
       name="$2"
       shift 2 ;;
+    --profile)
+      [ $# -ge 2 ] && [ -n "$2" ] || die 2 "--profile needs a value"
+      export MY_ORCA_PROFILE="$2"
+      shift 2 ;;
     --) shift; break ;;
     -*) die 2 "unknown option: $1" ;;
     *) break ;;
   esac
 done
-[ $# -eq 2 ] || die 2 "usage: start-goal [--name <name>] <repo> \"<goal>\""
+[ $# -eq 2 ] || die 2 "usage: start-goal [--name <name>] [--profile <profile>] <repo> \"<goal>\""
 goal="$2"
 [ -n "$goal" ] || die 2 "the goal is empty"
 command -v jq >/dev/null 2>&1 || die 2 "jq is required"
@@ -109,7 +124,13 @@ while read -r r h m _ || [ -n "$r" ]; do
   if [ "$r" = implement ]; then harness="$h"; model="$m"; break; fi
 done < "$profile_file"
 [ -n "$harness" ] && [ -n "$model" ] || die 2 "profile $profile has no 'implement <harness> <model>' line"
-[ "$harness" = claude ] || die 2 "profile $profile runs implement on $harness; start-goal needs claude (autopilot and the deny rules are Claude Code settings)"
+case "$harness" in
+  claude|antigravity) ;;
+  *) die 2 "profile $profile runs implement on $harness; start-goal needs claude or antigravity" ;;
+esac
+if [ "$harness" = antigravity ]; then
+  [ -x "$AGY_DENY_HOOK" ] || die 2 "the goal deny hook is missing or not executable: $AGY_DENY_HOOK"
+fi
 
 command -v orca >/dev/null 2>&1 || die 3 "orca command not found on PATH"
 status_json="$(orca status --json 2>/dev/null)"
@@ -143,13 +164,34 @@ printf '%s' "$current" | jq --slurpfile add "$DENY_FILE" '
   | .permissions = ((.permissions // {}) + {deny: ($have + ($add[0].permissions.deny - $have))})
 ' >"$settings.tmp" && mv "$settings.tmp" "$settings" \
   || discard_worktree 3 "cannot write $settings"
+if [ "$harness" = antigravity ]; then
+  hooks="$WT/.agents/hooks.json"
+  current='{}'
+  if [ -f "$hooks" ]; then
+    jq -e 'type == "object"' "$hooks" >/dev/null 2>&1 \
+      || discard_worktree 2 "existing $hooks is not a JSON object; not overwriting it"
+    current="$(cat "$hooks")"
+  fi
+  mkdir -p "$WT/.agents" || discard_worktree 3 "cannot create $WT/.agents"
+  printf '%s' "$current" | jq --arg cmd "$AGY_DENY_HOOK" '
+    .["goal-deny"] = {PreToolUse: [{matcher: "*", hooks: [{type: "command", command: $cmd, timeout: 10}]}]}
+  ' >"$hooks.tmp" && mv "$hooks.tmp" "$hooks" \
+    || discard_worktree 3 "cannot write $hooks"
+fi
 git_dir="$(git -C "$WT" rev-parse --absolute-git-dir 2>/dev/null)" \
   || discard_worktree 3 "not a Git worktree: $WT"
-if ! git -C "$WT" check-ignore -q .claude/settings.local.json; then
+for local_file in .claude/settings.local.json .agents/hooks.json; do
+  [ -f "$WT/$local_file" ] || continue
+  git -C "$WT" check-ignore -q "$local_file" && continue
+  if git -C "$WT" ls-files --error-unmatch "$local_file" >/dev/null 2>&1; then
+    git -C "$WT" update-index --skip-worktree "$local_file" \
+      || discard_worktree 3 "cannot hide the change to the tracked $local_file"
+    continue
+  fi
   exclude="$(git -C "$WT" rev-parse --path-format=absolute --git-path info/exclude)"
-  mkdir -p "${exclude%/*}" && printf '/.claude/settings.local.json\n' >>"$exclude" \
+  mkdir -p "${exclude%/*}" && printf '/%s\n' "$local_file" >>"$exclude" \
     || discard_worktree 3 "cannot write $exclude"
-fi
+done
 printf '%s\n' "$goal" >"$git_dir/$MARKER" || discard_worktree 3 "cannot write $git_dir/$MARKER"
 
 # turn_state — "started" when an agent in the worktree has a title (its first
@@ -162,9 +204,11 @@ turn_state() {
       elif ($a | length) > 0 then "idle" else "none" end' 2>/dev/null
 }
 
-# resendable — true when Claude Code's input box (a ❯ line between two rules)
-# is on screen, does not hold the prompt, and no turn has started.
+# resendable — true when the agent is Claude Code, its input box (a ❯ line
+# between two rules) is on screen, does not hold the prompt, and no turn has
+# started.
 resendable() {
+  [ "$harness" = claude ] || return 1
   [ "$(turn_state)" = idle ] || return 1
   orca terminal read --terminal "$handle" --screen --json 2>/dev/null \
     | jq -r '.result.terminal.tail[]?' 2>/dev/null \
@@ -205,9 +249,9 @@ while state="$(turn_state)"; [ "$state" != started ]; do
 done
 [ "$state" = started ] && finish 0
 [ "$state" = idle ] \
-  || stuck "Claude Code did not report to Orca within two minutes, so the turn could not be checked; the launch prompt may still arrive, and nothing was resent"
+  || stuck "the agent did not report to Orca within two minutes, so the turn could not be checked; the launch prompt may still arrive, and nothing was resent"
 resendable && sleep 5 && resendable \
-  || stuck "the prompt started no turn, and Claude Code's input box was not seen empty of it; nothing was resent"
+  || stuck "the prompt started no turn, and the agent's input box was not seen empty of it; nothing was resent"
 sent="$(orca terminal send --terminal "$handle" --enter --wait-submit "$wait_submit" --text "$prompt" --json 2>/dev/null)"
 if printf '%s' "$sent" | jq -e '.result.send.prompt.stages | index("turn_started")' >/dev/null 2>&1 \
   || [ "$(turn_state)" = started ]; then
