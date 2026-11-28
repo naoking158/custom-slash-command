@@ -93,12 +93,14 @@ case "$1 $2" in
     wt="$FAKE/wt/$(arg --name "$@")"
     git -C "$FAKE/repo" worktree add -q -b "fake/${wt##*/}" "$wt" "$(arg --base-branch "$@")" 2>/dev/null
     if [ -f "$FAKE/existing.json" ]; then mkdir -p "$wt/.claude"; cp "$FAKE/existing.json" "$wt/.claude/settings.local.json"; fi
+    if [ -f "$FAKE/existing-hooks.json" ]; then mkdir -p "$wt/.agents"; cp "$FAKE/existing-hooks.json" "$wt/.agents/hooks.json"; fi
     printf '{"ok":true,"result":{"worktree":{"path":"%s"}}}\n' "$wt" ;;
   "agent launch")
     shift 2
     printf '%s\n' "$@" >"$FAKE/launch.args"
     wt="$(arg --worktree "$@")"; wt="${wt#path:}"
     cp "$wt/.claude/settings.local.json" "$FAKE/settings-at-launch.json" 2>/dev/null
+    cp "$wt/.agents/hooks.json" "$FAKE/hooks-at-launch.json" 2>/dev/null
     cp "$(git -C "$wt" rev-parse --absolute-git-dir)/my-autopilot-worktree" "$FAKE/marker-at-launch" 2>/dev/null
     if [ -f "$FAKE/launch.json" ]; then cat "$FAKE/launch.json"; exit 1; fi
     echo '{"ok":true,"result":{"outcome":{"kind":"terminal","handle":"term_fake"}}}' ;;
@@ -119,6 +121,18 @@ case "$1 $2" in
   *) exit 64 ;;
 esac
 SH
+}
+
+# make_kit — a copy of orca/ with the work profile, for tests that add a
+# profile of their own; prints its path.
+make_kit() {
+  local kit="$TMP/kit/orca"
+  mkdir -p "$kit/bin" "$kit/lib" "$kit/profiles" "$kit/settings"
+  cp "$START_GOAL" "$kit/bin/"
+  cp "$REPO_ROOT/orca/lib/profile.sh" "$kit/lib/"
+  cp "$REPO_ROOT/orca/profiles/work.conf" "$kit/profiles/"
+  cp "$REPO_ROOT/orca/settings/goal.deny.json" "$kit/settings/"
+  printf '%s' "$kit"
 }
 
 run_start_goal() {
@@ -164,12 +178,7 @@ GOAL='README を直す。"引用" と `code` と $HOME
 }
 
 @test "switching MY_ORCA_PROFILE changes the model given to agent launch" {
-  kit="$TMP/kit/orca"
-  mkdir -p "$kit/bin" "$kit/lib" "$kit/profiles" "$kit/settings"
-  cp "$START_GOAL" "$kit/bin/"
-  cp "$REPO_ROOT/orca/lib/profile.sh" "$kit/lib/"
-  cp "$REPO_ROOT/orca/profiles/work.conf" "$kit/profiles/"
-  cp "$REPO_ROOT/orca/settings/goal.deny.json" "$kit/settings/"
+  kit="$(make_kit)"
   printf 'implement claude alt-model\n' >"$kit/profiles/alt.conf"
   MY_ORCA_PROFILE=work run --separate-stderr "$kit/bin/start-goal" --name w "$REPO" "$GOAL"
   [ "$status" -eq 0 ]
@@ -180,13 +189,61 @@ GOAL='README を直す。"引用" と `code` と $HOME
   [ "$(arg_of launch --model)" = "alt-model" ]
 }
 
-@test "a profile whose implement harness is not claude: exit 2 before creating a worktree" {
-  [ "$(profile_value private implement 2)" != claude ]
-  MY_ORCA_PROFILE=private run_start_goal "$REPO" "$GOAL"
+@test "a profile whose implement harness is neither claude nor antigravity: exit 2 before creating a worktree" {
+  kit="$(make_kit)"
+  printf 'implement codex some-model\n' >"$kit/profiles/other.conf"
+  MY_ORCA_PROFILE=other run --separate-stderr "$kit/bin/start-goal" "$REPO" "$GOAL"
   [ "$status" -eq 2 ]
   [ "$(last_line)" = "[start-goal] exit=2 -" ]
-  [[ "$stderr" == *"needs claude"* ]]
+  [[ "$stderr" == *"needs claude or antigravity"* ]]
   [ ! -f "$TMP/calls" ]
+}
+
+@test "--profile picks the profile for this goal over MY_ORCA_PROFILE" {
+  MY_ORCA_PROFILE=work run_start_goal --profile private --name p1 "$REPO" "$GOAL"
+  [ "$status" -eq 0 ]
+  [ "$(arg_of launch --agent)" = "$(profile_value private implement 2)" ]
+  [ "$(arg_of launch --model)" = "$(profile_value private implement 3)" ]
+}
+
+@test "antigravity: the goal deny hook is registered in .agents/hooks.json before the agent starts" {
+  [ "$(profile_value private implement 2)" = antigravity ]
+  MY_ORCA_PROFILE=private run_start_goal --name a1 "$REPO" "$GOAL"
+  [ "$status" -eq 0 ]
+  [ "$(arg_of launch --agent)" = antigravity ]
+  [ "$(jq -r '.["goal-deny"].PreToolUse[0].hooks[0].command' "$TMP/hooks-at-launch.json")" = "$REPO_ROOT/scripts/hooks/antigravity-goal-deny.sh" ]
+  [ "$(jq -r '.["goal-deny"].PreToolUse[0].matcher' "$TMP/hooks-at-launch.json")" = "*" ]
+  [ "$(jq -r '.permissions.deny[]' "$TMP/settings-at-launch.json")" = "$(deny_rules)" ]
+  [ -z "$(git -C "$TMP/wt/a1" status --porcelain)" ]
+}
+
+@test "antigravity: hooks already in .agents/hooks.json are kept" {
+  printf '{"mine":{"Stop":[]}}' >"$TMP/existing-hooks.json"
+  MY_ORCA_PROFILE=private run_start_goal --name a1 "$REPO" "$GOAL"
+  [ "$status" -eq 0 ]
+  jq -e '.mine == {"Stop": []} and (.["goal-deny"].PreToolUse | length == 1)' "$TMP/hooks-at-launch.json"
+}
+
+@test "antigravity: a tracked .agents/hooks.json gets the hook without showing as a change" {
+  mkdir -p "$REPO/.agents"
+  printf '{"team":{"Stop":[]}}\n' >"$REPO/.agents/hooks.json"
+  git -C "$REPO" add .agents/hooks.json
+  git -C "$REPO" -c user.name=t -c user.email=t@t commit -qm hooks
+  git -C "$REPO" push -q origin HEAD:trunk
+  git -C "$REPO" fetch -q origin
+  MY_ORCA_PROFILE=private run_start_goal --name a1 "$REPO" "$GOAL"
+  [ "$status" -eq 0 ]
+  jq -e '.team and .["goal-deny"]' "$TMP/hooks-at-launch.json"
+  [ -z "$(git -C "$TMP/wt/a1" status --porcelain)" ]
+}
+
+@test "antigravity: an existing .agents/hooks.json that is not an object: exit 2, worktree removed, no agent" {
+  printf '[]' >"$TMP/existing-hooks.json"
+  MY_ORCA_PROFILE=private run_start_goal --name a1 "$REPO" "$GOAL"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"not a JSON object"* ]]
+  called "worktree rm"
+  ! called "agent launch"
 }
 
 # --- deny before launch ---
