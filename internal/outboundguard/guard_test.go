@@ -630,6 +630,7 @@ var guardTests = []struct {
 		f.guard(`git --no-pager push origin feature/x`).allow()
 		f.guard(`git --git-dir=/x/.git push origin feature/x`).deny()
 		f.guard(`git --work-tree /x push origin feature/x`).deny()
+		f.guard(`git --attr-source HEAD commit -mH001`).deny()
 	}},
 	{"bodies of other gh commands are checked", func(f *fx) {
 		f.own()
@@ -650,6 +651,7 @@ var guardTests = []struct {
 			`gh gist create m.txt`,
 			`gh gist create -d "fix H001" clean.txt`,
 			`gh gist edit abc -a m.txt`,
+			`gh gist create < m.txt`,
 			`gh pr comment 3 -b x --attach './a.png#see H001'`,
 		} {
 			f.guard(c).deny()
@@ -677,6 +679,8 @@ var guardTests = []struct {
 		f.shipRepo()
 		f.guard(`gh pr merge 3 "-R" work/app`).deny()
 		f.guard(`gh pr merge 3 "-R" me/app`).allow()
+		f.guard(`gh pr merge 3 "--repo" work/app`).deny()
+		f.guard(`gh pr merge 3 "--repo=work/app"`).deny()
 	}},
 	{"file flags quoted inside a message are message text, not body files", func(f *fx) {
 		f.guard(`git commit -q -m 'read config with --file $CONFIG or -F /etc/nothere'`).allow()

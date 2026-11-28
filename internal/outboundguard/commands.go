@@ -366,7 +366,7 @@ func (p *commandParser) namedRepos(gh string) (repos, also []string) {
 			words[i] = word{text: p.literalText(t)}
 		}
 		for _, o := range gr.options(words) {
-			if !o.is("R") || !o.hasValue || strings.HasPrefix(toks[o.first], "-R") || toks[o.first] == "--repo" || strings.HasPrefix(toks[o.first], "--repo=") {
+			if !o.is("R", "repo") || !o.hasValue || strings.HasPrefix(toks[o.first], "-R") || toks[o.first] == "--repo" || strings.HasPrefix(toks[o.first], "--repo=") {
 				continue
 			}
 			if o.attached {

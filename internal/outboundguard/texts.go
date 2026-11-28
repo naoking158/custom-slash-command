@@ -454,7 +454,11 @@ func outboundText(cmd string) string {
 			}
 		}
 		if g.args != argsText {
-			for _, i := range arguments(words, opts) {
+			args := arguments(words, opts)
+			if g.args == argsFiles && len(args) == 0 {
+				stdin = true
+			}
+			for _, i := range args {
 				cut = append(cut, span{words[i].start, words[i].end, 0})
 				if g.args == argsFiles {
 					readFile(words[i].text)

@@ -350,7 +350,7 @@ func gitSub(s, sub string, from int) (start int, opts string, end int, ok bool) 
 
 // gitValued are git's global options that take the next word as their value
 // when they are not written --name=value.
-var gitValued = []string{"--git-dir", "--work-tree", "--namespace", "--config-env"}
+var gitValued = []string{"--git-dir", "--work-tree", "--namespace", "--config-env", "--attr-source"}
 
 // gitGlobals returns the options git is given from p, before its subcommand:
 // -C and -c with the next word, the gitValued ones with theirs, and any other
