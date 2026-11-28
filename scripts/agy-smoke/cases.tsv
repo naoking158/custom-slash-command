@@ -1,0 +1,28 @@
+# One case per line: <skill><TAB><arguments typed after /my:<skill>>.
+# Arguments run against the fixture repository (see fixture.sh): calc.sh on
+# branch feature/mul, one commit ahead of origin/main.
+architect	add a --verbose flag to calc.sh that prints each operation
+autopilot	add a sub function to calc.sh with a test in test_calc.sh
+babysit	check current
+backlog	quick calc.sh に割り算を追加したい
+blast-radius
+catchup	2h --quiet
+correct	--dry-run --since 7d
+create-verification-skill	.
+eval-skill	skills/how
+how	how does calc.sh dispatch its subcommands?
+interrogate
+learn	--category friction agy smoke test memo
+maintain-verification-skill	.
+pdm-setup	--show
+prd	電卓 CLI に計算履歴を残す機能を追加する
+product-spec	docs/prd/20261128-calc-history.md
+retro	--dry-run --since 1d
+review	code:calc.sh --no-screen
+rules-go	summarize the rules in three bullets
+rules-rails	summarize the rules in three bullets
+rules-react	summarize the rules in three bullets
+rules-typescript	summarize the rules in three bullets
+sharpen	make calc.sh handle decimals
+why	why does calc.sh have a mul subcommand?
+worktree-cleanup	.
