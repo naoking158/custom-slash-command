@@ -178,14 +178,15 @@ func (g *guard) run(payload []byte) {
 	}
 	commands := parseCommands(g.cmd, cwd, g.env.Home)
 	g.labelCheck()
-	textDir, apiDir := "", ""
+	textDir := ""
+	var apiDirs []string
 	for _, c := range commands {
 		switch c.Kind {
 		case "pr":
-			if strings.HasPrefix(c.Rest, "gh api") && !globMatch(`gh api*:\?*`, c.Rest+":"+c.Dir) && apiDir == "" {
-				apiDir = c.Dir
+			if strings.HasPrefix(c.Rest, "gh api") {
+				apiDirs = append(apiDirs, c.Dir)
 			}
-			g.judgePR(c.Dir, c.Rest)
+			g.judgePR(c.Dir, c.Rest, c.Repos, c.Also)
 		case "push":
 			g.judgePush(c.Dir, c.Rest)
 		case "text":
@@ -206,7 +207,7 @@ func (g *guard) run(payload []byte) {
 		}
 	}
 	g.textCheck(textDir)
-	g.apiCheck(apiDir)
+	g.apiCheck(apiDirs)
 	if g.pendingAsk != "" {
 		decide("ask", g.pendingAsk)
 	}
@@ -253,8 +254,10 @@ var (
 
 func isCmd(gh, name string) bool { return gh == name || strings.HasPrefix(gh, name+" ") }
 
-// judgePR denies what a strict repository does not allow.
-func (g *guard) judgePR(dir, gh string) {
+// judgePR denies what a strict repository does not allow. The repositories
+// judged are those gh is told to use, or dir's when it is told none, and
+// every other one it may act on: all of them must be ship.
+func (g *guard) judgePR(dir, gh string, repos, also []string) {
 	reason, cut := "", false
 	hint := "-R <owner/name> を付けるか cd <絶対パス> で始める"
 	if strings.HasSuffix(gh, " ?") {
@@ -285,59 +288,29 @@ func (g *guard) judgePR(dir, gh string) {
 	if cut {
 		decide("deny", "gh の引数を判定できない。command substitution を使わず値を直接書く")
 	}
-	repo := lastRepoOption(gh)
-	switch {
-	case repo == "":
+	targets := repos
+	if len(targets) == 0 {
 		switch dir {
 		case "?case":
 			decide("deny", "case 文と同じ行では gh を実行するリポジトリを判定できない。-R <owner/name> を付けるか別のコマンドに分ける")
 		case "?":
 			decide("deny", "gh を実行するリポジトリを判定できない。"+hint)
 		}
-		repo = repoSlug(dir)
-	case strings.ContainsAny(repo, `"'`):
-		repo = ""
+		targets = []string{repoSlug(dir)}
 	}
-	if g.autonomyMode(repo) != "strict" {
-		return
-	}
-	if g.shipConfigured(repo) {
-		if strings.Contains(gh, " -R ") || strings.Contains(gh, " --repo") {
-			dir = "<" + repo + " の checkout>"
-		}
-		reason += "（ship の設定はあるが、default branch の保護を確かめた記録がない。" + g.env.LibDir + "/autonomy.sh \"" + dir + "\" を実行する）"
-	}
-	decide("deny", reason)
-}
-
-// lastRepoOption returns the value of the last -R / --repo of gh.
-func lastRepoOption(gh string) string {
-	for k := len(gh) - 1; k >= 0; k-- {
-		p := k
-		if isSpace(gh[k]) {
-			p = k + 1
-		} else if k != 0 {
+	targets = append(targets, also...)
+	for _, repo := range targets {
+		if g.autonomyMode(repo) != "strict" {
 			continue
 		}
-		for _, opt := range []string{"-R", "--repo"} {
-			if !strings.HasPrefix(gh[p:], opt) {
-				continue
+		if g.shipConfigured(repo) {
+			if len(repos) > 0 || repo != targets[0] {
+				dir = "<" + repo + " の checkout>"
 			}
-			q := p + len(opt)
-			r := q
-			for r < len(gh) && (isSpace(gh[r]) || gh[r] == '=') {
-				r++
-			}
-			e := r
-			for e < len(gh) && !isSpace(gh[e]) {
-				e++
-			}
-			if r > q && e > r {
-				return gh[r:e]
-			}
+			reason += "（ship の設定はあるが、default branch の保護を確かめた記録がない。" + g.env.LibDir + "/autonomy.sh \"" + dir + "\" を実行する）"
 		}
+		decide("deny", reason)
 	}
-	return ""
 }
 
 func git(dir string, args ...string) (string, bool) {
@@ -614,6 +587,9 @@ func (g *guard) textCheck(textDir string) {
 	}
 	for _, f := range grepLines(text, "\x02", true) {
 		f = f[1:]
+		if f == "" {
+			decide("deny", "本文を読むコマンドの引数を判定できない。ファイルのパスを直接書く")
+		}
 		if strings.HasPrefix(f, "/dev/fd/") || f == "/dev/null" {
 			continue
 		}
@@ -644,27 +620,46 @@ var (
 )
 
 // apiCheck applies the leak and label checks to what `gh api` writes send.
-func (g *guard) apiCheck(apiDir string) {
-	api := shellOut(apiWrites(g.cmd))
-	if api == "" {
-		return
-	}
-	text := shellOut(strings.Join(grepLines(api, "\x02", false), "\n"))
-	for _, f := range grepLines(api, "\x02", true) {
-		f = g.tilde(f[1:])
-		if !strings.HasPrefix(f, "/") && apiDir != "" {
-			f = apiDir + "/" + f
+// dirs are the directories the parser followed for each `gh api` on the line;
+// a relative file is read from its own call's directory.
+func (g *guard) apiCheck(dirs []string) {
+	calls, written := apiCalls(g.cmd)
+	for i, c := range calls {
+		if !c.writes {
+			continue
 		}
-		if !readable(f) {
-			decide("deny", "gh api が送るファイル "+basename(f)+" を読めない。ファイルを書くコマンドと gh api を別の Bash 呼び出しに分け、パスを直接書く")
+		dir := ""
+		if len(dirs) == len(calls) && !strings.HasPrefix(dirs[i], "?") {
+			dir = dirs[i]
 		}
-		text += "\n" + readBody(f) + "\n" + jsonStrings(f)
-	}
-	if anyLine(text, labelAPI) {
-		decide("deny", "gh api で label を書き換えない。human-approved 以外の label は gh pr edit --add-label で付ける")
-	}
-	if r := g.leakReason(shellOut(jsonEscapeNL.ReplaceAllString(text, " ")), apiDir); r != "" {
-		decide("deny", r)
+		text := shellOut(c.text)
+		for _, f := range c.files {
+			if f == "" {
+				decide("deny", "gh api が送る本文を読むコマンドの引数を判定できない。ファイルのパスを直接書く")
+			}
+			for _, w := range written {
+				if basename(w) == basename(f) {
+					decide("deny", "gh api が送るファイル "+basename(f)+" を同じ呼び出しで書いている。ファイルを書くコマンドと gh api を別の Bash 呼び出しに分ける")
+				}
+			}
+			f = g.tilde(f)
+			if !strings.HasPrefix(f, "/") {
+				if dir == "" {
+					decide("deny", "gh api が送るファイル "+basename(f)+" の directory を判定できない。cd <絶対パス> で始めるか、パスを絶対パスで書く")
+				}
+				f = dir + "/" + f
+			}
+			if !readable(f) {
+				decide("deny", "gh api が送るファイル "+basename(f)+" を読めない。ファイルを書くコマンドと gh api を別の Bash 呼び出しに分け、パスを直接書く")
+			}
+			text += "\n" + readBody(f) + "\n" + jsonStrings(f)
+		}
+		if anyLine(text, labelAPI) {
+			decide("deny", "gh api で label を書き換えない。human-approved 以外の label は gh pr edit --add-label で付ける")
+		}
+		if r := g.leakReason(shellOut(jsonEscapeNL.ReplaceAllString(text, " ")), dir); r != "" {
+			decide("deny", r)
+		}
 	}
 }
 
