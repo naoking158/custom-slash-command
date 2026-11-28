@@ -825,6 +825,17 @@ var guardTests = []struct {
 		f.guard(`gh pr merge https://github.com/me/app/pull/3`).allow()
 		f.guard(`gh api -X PUT repos/me/app/pulls/3/merge`).allow()
 	}},
+	{"ship: a protection record older than 7 days or dated in the future is strict", func(f *fx) {
+		f.own()
+		f.shipRepo()
+		record := func(at int64) { f.write("data/ship-ready/me__app", strconv.FormatInt(at, 10)+"\n") }
+		record(f.env.Now - 604801)
+		f.guard(`gh pr merge 3`).deny()
+		record(f.env.Now + 1)
+		f.guard(`gh pr merge 3`).deny()
+		record(f.env.Now - 604800)
+		f.guard(`gh pr merge 3`).allow()
+	}},
 }
 
 func TestNULInCommandIsDropped(t *testing.T) {
