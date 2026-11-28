@@ -87,6 +87,18 @@ report() {
   [[ "$output" == "$REVIEWS/prs/7-${REVIEWED:0:7}.md (then a merge of main sharing no file"* ]]
 }
 
+@test "a merge commit with a change made by hand is not covered" {
+  report "7-${REVIEWED:0:7}" PASS
+  git -C "$REPO" switch -q main
+  commit_file other.txt landed
+  git -C "$REPO" switch -q pr
+  git -C "$REPO" merge -q --no-commit main
+  echo sneaked >"$REPO/extra.txt"
+  git -C "$REPO" add extra.txt
+  git -C "$REPO" commit -q --no-edit
+  run -1 bash "$REVIEWED_HEAD" "$REPO" "$REVIEWS" 7 HEAD main
+}
+
 @test "a merge of the default branch that shares a file is not covered" {
   report "7-${REVIEWED:0:7}" PASS
   git -C "$REPO" switch -q main

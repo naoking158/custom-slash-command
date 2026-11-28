@@ -11,8 +11,9 @@
 #     prs/<pr>-<since7>..<sha7>[-<k>].md, where <since> is an ancestor of
 #     <sha> and is itself covered
 #   - with <default-ref>: <sha> is a merge of a commit of <default-ref> into a
-#     covered commit, and what the default branch brought in shares no file
-#     with what the PR changes
+#     covered commit, what the default branch brought in shares no file with
+#     what the PR changes, and the merge's tree is the one git merges to (no
+#     change made by hand in the merge commit)
 #
 # Prints the report that covers <sha> (with a note for the merge case) and
 # exits 0; exits 1 with the reason on stderr when nothing covers it, 2 on a
@@ -76,6 +77,7 @@ covered() {
     <(git -C "$repo" diff --name-only --no-renames "$p1...$p2" | sort) \
     <(git -C "$repo" diff --name-only --no-renames "$p2...$p1" | sort))"
   [ -z "$shared" ] || return 1
+  [ "$(git -C "$repo" merge-tree --write-tree "$p1" "$p2")" = "$(git -C "$repo" rev-parse "$sha^{tree}")" ] || return 1
   echo "$report (then a merge of $default_ref sharing no file: ${sha:0:7})"
 }
 
