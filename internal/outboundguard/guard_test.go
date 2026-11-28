@@ -287,6 +287,13 @@ var guardTests = []struct {
 	}},
 	{"gh pr create --draft=false is denied", func(f *fx) {
 		f.guard(`gh pr create --draft=false --title t --body b`).deny()
+		f.guard(`gh pr create -d=false --title t --body b`).deny()
+		f.guard(`gh pr create --draft=FALSE --title t --body b`).deny()
+		f.guard(`gh pr create -d --draft=0 --title t --body b`).deny()
+		f.guard(`gh pr create --draft=false -d --title t --body b`).deny()
+	}},
+	{"gh pr create -d bundled with other short options is a draft", func(f *fx) {
+		f.guard(`gh pr create -fd --title t`).allow()
 	}},
 	{"gh pr ready is denied", func(f *fx) {
 		f.guard(`gh pr ready 12`).deny()
@@ -327,6 +334,25 @@ var guardTests = []struct {
 	}},
 	{"force push is denied", func(f *fx) {
 		f.guard(`git push --force-with-lease origin feature/x`).deny()
+	}},
+	{"force and delete bundled with other short options or abbreviated are denied", func(f *fx) {
+		for _, c := range []string{
+			`git push -uf origin feature/x`,
+			`git push -qd origin feature/x`,
+			`git push --del origin feature/x`,
+			`git push --forc origin feature/x`,
+			`git push --mir origin`,
+			`git push --branches origin`,
+		} {
+			f.guard(c).deny()
+		}
+		f.guard(`git push -u origin feature/x`).allow()
+	}},
+	{"a push option value is not taken for the remote", func(f *fx) {
+		f.own()
+		f.git("-C", f.repo, "checkout", "-q", "main")
+		f.guard(`git push -o ci.skip origin`).deny()
+		f.guard(`git push --recurse-submodules check origin`).deny()
 	}},
 	{"plus refspec is denied", func(f *fx) {
 		f.guard(`git push origin +feature/x`).deny()
@@ -540,6 +566,59 @@ var guardTests = []struct {
 		f.guard("git commit -q -F - < " + f.tmp + "/leak.md").deny()
 		f.guard("git commit -q -F - 0<" + f.tmp + "/leak.md").deny()
 	}},
+	{"a -C word inside a message or body file does not hide a review ID", func(f *fx) {
+		f.guard(`git commit -m "use -C H001 here"`).deny()
+		f.write("m.txt", "use -C H001 here\n")
+		f.guard("git commit -q -F " + f.tmp + "/m.txt").deny()
+		f.guard("gh pr comment 3 --body-file " + f.tmp + "/m.txt").deny()
+		f.guard(`gh pr comment 3 --body "run git -C /Users/me/x"`).deny()
+		f.guard(`echo see git -C H001 | gh pr comment 3 --body-file -`).deny()
+		f.guard(`git log -1 --format="git -C H001" | gh pr comment 3 --body-file -`).deny()
+	}},
+	{"git -C before commit and -C after it are not message text", func(f *fx) {
+		f.guard(`git -C /Users/me/tmp/w commit -m ok`).allow()
+		f.guard(`git -c user.name=x -C /Users/me/tmp/w commit -m ok`).allow()
+		f.guard(`git commit -m x -C HEAD`).allow()
+		f.guard(`git -C /Users/me/tmp/w log -1 --format=%B | gh pr comment 3 --body-file -`).allow()
+		f.guard(`gh pr comment 3 --body "$(git -C /Users/me/tmp/w log -1 --format=%B)"`).deny()
+	}},
+	{"short options bundled with a body file or message are read as git and gh read them", func(f *fx) {
+		f.own()
+		f.write(f.repo+"/m.txt", "fix H001\n")
+		f.write(f.repo+"/clean.txt", "fix x\n")
+		for _, c := range []string{
+			`git commit -qF m.txt`,
+			`git commit -qFm.txt`,
+			`git commit -vqF m.txt`,
+			`git commit --fil m.txt`,
+			`git commit --fil=m.txt`,
+			`git commit -mH001`,
+			`git commit -amH001`,
+			`gh pr create -d -bH001`,
+			`gh pr create -d -tH001 -b x`,
+			`gh pr comment 3 -eF m.txt`,
+			`gh pr comment 3 -eFm.txt`,
+			`gh pr comment 3 -F=m.txt`,
+			`gh pr review 3 -aF m.txt`,
+			`gh pr review 3 -cbH001`,
+			`gh issue create -t x -wF m.txt`,
+		} {
+			f.guard(c).deny()
+			if !strings.Contains(f.out, "review finding ID") {
+				f.t.Fatalf("command %q: reason is not the review ID: %q", c, f.out)
+			}
+		}
+		for _, c := range []string{
+			`git commit -qF clean.txt`,
+			`git commit -qFclean.txt`,
+			`git commit -am ok`,
+			`gh pr comment 3 -eF clean.txt`,
+			`gh pr review 3 -aF clean.txt`,
+			`gh pr create -d -tFix -b x`,
+		} {
+			f.guard(c).allow()
+		}
+	}},
 	{"file flags quoted inside a message are message text, not body files", func(f *fx) {
 		f.guard(`git commit -q -m 'read config with --file $CONFIG or -F /etc/nothere'`).allow()
 		f.guard(`git commit -q --allow-empty -F /dev/null`).allow()
@@ -629,6 +708,9 @@ var guardTests = []struct {
 		f.own()
 		f.shipRepo()
 		f.guard(`gh pr merge 3 -R work/app`).deny()
+		f.guard(`gh pr merge 3 -sR work/app`).deny()
+		f.guard(`gh pr merge 3 -sdR work/app`).deny()
+		f.guard(`gh pr merge 3 -sR me/app`).allow()
 	}},
 	{"ship cwd: cd into a strict repo is judged as that repo", func(f *fx) {
 		f.own()
@@ -736,6 +818,25 @@ var guardTests = []struct {
 	{"api: a read-only gh api call is allowed", func(f *fx) {
 		f.guard(`gh api repos/o/r/pulls/1/comments`).allow()
 		f.guard(`gh api --paginate repos/o/r/pulls/1/comments --jq '.[] | select(.body | test("H001"))'`).allow()
+	}},
+	{"a file read into a message written after -m is checked as the file, not as its path", func(f *fx) {
+		f.write("home/clean.md", "fix x\n")
+		f.write("home/leak.md", "fix H001\n")
+		home := filepath.Join(f.tmp, "home")
+		f.env.Home = &home
+		f.guard(`git commit -m"$(cat ~/clean.md)"`).allow()
+		f.guard(`git commit -m"$(cat ~/leak.md)"`).deny()
+	}},
+	{"api: fields bundled after a boolean short option are checked", func(f *fx) {
+		f.write("body.md", "fixed H001\n")
+		f.guard("gh api repos/o/r/issues/1/comments -iF body=@" + f.tmp + "/body.md").deny()
+		f.guard("gh api repos/o/r/issues/1/comments -iFbody=@" + f.tmp + "/body.md").deny()
+		f.guard(`gh api repos/o/r/issues/1/comments -iFbody=H001`).deny()
+		f.guard(`gh api repos/o/r/issues/1/comments -if body=H001`).deny()
+		f.guard(`gh api -X GET -XPOST repos/o/r/issues/1/comments -f body=H001`).deny()
+		f.guard(`gh api -XPOST -X GET repos/o/r/issues/1/comments -f body=H001`).deny()
+		f.write("clean.md", "fixed in abc123\n")
+		f.guard("gh api repos/o/r/issues/1/comments -iF body=@" + f.tmp + "/clean.md").allow()
 	}},
 	{"api: GET with query fields is not a write", func(f *fx) {
 		f.guard(`gh api -X GET search/issues -f q="repo:o/r H001"`).allow()

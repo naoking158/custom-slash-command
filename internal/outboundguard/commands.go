@@ -349,12 +349,28 @@ func (p *commandParser) known(word string) string {
 }
 
 // namedRepos returns the repositories gh is told to use (-R / --repo and the
-// next word) and, from any word, the ones it may act on: an attached
-// -R<repo>, which may be another option's value, pull request URLs and
-// repos/OWNER/NAME paths. {owner}/{repo} is the directory's own repository and
+// next word, -R after other short options in one word as gh reads them) and,
+// from any word, the ones it may act on: an attached -R<repo>, which may be
+// another option's value, pull request URLs and repos/OWNER/NAME paths. {owner}/{repo} is the directory's own repository and
 // is not listed.
 func (p *commandParser) namedRepos(gh string) (repos, also []string) {
 	toks := fields(gh)
+	if gr, ok := ghGrammarOf(gh); ok {
+		words := make([]word, len(toks))
+		for i, t := range toks {
+			words[i] = word{text: t}
+		}
+		for _, o := range gr.options(words) {
+			if !o.is("R") || !o.hasValue || strings.HasPrefix(toks[o.first], "-R") {
+				continue
+			}
+			if o.attached {
+				also = append(also, p.known(o.value))
+			} else {
+				repos = append(repos, p.known(o.value))
+			}
+		}
+	}
 	for i := 0; i < len(toks); i++ {
 		t := toks[i]
 		switch {

@@ -230,9 +230,33 @@ func (g *guard) labelCheck() {
 		}
 		return r
 	}, g.cmd)
-	if anyLine(flat, labelAdd) || anyLine(flat, labelEdit) {
+	if anyLine(flat, labelAdd) || anyLine(flat, labelEdit) || labelOption(g.cmd) {
 		decide("deny", "label human-approved は人の承認を表す。agent は付けず、人が GitHub の画面で付ける（label は変数を使わず直接書く）")
 	}
+}
+
+// labelOption reports whether a gh pr / issue create or edit on the line adds
+// human-approved, or a label it does not show, through -l / --label /
+// --add-label as gh reads them (-dl human-approved, -lhuman-approved).
+func labelOption(cmd string) bool {
+	s, h := holdLine(cmd)
+	for _, seg := range splitOn(s, listSep(true, "<>|")) {
+		for from := 0; ; {
+			start, end, ok := findGh(seg, from, ghLabelCmds)
+			if !ok {
+				break
+			}
+			from = end
+			gr, _ := ghGrammarOf(seg[start:end])
+			for _, o := range gr.options(lineWords(seg, end, h)) {
+				if o.hasValue && o.is("l", "label", "add-label") &&
+					(strings.Contains(strings.ToLower(o.value), "human-approved") || strings.ContainsAny(o.value, "$`")) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // anyLine reports whether re matches one of the lines of s, as grep does.
@@ -246,11 +270,33 @@ func anyLine(s string, re *regexp.Regexp) bool {
 }
 
 var (
-	draftFalse = regexp.MustCompile(`--draft=(false|0)`)
-	draftFlag  = regexp.MustCompile(`(^|[[:space:]])(--draft|-d)([[:space:]=]|$)`)
-	apiMerge   = regexp.MustCompile(`(?i)mergePullRequest|enablePullRequestAutoMerge|pulls/[0-9]+/merge`)
-	apiReady   = regexp.MustCompile(`(?i)markPullRequestReadyForReview|"?draft"?[[:space:]]*[:=][[:space:]]*false`)
+	apiMerge = regexp.MustCompile(`(?i)mergePullRequest|enablePullRequestAutoMerge|pulls/[0-9]+/merge`)
+	apiReady = regexp.MustCompile(`(?i)markPullRequestReadyForReview|"?draft"?[[:space:]]*[:=][[:space:]]*false`)
 )
+
+// draftReason returns why a gh pr create may not open a draft, or "": it
+// needs a -d / --draft and none that pflag reads as false (-d=false,
+// --draft=0).
+func draftReason(gh string) string {
+	var words []word
+	for _, t := range fields(gh)[3:] {
+		words = append(words, word{text: t})
+	}
+	draft := false
+	for _, o := range ghGrammars["pr create"].options(words) {
+		if !o.is("d", "draft") {
+			continue
+		}
+		if b, err := strconv.ParseBool(o.value); o.hasValue && (err != nil || !b) {
+			return "PR は draft で作る（--draft=false は使わない）"
+		}
+		draft = true
+	}
+	if draft {
+		return ""
+	}
+	return "PR は draft で作る。gh pr create に --draft を付ける"
+}
 
 func isCmd(gh, name string) bool { return gh == name || strings.HasPrefix(gh, name+" ") }
 
@@ -269,11 +315,7 @@ func (g *guard) judgePR(dir, gh string, repos, also []string) {
 	case isCmd(gh, "gh pr ready"):
 		reason = "PR を ready にしない。ready への変更は本人がセルフレビュー後に行う"
 	case isCmd(gh, "gh pr create"), isCmd(gh, "gh pr new"):
-		if anyLine(gh, draftFalse) {
-			reason = "PR は draft で作る（--draft=false は使わない）"
-		} else if !anyLine(gh, draftFlag) {
-			reason = "PR は draft で作る。gh pr create に --draft を付ける"
-		}
+		reason = draftReason(gh)
 	case isCmd(gh, "gh api"):
 		hint = "cd <絶対パス> で始める"
 		if anyLine(g.cmd, apiMerge) {
@@ -399,22 +441,51 @@ func (g *guard) autonomyMode(slug string) string {
 	return "strict"
 }
 
+// pushRefused reports whether a git push long option, possibly abbreviated as
+// git allows, forces, deletes or pushes more than one branch.
+func pushRefused(name string) bool {
+	for _, o := range []string{"force", "force-with-lease", "force-if-includes", "mirror", "all", "branches", "delete", "prune"} {
+		if strings.HasPrefix(o, name) {
+			return true
+		}
+	}
+	return false
+}
+
 // judgePush denies force pushes and pushes to the default branch.
 func (g *guard) judgePush(dir, args string) {
 	unknownDir := "git push を実行する directory を判定できない。cd <絶対パス> で始めるか git -C <絶対パス> push と書く"
 	var positional, dests []string
 	tags := false
-	for _, tok := range fieldsIFS(args) {
+	toks := fieldsIFS(args)
+	words := make([]word, len(toks))
+	for i, t := range toks {
+		if t == "?" {
+			decide("deny", "git push の引数を判定できない。remote と branch を直接書く")
+		}
+		words[i] = word{text: t}
+	}
+	inOption := make([]bool, len(toks))
+	for _, o := range gitPushGrammar.options(words) {
+		for i := o.first; i <= o.last; i++ {
+			inOption[i] = true
+		}
+		tok := words[o.first].text
 		switch {
-		case tok == "-f" || tok == "--force" || tok == "--force-with-lease" || strings.HasPrefix(tok, "--force-with-lease=") ||
-			tok == "--force-if-includes" || tok == "--mirror" || tok == "--all" || tok == "--delete" || tok == "-d" || tok == "--prune":
+		case !o.long && (o.name == "f" || o.name == "d"), o.long && o.name != "" && pushRefused(o.name):
 			decide("deny", "git push "+tok+" は使わない（取り消せない、または既定の branch に及ぶ）")
-		case tok == "--tags":
+		case o.long && o.name != "" && strings.HasPrefix("tags", o.name):
 			tags = true
 			g.pendingAsk = "tag の push は deploy を起こしうる"
-		case tok == "?":
-			decide("deny", "git push の引数を判定できない。remote と branch を直接書く")
-		case strings.HasPrefix(tok, "-"):
+		}
+	}
+	afterDashes := false
+	for i, tok := range toks {
+		switch {
+		case inOption[i]:
+		case tok == "--" && !afterDashes:
+			afterDashes = true
+		case strings.HasPrefix(tok, "-") && !afterDashes:
 		case strings.HasPrefix(tok, "+"):
 			decide("deny", "+ 付きの refspec は force-push になる")
 		default:
@@ -546,12 +617,6 @@ func (g *guard) tilde(f string) string {
 	return f
 }
 
-var dashC = func() *regexp.Regexp {
-	re := regexp.MustCompile(`-C[[:space:]]+("[^"]*"|[^[:space:]]+)`)
-	re.Longest()
-	return re
-}()
-
 // shellOut is what $(...) keeps of a command's output: trailing newlines go.
 func shellOut(s string) string { return strings.TrimRight(s, "\n") }
 
@@ -605,11 +670,7 @@ func (g *guard) textCheck(textDir string) {
 		}
 		body += "\n" + readBody(f)
 	}
-	lines := strings.Split(body, "\n")
-	for i, l := range lines {
-		lines[i] = dashC.ReplaceAllString(l, "")
-	}
-	if r := g.leakReason(shellOut(strings.Join(lines, "\n")), textDir); r != "" {
+	if r := g.leakReason(shellOut(body), textDir); r != "" {
 		decide("deny", r)
 	}
 }
