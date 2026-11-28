@@ -292,16 +292,9 @@ otherwise.
   `verifier`, the `review` line for `reviewer` and `diff-reviewer`, the
   `adversary` line for `adversary` and the `audit` line for `trail-auditor`
   (these two fall back to the `review` line); start-goal reads the
-  `implement` line.
-
-  | Role | `work` | `private` |
-  |------|--------|-----------|
-  | implement | claude opus | antigravity gemini-4-carbon-high |
-  | verify, review | claude opus | antigravity gemini-4-carbon-high |
-  | adversary, audit | claude opus | antigravity gemini-4-carbon-high |
-  | scout | claude haiku | antigravity gemini-3.8-flash-medium |
-  | retro | claude sonnet | antigravity gemini-4-carbon-high |
-
+  `implement` line. The values for each machine are in
+  `orca/profiles/work.conf` and `orca/profiles/private.conf`, and only
+  there; read the comments in each file before relying on a model choice.
   For a cross-model check, point `adversary` or `audit` at a different
   vendor's harness and model than `implement` on that machine.
 - A profile must be selected on any machine with `orca` on PATH: set
