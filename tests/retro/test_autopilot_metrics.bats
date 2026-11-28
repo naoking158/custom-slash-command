@@ -214,7 +214,7 @@ SH
 @test "four metrics and the unreadable counts come out of logs, gh and git" {
   run -0 bash "$METRICS" --checkout "$REPO"
   [ "${lines[0]}" = "期間: 2026-10-30..2026-11-26" ]
-  [ "${lines[1]}" = "進行の記録: ゴール 2、タスク 5（Started が読めないゴール 1、タスクの見出しがないゴール 1）" ]
+  [ "${lines[1]}" = "進行の記録: ゴール 2、タスク 5（Started が読めないゴール 1、タスクが読めないゴール 1）" ]
   [ "${lines[2]}" = "レビューの往復数: 読めた 4（1回 2、2回 2、平均 1.5）、不明 1" ]
   [ "${lines[3]}" = "verify: PASS 1、修正後に PASS 1、BLOCKED 1、未検証 1、不明 1" ]
   [ "${lines[4]}" = "人間の差し戻し: auto/ の PR 5、人間のコメントか変更要求 2、マージせずに閉じた 1、不明のリポジトリ 0" ]
@@ -225,7 +225,7 @@ SH
 @test "goals, PRs and commits outside the period are not counted" {
   run -0 bash "$METRICS" --checkout "$REPO" --since 2026-11-22 --until 2026-11-23
   [ "${lines[0]}" = "期間: 2026-11-22..2026-11-23" ]
-  [ "${lines[1]}" = "進行の記録: ゴール 0、タスク 0（Started が読めないゴール 1、タスクの見出しがないゴール 0）" ]
+  [ "${lines[1]}" = "進行の記録: ゴール 0、タスク 0（Started が読めないゴール 1、タスクが読めないゴール 0）" ]
   [ "${lines[2]}" = "レビューの往復数: 読めた 0、不明 0" ]
   [ "${lines[4]}" = "人間の差し戻し: auto/ の PR 3、人間のコメントか変更要求 1、マージせずに閉じた 1、不明のリポジトリ 0" ]
   [ "${lines[5]}" = "マージ後の手戻り: auto/ の PR を取り消したコミット 0、auto/ と結びつかない revert 0、不明のリポジトリ 0" ]
@@ -234,7 +234,7 @@ SH
 @test "--since Nd covers N days ending on --until, and a goal started on the first day is in" {
   run -0 bash "$METRICS" --since 7d --until 2026-11-26
   [ "${lines[0]}" = "期間: 2026-11-20..2026-11-26" ]
-  [ "${lines[1]}" = "進行の記録: ゴール 2、タスク 5（Started が読めないゴール 1、タスクの見出しがないゴール 1）" ]
+  [ "${lines[1]}" = "進行の記録: ゴール 2、タスク 5（Started が読めないゴール 1、タスクが読めないゴール 1）" ]
 }
 
 @test "a repository without a checkout is unknown for reverts" {
@@ -259,7 +259,7 @@ SH
 
 @test "--repo keeps other repositories' goals out" {
   run -0 bash "$METRICS" --repo x/y
-  [ "${lines[1]}" = "進行の記録: ゴール 0、タスク 0（Started が読めないゴール 0、タスクの見出しがないゴール 0）" ]
+  [ "${lines[1]}" = "進行の記録: ゴール 0、タスク 0（Started が読めないゴール 0、タスクが読めないゴール 0）" ]
   ! grep -q -- '-R o/r' "$TMP/gh.calls"
 }
 
@@ -286,7 +286,7 @@ MD
   task 4 1 unverified
   task 5 3 fail
   run -0 bash "$METRICS" --repo t/t
-  [ "${lines[1]}" = "進行の記録: ゴール 1、タスク 5（Started が読めないゴール 0、タスクの見出しがないゴール 0）" ]
+  [ "${lines[1]}" = "進行の記録: ゴール 1、タスク 5（Started が読めないゴール 0、タスクが読めないゴール 0）" ]
   [ "${lines[2]}" = "レビューの往復数: 読めた 5（0回 1、1回 2、2回 1、3回 1、平均 1.4）、不明 0" ]
   [ "${lines[3]}" = "verify: PASS 1、修正後に PASS 1、BLOCKED 1、未検証 1、不明 1" ]
 }
@@ -297,7 +297,7 @@ MD
   task 2 2 blocked
   task 1 1 pass
   run -0 bash "$METRICS" --repo t/t
-  [ "${lines[1]}" = "進行の記録: ゴール 1、タスク 2（Started が読めないゴール 0、タスクの見出しがないゴール 0）" ]
+  [ "${lines[1]}" = "進行の記録: ゴール 1、タスク 2（Started が読めないゴール 0、タスクが読めないゴール 0）" ]
   [ "${lines[2]}" = "レビューの往復数: 読めた 2（1回 1、2回 1、平均 1.5）、不明 0" ]
   [ "${lines[3]}" = "verify: PASS 1、修正後に PASS 0、BLOCKED 1、未検証 0、不明 0" ]
 }
@@ -310,7 +310,7 @@ MD
   task 4 1 unverified
   task 5 3 fail
   run -0 bash "$METRICS" --checkout "$REPO"
-  [ "${lines[1]}" = "進行の記録: ゴール 3、タスク 10（Started が読めないゴール 1、タスクの見出しがないゴール 1）" ]
+  [ "${lines[1]}" = "進行の記録: ゴール 3、タスク 10（Started が読めないゴール 1、タスクが読めないゴール 1）" ]
   [ "${lines[2]}" = "レビューの往復数: 読めた 9（0回 1、1回 4、2回 3、3回 1、平均 1.44）、不明 1" ]
   [ "${lines[3]}" = "verify: PASS 2、修正後に PASS 2、BLOCKED 2、未検証 2、不明 2" ]
 }
@@ -323,7 +323,7 @@ MD
 MD
   printf 'ts\ttask_id\tbranch\tpr\treview_rounds\tverify\tci\toutcome\n' >"$TSV_DIR/tasks.tsv"
   run -0 bash "$METRICS" --repo t/t
-  [ "${lines[1]}" = "進行の記録: ゴール 1、タスク 1（Started が読めないゴール 0、タスクの見出しがないゴール 0）" ]
+  [ "${lines[1]}" = "進行の記録: ゴール 1、タスク 1（Started が読めないゴール 0、タスクが読めないゴール 0）" ]
   [ "${lines[2]}" = "レビューの往復数: 読めた 1（2回 1、平均 2）、不明 0" ]
   [ "${lines[3]}" = "verify: PASS 1、修正後に PASS 0、BLOCKED 0、未検証 0、不明 0" ]
 }
@@ -340,7 +340,7 @@ MD
 MD
   task 2 1 unverified
   run -0 bash "$METRICS" --repo t/t
-  [ "${lines[1]}" = "進行の記録: ゴール 1、タスク 2（Started が読めないゴール 0、タスクの見出しがないゴール 0）" ]
+  [ "${lines[1]}" = "進行の記録: ゴール 1、タスク 2（Started が読めないゴール 0、タスクが読めないゴール 0）" ]
   [ "${lines[2]}" = "レビューの往復数: 読めた 2（1回 1、2回 1、平均 1.5）、不明 0" ]
   [ "${lines[3]}" = "verify: PASS 1、修正後に PASS 0、BLOCKED 0、未検証 1、不明 0" ]
 }
