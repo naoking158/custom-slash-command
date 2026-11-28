@@ -143,8 +143,11 @@ func (h *held) reads(body string) ([]string, bool) {
 
 // word is the value of a word that names a file: "" when it holds a variable
 // or a substitution the line does not show.
-func (h *held) word(w string) string {
-	v := h.put(w, true)
+func (h *held) word(w string) string { return fileValue(h.put(w, true)) }
+
+// fileValue is the file a word's value names: "" when it holds a variable or
+// a substitution the line does not show.
+func fileValue(v string) string {
 	if len(v) >= 2 && (v[0] == '\'' || v[0] == '"') && v[len(v)-1] == v[0] {
 		v = v[1 : len(v)-1]
 	}
@@ -218,37 +221,6 @@ func wordAfter(s string, p int) (int, int, bool) {
 	q := skipSpaces(s, p)
 	e := wordEnd(s, q)
 	return q, e, e > q
-}
-
-// bodyFileAt: --body-file / --file (space or =) WORD, or -F[space]WORD, at the
-// start of a word.
-func bodyFileAt(s string, i int) (span, bool) {
-	if prevIs(s, i, notSpace) {
-		return span{}, false
-	}
-	for _, opt := range []string{"--body-file", "--file"} {
-		if !strings.HasPrefix(s[i:], opt) {
-			continue
-		}
-		p := i + len(opt)
-		if p < len(s) && s[p] == '=' {
-			p++
-		} else if q := skipSpaces(s, p); q > p {
-			p = q
-		} else {
-			continue
-		}
-		if e := wordEnd(s, p); e > p {
-			return span{i, e, p}, true
-		}
-		return span{}, false
-	}
-	if strings.HasPrefix(s[i:], "-F") {
-		if ws, e, ok := wordAfter(s, i+2); ok {
-			return span{i, e, ws}, true
-		}
-	}
-	return span{}, false
 }
 
 // stdinAt: < WORD that is not <<, <(, <& and not after < or the given digits.
@@ -343,24 +315,28 @@ func commandWordAt(s, name string, min int) ([]string, bool) {
 	return nil, false
 }
 
-// outboundTextAt finds the first git commit or gh pr/issue text command.
-func outboundTextAt(s string) (int, bool) {
-	best := -1
-	if start, _, _, ok := gitSub(s, "commit", 0); ok {
-		best = start
+// outboundTextAt finds the first git commit or gh pr/issue text command: where
+// it starts, where its arguments start and how it reads its options.
+func outboundTextAt(s string) (start, args int, g grammar, ok bool) {
+	start = -1
+	if at, _, end, found := gitSub(s, "commit", 0); found {
+		start, args, g = at, end, gitCommitGrammar
 	}
-	if start, _, ok := findGh(s, 0, ghPRText); ok && (best < 0 || start < best) {
-		best = start
+	if at, end, found := findGh(s, 0, ghPRText); found && (start < 0 || at < start) {
+		start, args = at, end
+		g, _ = ghGrammarOf(s[at:end])
 	}
-	return best, best >= 0
+	return start, args, g, start >= 0
 }
 
 // outboundText describes what the outbound commands of cmd send, one line
 // each: "\x03<file>" for every file a command on the line writes (>, >>, >|,
 // n>, &>, tee, the last argument of cp / mv); then for each outbound command
-// "\x02<file>" per body file its own --body-file / --file / -F arguments name
-// (for `-`, its < redirect), and its text without those arguments, together
-// with the pipeline stages that feed it.
+// "\x02<file>" per body file its own -F / --file / --body-file options name,
+// read as the command reads them (for `-`, its < redirect), the value of each
+// option written in the same word as its letter (-mTEXT), and its text
+// without the body file options, together with the pipeline stages that feed
+// it.
 func outboundText(cmd string) string {
 	var out []string
 	s, h := holdLine(cmd)
@@ -368,10 +344,11 @@ func outboundText(cmd string) string {
 	written := writtenFiles(segs, h)
 	for _, seg := range segs {
 		stages := splitOn(seg, pipeSep(true))
-		k, start := -1, 0
+		k, start, args := -1, 0, 0
+		var g grammar
 		for n, st := range stages {
-			if at, ok := outboundTextAt(st); ok {
-				k, start = n, at
+			if at, a, gr, ok := outboundTextAt(st); ok {
+				k, start, args, g = n, at, a, gr
 				break
 			}
 		}
@@ -380,16 +357,23 @@ func outboundText(cmd string) string {
 		}
 		own := stages[k][start:]
 		stdin := false
-		matches := findAll(own, bodyFileAt)
-		for _, m := range matches {
-			f := h.put(own[m.wordStart:m.end], true)
-			if f == "-" || f == "/dev/stdin" {
+		words := lineWords(own, args-start, h)
+		var files []span
+		for _, o := range g.options(words) {
+			if o.attached {
+				out = append(out, o.value)
+			}
+			if !o.hasValue || !o.is("F", "file", "body-file") {
+				continue
+			}
+			files = append(files, span{words[o.first].start, words[o.last].end, 0})
+			if f := fileValue(o.value); f == "-" || f == "/dev/stdin" {
 				stdin = true
 			} else {
 				out = append(out, "\x02"+f)
 			}
 		}
-		own = removeSpans(own, matches)
+		own = removeSpans(own, files)
 		if stdin {
 			for _, f := range stdinFiles(stages[k][:start], h) {
 				out = append(out, "\x02"+f)

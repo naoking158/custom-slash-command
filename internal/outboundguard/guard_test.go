@@ -554,6 +554,43 @@ var guardTests = []struct {
 		f.guard(`git -C /Users/me/tmp/w log -1 --format=%B | gh pr comment 3 --body-file -`).allow()
 		f.guard(`gh pr comment 3 --body "$(git -C /Users/me/tmp/w log -1 --format=%B)"`).deny()
 	}},
+	{"short options bundled with a body file or message are read as git and gh read them", func(f *fx) {
+		f.own()
+		f.write(f.repo+"/m.txt", "fix H001\n")
+		f.write(f.repo+"/clean.txt", "fix x\n")
+		for _, c := range []string{
+			`git commit -qF m.txt`,
+			`git commit -qFm.txt`,
+			`git commit -vqF m.txt`,
+			`git commit --fil m.txt`,
+			`git commit --fil=m.txt`,
+			`git commit -mH001`,
+			`git commit -amH001`,
+			`gh pr create -d -bH001`,
+			`gh pr create -d -tH001 -b x`,
+			`gh pr comment 3 -eF m.txt`,
+			`gh pr comment 3 -eFm.txt`,
+			`gh pr comment 3 -F=m.txt`,
+			`gh pr review 3 -aF m.txt`,
+			`gh pr review 3 -cbH001`,
+			`gh issue create -t x -wF m.txt`,
+		} {
+			f.guard(c).deny()
+			if !strings.Contains(f.out, "review finding ID") {
+				f.t.Fatalf("command %q: reason is not the review ID: %q", c, f.out)
+			}
+		}
+		for _, c := range []string{
+			`git commit -qF clean.txt`,
+			`git commit -qFclean.txt`,
+			`git commit -am ok`,
+			`gh pr comment 3 -eF clean.txt`,
+			`gh pr review 3 -aF clean.txt`,
+			`gh pr create -d -tFix -b x`,
+		} {
+			f.guard(c).allow()
+		}
+	}},
 	{"file flags quoted inside a message are message text, not body files", func(f *fx) {
 		f.guard(`git commit -q -m 'read config with --file $CONFIG or -F /etc/nothere'`).allow()
 		f.guard(`git commit -q --allow-empty -F /dev/null`).allow()
