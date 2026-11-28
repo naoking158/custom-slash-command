@@ -386,6 +386,9 @@ func outboundText(cmd string) string {
 		}
 		own = removeSpans(own, matches)
 		if stdin {
+			for _, f := range stdinFiles(stages[k][:start], h) {
+				out = append(out, "\x02"+f)
+			}
 			in := findAll(own, stdinAt("123456789"))
 			for _, m := range in {
 				out = append(out, "\x02"+h.put(own[m.wordStart:m.end], true))
@@ -415,6 +418,16 @@ func dropWrites(stages []string) string {
 		stages[i] = removeSpans(st, findAll(st, writeAt))
 	}
 	return strings.Join(stages, " | ")
+}
+
+// stdinFiles returns the files of the < redirects in the words before a
+// command: `< f cmd` feeds f to it just as `cmd < f` does.
+func stdinFiles(before string, h *held) []string {
+	var files []string
+	for _, m := range findAll(before, stdinAt("0123456789")) {
+		files = append(files, h.put(before[m.wordStart:m.end], true))
+	}
+	return files
 }
 
 // writtenFiles lists the files the commands of segs write: >, >>, >|, n>, &>,
@@ -500,14 +513,14 @@ func apiCalls(cmd string) ([]apiCall, []string) {
 					break
 				}
 				from = end
-				calls = append(calls, apiCallAt(stages[:k], st[start:], h))
+				calls = append(calls, apiCallAt(stages[:k], st[:start], st[start:], h))
 			}
 		}
 	}
 	return calls, writtenFiles(segs, h)
 }
 
-func apiCallAt(feed []string, gh string, h *held) apiCall {
+func apiCallAt(feed []string, before, gh string, h *held) apiCall {
 	if !apiWrites1(gh, h) {
 		return apiCall{}
 	}
@@ -532,6 +545,7 @@ func apiCallAt(feed []string, gh string, h *held) apiCall {
 		}
 	}
 	if stdin {
+		c.files = append(c.files, stdinFiles(before, h)...)
 		in := findAll(gh, stdinAt("0123456789"))
 		for _, m := range in {
 			c.files = append(c.files, h.put(gh[m.wordStart:m.end], true))

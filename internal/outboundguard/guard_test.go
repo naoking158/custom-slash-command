@@ -846,6 +846,9 @@ var guardTests = []struct {
 		f.guard(`cat ~/clean.md | gh pr comment 3 --body-file -`).allow()
 		f.guard(`gh api --method POST repos/o/r/issues/1/comments -F body=@- < ~/clean.md`).allow()
 		f.guard(`gh pr comment 3 --body "$(cat ~/leak.md)"`).deny()
+		f.guard(`< ~/leak.md gh pr comment 3 --body-file -`).deny()
+		f.guard(`< ~/clean.md gh pr comment 3 --body-file -`).allow()
+		f.guard(`< ~/leak.md gh api --method POST repos/o/r/issues/1/comments -F body=@-`).deny()
 	}},
 	{"ship cwd: a repository named by an attached -R, a PR URL, GH_REPO or an API path is judged as that repo", func(f *fx) {
 		f.own()
