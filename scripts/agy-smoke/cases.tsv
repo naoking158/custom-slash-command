@@ -17,7 +17,7 @@ maintain-verification-skill	.
 pdm-setup	--show
 prd	電卓 CLI に計算履歴を残す機能を追加する
 product-spec	docs/prd/20261128-calc-history.md
-retro	--dry-run --since 1d
+retro	--dry-run --deep --since 1d
 review	code:calc.sh --no-screen
 rules-go	summarize the rules in three bullets
 rules-rails	summarize the rules in three bullets
