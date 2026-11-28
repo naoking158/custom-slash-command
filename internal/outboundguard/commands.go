@@ -17,10 +17,11 @@ import (
 // Dir is "?" when the line does not show it, "?case" when a case statement
 // precedes the command, and gitElsewhereDir for a git the line points at
 // another repository, work tree or push target. For pr, Repos are the
-// repositories gh is told to use instead of Dir's (-R or --repo with its value as the next word, GH_REPO
-// assigned just before gh) and Also the ones it may act on besides (an
-// attached -R<repo>, a pull request URL, a repos/OWNER/NAME path, any other
-// GH_REPO assignment); "" stands for one the line does not show. Args are the
+// repositories gh is told to use instead of Dir's (-R or --repo with its value
+// as the next word, GH_REPO assigned just before gh) and Also the ones it may
+// act on besides (an attached -R<repo>, a pull request URL, a
+// repos/OWNER/NAME path, any other GH_REPO assignment); "" stands for one the
+// line does not show. Args are the
 // words of a pr command with their quotes removed, unexpanded.
 type command struct {
 	Kind, Dir, Rest string

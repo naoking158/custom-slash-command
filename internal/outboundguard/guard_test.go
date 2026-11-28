@@ -749,11 +749,12 @@ var guardTests = []struct {
 			`declare {GIT_DIR=/x/.git,A=b}; git push origin feature/x`,
 			`env {GIT_DIR=/x/.git,A=b} git push origin feature/x`,
 			`echo hi; export {GIT_DIR=/x/.git,A=1}; git push origin feature/x`,
+			`unset HOME; : ${HOME[a[0]]:=/x}; git push origin feature/x`,
 		} {
 			f.guard(c).deny()
 		}
 	}},
-	{"a push denied for a git pointed elsewhere says what points it there", func(f *fx) {
+	{"a push denied for a git pointed elsewhere names the variable, not cd", func(f *fx) {
 		f.guard(`GIT_DIR=/x/.git git push origin feature/x`).deny()
 		if !strings.Contains(f.out, "GIT_DIR") || strings.Contains(f.out, "cd <絶対パス>") {
 			f.t.Fatalf("reason does not name what points git elsewhere: %q", f.out)
