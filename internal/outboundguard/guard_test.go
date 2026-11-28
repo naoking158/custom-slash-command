@@ -540,6 +540,20 @@ var guardTests = []struct {
 		f.guard("git commit -q -F - < " + f.tmp + "/leak.md").deny()
 		f.guard("git commit -q -F - 0<" + f.tmp + "/leak.md").deny()
 	}},
+	{"a -C word inside a message or body file does not hide a review ID", func(f *fx) {
+		f.guard(`git commit -m "use -C H001 here"`).deny()
+		f.write("m.txt", "use -C H001 here\n")
+		f.guard("git commit -q -F " + f.tmp + "/m.txt").deny()
+		f.guard("gh pr comment 3 --body-file " + f.tmp + "/m.txt").deny()
+		f.guard(`gh pr comment 3 --body "run git -C /Users/me/x"`).deny()
+	}},
+	{"git -C before commit and -C after it are not message text", func(f *fx) {
+		f.guard(`git -C /Users/me/tmp/w commit -m ok`).allow()
+		f.guard(`git -c user.name=x -C /Users/me/tmp/w commit -m ok`).allow()
+		f.guard(`git commit -m x -C HEAD`).allow()
+		f.guard(`git -C /Users/me/tmp/w log -1 --format=%B | gh pr comment 3 --body-file -`).allow()
+		f.guard(`gh pr comment 3 --body "$(git -C /Users/me/tmp/w log -1 --format=%B)"`).deny()
+	}},
 	{"file flags quoted inside a message are message text, not body files", func(f *fx) {
 		f.guard(`git commit -q -m 'read config with --file $CONFIG or -F /etc/nothere'`).allow()
 		f.guard(`git commit -q --allow-empty -F /dev/null`).allow()

@@ -468,6 +468,7 @@ func (h *held) takeSent(feed []string, own string) ([]string, []string) {
 	sent := append([]string{}, feed...)
 	sent = append(sent, own)
 	for i := range sent {
+		sent[i] = removeSpans(sent[i], gitOptionSpans(sent[i]))
 		var fs []string
 		if i < len(feed) {
 			sent[i], fs = h.takeFed(sent[i])
@@ -477,6 +478,36 @@ func (h *held) takeSent(feed []string, own string) ([]string, []string) {
 		files = append(files, fs...)
 	}
 	return sent, files
+}
+
+// gitOptionSpans returns the -C <dir> and -c <name=value> options each git
+// in s is given before its subcommand: they say where and how git runs, not
+// what it sends.
+func gitOptionSpans(s string) []span {
+	var out []span
+	for i := 0; ; i++ {
+		k := strings.Index(s[i:], "git")
+		if k < 0 {
+			return out
+		}
+		i += k
+		if prevIs(s, i, wordOrDash) {
+			continue
+		}
+		p := i + 3
+		for {
+			q := skipSpaces(s, p)
+			if q == p || q+1 >= len(s) || s[q] != '-' || (s[q+1] != 'C' && s[q+1] != 'c') {
+				break
+			}
+			ws, e, ok := wordAfter(s, q+2)
+			if !ok || ws == q+2 {
+				break
+			}
+			out = append(out, span{q, e, ws})
+			p = e
+		}
+	}
 }
 
 // cpOrMv returns the words after the first cp or mv that has two or more.

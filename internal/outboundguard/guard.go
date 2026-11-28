@@ -546,12 +546,6 @@ func (g *guard) tilde(f string) string {
 	return f
 }
 
-var dashC = func() *regexp.Regexp {
-	re := regexp.MustCompile(`-C[[:space:]]+("[^"]*"|[^[:space:]]+)`)
-	re.Longest()
-	return re
-}()
-
 // shellOut is what $(...) keeps of a command's output: trailing newlines go.
 func shellOut(s string) string { return strings.TrimRight(s, "\n") }
 
@@ -605,11 +599,7 @@ func (g *guard) textCheck(textDir string) {
 		}
 		body += "\n" + readBody(f)
 	}
-	lines := strings.Split(body, "\n")
-	for i, l := range lines {
-		lines[i] = dashC.ReplaceAllString(l, "")
-	}
-	if r := g.leakReason(shellOut(strings.Join(lines, "\n")), textDir); r != "" {
+	if r := g.leakReason(shellOut(body), textDir); r != "" {
 		decide("deny", r)
 	}
 }
